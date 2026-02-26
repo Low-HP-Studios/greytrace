@@ -55,6 +55,17 @@ const WORLD_BOUNDS: WorldBounds = {
   minZ: -80,
   maxZ: 80,
 };
+const WALKABLE_CENTER_X = (WORLD_BOUNDS.minX + WORLD_BOUNDS.maxX) / 2;
+const WALKABLE_CENTER_Z = (WORLD_BOUNDS.minZ + WORLD_BOUNDS.maxZ) / 2;
+const WALKABLE_SIZE_X = WORLD_BOUNDS.maxX - WORLD_BOUNDS.minX;
+const WALKABLE_SIZE_Z = WORLD_BOUNDS.maxZ - WORLD_BOUNDS.minZ;
+const SHORE_SHELF_PADDING = 28;
+const SHORE_SHELF_Y = -0.42;
+const SHORE_FOAM_RING_PADDING = 10;
+const OCEAN_LEVEL_Y = -2.7;
+const OCEAN_SIZE = 1600;
+const CLIFF_HEIGHT = 0.7;
+const CLIFF_THICKNESS = 1.15;
 
 const BUILDING_CENTER = new THREE.Vector3(8, 0, -4);
 const BUILDING_WIDTH = 10;
@@ -178,17 +189,17 @@ export function Scene({
       className="game-canvas"
       shadows={settings.shadows ? "percentage" : false}
       dpr={dpr}
-      camera={{ fov: 65, near: 0.1, far: 360, position: [0, 3.5, 12] }}
+      camera={{ fov: 65, near: 0.1, far: 650, position: [0, 3.5, 12] }}
       gl={{ antialias: true, powerPreference: "high-performance" }}
     >
-      <color attach="background" args={["#d5eeff"]} />
-      <fog attach="fog" args={["#dff2ff", 95, 320]} />
-      <hemisphereLight args={["#f0fbff", "#d0c4a2", 0.65]} />
-      <ambientLight intensity={0.48} />
+      <color attach="background" args={["#c8654e"]} />
+      <fog attach="fog" args={["#d67a5f", 82, 520]} />
+      <hemisphereLight args={["#ffb986", "#5a4a3d", 0.7]} />
+      <ambientLight intensity={0.34} />
       <directionalLight
-        position={[22, 28, 12]}
-        intensity={2.1}
-        color="#fff0c4"
+        position={[92, 24, -108]}
+        intensity={2.35}
+        color="#ffb46f"
         castShadow={settings.shadows}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
@@ -659,19 +670,132 @@ type MapEnvironmentProps = {
 };
 
 function MapEnvironment({ shadows }: MapEnvironmentProps) {
+  const sandTexture = useMemo(() => createSandTexture(), []);
+  const oceanTexture = useMemo(() => createOceanTexture(), []);
+
+  useEffect(() => {
+    return () => {
+      sandTexture?.dispose();
+      oceanTexture?.dispose();
+    };
+  }, [oceanTexture, sandTexture]);
+
+  useFrame((_, delta) => {
+    if (!oceanTexture) {
+      return;
+    }
+    oceanTexture.offset.x = (oceanTexture.offset.x + delta * 0.012) % 1;
+    oceanTexture.offset.y = (oceanTexture.offset.y + delta * 0.006) % 1;
+  });
+
+  const shelfSizeX = WALKABLE_SIZE_X + SHORE_SHELF_PADDING * 2;
+  const shelfSizeZ = WALKABLE_SIZE_Z + SHORE_SHELF_PADDING * 2;
+  const foamRingSizeX = WALKABLE_SIZE_X + SHORE_FOAM_RING_PADDING * 2;
+  const foamRingSizeZ = WALKABLE_SIZE_Z + SHORE_FOAM_RING_PADDING * 2;
+  const cliffY = 0 - CLIFF_HEIGHT / 2;
+
   return (
     <group>
-      <mesh position={[54, 42, -32]}>
-        <sphereGeometry args={[4.8, 20, 20]} />
-        <meshBasicMaterial color="#ffe28f" />
+      <mesh position={[128, 20, -148]}>
+        <sphereGeometry args={[8.6, 20, 20]} />
+        <meshBasicMaterial color="#ffb66d" />
+      </mesh>
+      <mesh position={[128, 20, -148]}>
+        <sphereGeometry args={[13.5, 20, 20]} />
+        <meshBasicMaterial color="#ff7f4e" transparent opacity={0.17} depthWrite={false} />
       </mesh>
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow={shadows} userData={{ bulletHittable: true }}>
-        <planeGeometry args={[220, 220]} />
-        <meshStandardMaterial color="#94b68d" roughness={0.96} metalness={0.02} />
+      <EveningClouds />
+
+      <mesh
+        position={[WALKABLE_CENTER_X, OCEAN_LEVEL_Y, WALKABLE_CENTER_Z]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <planeGeometry args={[OCEAN_SIZE, OCEAN_SIZE]} />
+        <meshStandardMaterial
+          color="#2b5f77"
+          map={oceanTexture ?? undefined}
+          roughness={0.28}
+          metalness={0.1}
+        />
+      </mesh>
+      <mesh
+        position={[WALKABLE_CENTER_X, OCEAN_LEVEL_Y + 0.06, WALKABLE_CENTER_Z]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <planeGeometry args={[OCEAN_SIZE, OCEAN_SIZE]} />
+        <meshBasicMaterial color="#80cae4" transparent opacity={0.07} depthWrite={false} />
       </mesh>
 
-      <gridHelper args={[220, 110, "#8db4c6", "#cde3ee"]} position={[0, 0.02, 0]} />
+      <mesh
+        position={[WALKABLE_CENTER_X, SHORE_SHELF_Y, WALKABLE_CENTER_Z]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow={shadows}
+        userData={{ bulletHittable: true }}
+      >
+        <planeGeometry args={[shelfSizeX, shelfSizeZ]} />
+        <meshStandardMaterial color="#b79059" roughness={0.98} metalness={0.01} />
+      </mesh>
+
+      <mesh
+        position={[WALKABLE_CENTER_X, SHORE_SHELF_Y + 0.03, WALKABLE_CENTER_Z]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <planeGeometry args={[foamRingSizeX, foamRingSizeZ]} />
+        <meshBasicMaterial color="#f7dcb8" transparent opacity={0.08} depthWrite={false} />
+      </mesh>
+
+      <mesh
+        position={[WALKABLE_CENTER_X, 0, WALKABLE_CENTER_Z]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow={shadows}
+        userData={{ bulletHittable: true }}
+      >
+        <planeGeometry args={[WALKABLE_SIZE_X, WALKABLE_SIZE_Z]} />
+        <meshStandardMaterial
+          color="#d1ad72"
+          map={sandTexture ?? undefined}
+          roughness={0.99}
+          metalness={0}
+        />
+      </mesh>
+
+      <mesh
+        position={[WALKABLE_CENTER_X, cliffY, WORLD_BOUNDS.maxZ + CLIFF_THICKNESS / 2]}
+        castShadow={shadows}
+        receiveShadow={shadows}
+        userData={{ bulletHittable: true }}
+      >
+        <boxGeometry args={[WALKABLE_SIZE_X + CLIFF_THICKNESS, CLIFF_HEIGHT, CLIFF_THICKNESS]} />
+        <meshStandardMaterial color="#7d6445" roughness={0.93} metalness={0.02} />
+      </mesh>
+      <mesh
+        position={[WALKABLE_CENTER_X, cliffY, WORLD_BOUNDS.minZ - CLIFF_THICKNESS / 2]}
+        castShadow={shadows}
+        receiveShadow={shadows}
+        userData={{ bulletHittable: true }}
+      >
+        <boxGeometry args={[WALKABLE_SIZE_X + CLIFF_THICKNESS, CLIFF_HEIGHT, CLIFF_THICKNESS]} />
+        <meshStandardMaterial color="#775f42" roughness={0.93} metalness={0.02} />
+      </mesh>
+      <mesh
+        position={[WORLD_BOUNDS.maxX + CLIFF_THICKNESS / 2, cliffY, WALKABLE_CENTER_Z]}
+        castShadow={shadows}
+        receiveShadow={shadows}
+        userData={{ bulletHittable: true }}
+      >
+        <boxGeometry args={[CLIFF_THICKNESS, CLIFF_HEIGHT, WALKABLE_SIZE_Z + CLIFF_THICKNESS * 2]} />
+        <meshStandardMaterial color="#7a6245" roughness={0.93} metalness={0.02} />
+      </mesh>
+      <mesh
+        position={[WORLD_BOUNDS.minX - CLIFF_THICKNESS / 2, cliffY, WALKABLE_CENTER_Z]}
+        castShadow={shadows}
+        receiveShadow={shadows}
+        userData={{ bulletHittable: true }}
+      >
+        <boxGeometry args={[CLIFF_THICKNESS, CLIFF_HEIGHT, WALKABLE_SIZE_Z + CLIFF_THICKNESS * 2]} />
+        <meshStandardMaterial color="#6f593f" roughness={0.93} metalness={0.02} />
+      </mesh>
 
       <CoverBlock position={[-14, 1.2, -12]} size={[2.8, 2.4, 2.4]} shadows={shadows} color="#b7bcc3" />
       <CoverBlock position={[18, 1.3, -22]} size={[4, 2.6, 2.6]} shadows={shadows} color="#a8b6c0" />
@@ -685,6 +809,203 @@ function MapEnvironment({ shadows }: MapEnvironmentProps) {
       </mesh>
     </group>
   );
+}
+
+type CloudClusterSpec = {
+  position: [number, number, number];
+  scale: number;
+  yaw: number;
+  color: string;
+};
+
+const EVENING_CLOUDS: CloudClusterSpec[] = [
+  { position: [-96, 40, -156], scale: 10, yaw: 0.2, color: "#f6c4a4" },
+  { position: [-34, 47, -118], scale: 12, yaw: -0.35, color: "#ffd2b4" },
+  { position: [34, 52, -176], scale: 13, yaw: 0.45, color: "#ffcab0" },
+  { position: [102, 42, -114], scale: 10.5, yaw: -0.25, color: "#efb090" },
+  { position: [148, 33, -208], scale: 15, yaw: 0.1, color: "#e99874" },
+  { position: [-150, 36, -78], scale: 9.5, yaw: -0.1, color: "#f1ba97" },
+];
+
+function EveningClouds() {
+  return (
+    <group>
+      {EVENING_CLOUDS.map((cloud) => (
+        <CloudCluster key={`${cloud.position[0]}-${cloud.position[2]}`} cloud={cloud} />
+      ))}
+    </group>
+  );
+}
+
+function CloudCluster({ cloud }: { cloud: CloudClusterSpec }) {
+  const puffs: Array<{
+    position: [number, number, number];
+    scale: [number, number, number];
+  }> = [
+    { position: [-0.65, 0.02, 0.12], scale: [0.9, 0.45, 0.75] },
+    { position: [-0.2, 0.12, -0.08], scale: [1, 0.52, 0.9] },
+    { position: [0.25, 0.1, 0.05], scale: [0.95, 0.48, 0.82] },
+    { position: [0.72, 0, -0.12], scale: [0.78, 0.4, 0.7] },
+    { position: [0.05, -0.05, 0.28], scale: [0.9, 0.35, 0.65] },
+  ];
+
+  return (
+    <group
+      position={cloud.position}
+      rotation={[0, cloud.yaw, 0]}
+      scale={[cloud.scale, cloud.scale * 0.6, cloud.scale]}
+    >
+      {puffs.map((puff, index) => (
+        <mesh
+          key={`${index}-${puff.position[0]}`}
+          position={puff.position}
+          scale={puff.scale}
+        >
+          <sphereGeometry args={[1, 14, 12]} />
+          <meshStandardMaterial
+            color={cloud.color}
+            roughness={1}
+            metalness={0}
+            transparent
+            opacity={0.88}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function createSandTexture(): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return null;
+  }
+
+  const rng = createSeededRandom(90210);
+  ctx.fillStyle = "#cda66a";
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 2600; i += 1) {
+    const x = rng() * size;
+    const y = rng() * size;
+    const radius = 0.35 + rng() * 1.1;
+    const alpha = 0.08 + rng() * 0.18;
+    const tone = rng();
+    const r = tone > 0.7 ? 244 : tone > 0.35 ? 214 : 158;
+    const g = tone > 0.7 ? 218 : tone > 0.35 ? 179 : 129;
+    const b = tone > 0.7 ? 170 : tone > 0.35 ? 126 : 84;
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  for (let i = 0; i < 42; i += 1) {
+    const y = rng() * size;
+    const amplitude = 2 + rng() * 4;
+    const wavelength = 20 + rng() * 28;
+    const phase = rng() * Math.PI * 2;
+    ctx.beginPath();
+    ctx.lineWidth = 1 + rng() * 1.5;
+    ctx.strokeStyle = `rgba(255, 236, 205, ${0.03 + rng() * 0.04})`;
+
+    for (let x = -8; x <= size + 8; x += 6) {
+      const rippleY = y + Math.sin(x / wavelength + phase) * amplitude;
+      if (x <= -8) {
+        ctx.moveTo(x, rippleY);
+      } else {
+        ctx.lineTo(x, rippleY);
+      }
+    }
+
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(8, 8);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function createOceanTexture(): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return null;
+  }
+
+  const rng = createSeededRandom(404);
+  const gradient = ctx.createLinearGradient(0, 0, size, size);
+  gradient.addColorStop(0, "#2a5f76");
+  gradient.addColorStop(0.5, "#326e84");
+  gradient.addColorStop(1, "#1e4a61");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 64; i += 1) {
+    const y = rng() * size;
+    const amplitude = 1.5 + rng() * 4;
+    const wavelength = 10 + rng() * 22;
+    const phase = rng() * Math.PI * 2;
+    ctx.beginPath();
+    ctx.lineWidth = 1 + rng() * 1.2;
+    ctx.strokeStyle = `rgba(184, 233, 246, ${0.035 + rng() * 0.05})`;
+
+    for (let x = -8; x <= size + 8; x += 5) {
+      const waveY = y + Math.sin(x / wavelength + phase) * amplitude;
+      if (x <= -8) {
+        ctx.moveTo(x, waveY);
+      } else {
+        ctx.lineTo(x, waveY);
+      }
+    }
+
+    ctx.stroke();
+  }
+
+  for (let i = 0; i < 850; i += 1) {
+    const x = rng() * size;
+    const y = rng() * size;
+    const alpha = 0.02 + rng() * 0.05;
+    ctx.fillStyle = `rgba(220, 250, 255, ${alpha})`;
+    ctx.fillRect(x, y, 1 + rng() * 1.5, 1);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(16, 16);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function createSeededRandom(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
 }
 
 type CoverBlockProps = {

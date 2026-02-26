@@ -327,36 +327,102 @@ export class AudioManager {
     }
 
     const now = this.context.currentTime;
+    const stepGainBoost = sprinting ? 1.18 : 1;
 
     if (this.buffers.footstep) {
       const source = this.context.createBufferSource();
       source.buffer = this.buffers.footstep;
-      source.playbackRate.value = sprinting ? 1.22 : 0.95;
+      source.playbackRate.value = sprinting ? 1.18 : 0.9;
       const gain = this.context.createGain();
-      gain.gain.value = sprinting ? 0.7 : 0.5;
-      source.connect(gain);
+      const tone = this.context.createBiquadFilter();
+      tone.type = "lowpass";
+      tone.frequency.value = sprinting ? 1500 : 1100;
+      gain.gain.value = sprinting ? 0.34 : 0.26;
+      source.connect(tone);
+      tone.connect(gain);
       gain.connect(this.footstepGain);
       source.start(now);
       source.stop(now + Math.min(0.14, source.buffer.duration));
-      return;
     }
 
-    const osc = this.context.createOscillator();
-    const gain = this.context.createGain();
-    const filter = this.context.createBiquadFilter();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(sprinting ? 88 : 74, now);
-    osc.frequency.exponentialRampToValueAtTime(44, now + 0.06);
-    filter.type = "lowpass";
-    filter.frequency.value = 220;
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.exponentialRampToValueAtTime(sprinting ? 0.12 : 0.08, now + 0.004);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.footstepGain);
-    osc.start(now);
-    osc.stop(now + 0.08);
+    const heel = this.context.createOscillator();
+    const heelGain = this.context.createGain();
+    const heelFilter = this.context.createBiquadFilter();
+    heel.type = "triangle";
+    heel.frequency.setValueAtTime(sprinting ? 112 : 88, now);
+    heel.frequency.exponentialRampToValueAtTime(42, now + 0.055);
+    heelFilter.type = "lowpass";
+    heelFilter.frequency.value = 240;
+    heelGain.gain.setValueAtTime(0.001, now);
+    heelGain.gain.exponentialRampToValueAtTime((sprinting ? 0.11 : 0.08) * stepGainBoost, now + 0.004);
+    heelGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+    heel.connect(heelFilter);
+    heelFilter.connect(heelGain);
+    heelGain.connect(this.footstepGain);
+    heel.start(now);
+    heel.stop(now + 0.08);
+
+    if (this.whiteNoiseBuffer) {
+      const crunch = this.context.createBufferSource();
+      crunch.buffer = this.whiteNoiseBuffer;
+      crunch.playbackRate.value = sprinting ? 1.35 + Math.random() * 0.2 : 1.02 + Math.random() * 0.18;
+      const crunchHigh = this.context.createBiquadFilter();
+      const crunchBand = this.context.createBiquadFilter();
+      const crunchLow = this.context.createBiquadFilter();
+      const crunchGain = this.context.createGain();
+      crunchHigh.type = "highpass";
+      crunchHigh.frequency.value = sprinting ? 260 : 220;
+      crunchBand.type = "bandpass";
+      crunchBand.frequency.value = 1400 + Math.random() * 700;
+      crunchBand.Q.value = 0.75;
+      crunchLow.type = "lowpass";
+      crunchLow.frequency.value = 2800;
+      crunchGain.gain.setValueAtTime(0.001, now);
+      crunchGain.gain.exponentialRampToValueAtTime((sprinting ? 0.18 : 0.13) * stepGainBoost, now + 0.005);
+      crunchGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.085);
+      crunch.connect(crunchHigh);
+      crunchHigh.connect(crunchBand);
+      crunchBand.connect(crunchLow);
+      crunchLow.connect(crunchGain);
+      crunchGain.connect(this.footstepGain);
+      crunch.start(now);
+      crunch.stop(now + 0.1);
+
+      const scrape = this.context.createBufferSource();
+      scrape.buffer = this.whiteNoiseBuffer;
+      scrape.playbackRate.value = sprinting ? 0.95 : 0.8;
+      const scrapeHigh = this.context.createBiquadFilter();
+      const scrapeLow = this.context.createBiquadFilter();
+      const scrapeGain = this.context.createGain();
+      scrapeHigh.type = "highpass";
+      scrapeHigh.frequency.value = 120;
+      scrapeLow.type = "lowpass";
+      scrapeLow.frequency.value = 760;
+      scrapeGain.gain.setValueAtTime(0.001, now + 0.01);
+      scrapeGain.gain.exponentialRampToValueAtTime((sprinting ? 0.08 : 0.055) * stepGainBoost, now + 0.02);
+      scrapeGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+      scrape.connect(scrapeHigh);
+      scrapeHigh.connect(scrapeLow);
+      scrapeLow.connect(scrapeGain);
+      scrapeGain.connect(this.footstepGain);
+      scrape.start(now);
+      scrape.stop(now + 0.11);
+    }
+
+    if (Math.random() < 0.45) {
+      const grit = this.context.createOscillator();
+      const gritGain = this.context.createGain();
+      grit.type = "triangle";
+      grit.frequency.setValueAtTime(1700 + Math.random() * 800, now);
+      grit.frequency.exponentialRampToValueAtTime(820 + Math.random() * 240, now + 0.03);
+      gritGain.gain.setValueAtTime(0.001, now);
+      gritGain.gain.exponentialRampToValueAtTime((sprinting ? 0.03 : 0.02) * stepGainBoost, now + 0.003);
+      gritGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+      grit.connect(gritGain);
+      gritGain.connect(this.footstepGain);
+      grit.start(now);
+      grit.stop(now + 0.04);
+    }
   }
 
   private applyVolumeSettings() {
