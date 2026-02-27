@@ -40,31 +40,64 @@
 - No crouch, no slope handling, no step-up logic
 - Tauri fallback mode: cursor can hit screen edges (acceptable in fullscreen)
 
+## Character Model
+
+### Responsibilities
+
+- Load Trooper FBX model with `SkeletonUtils.clone()` for correct skinned mesh handling
+- Manually apply textures (FBXLoader can't resolve the channel types in this FBX)
+- Scale model to `CHARACTER_TARGET_HEIGHT` (1.65m) and ground it
+- Drive `AnimationMixer` with 7 animation clips (idle, walk variants, rifle aim)
+- Switch animation state based on player movement: idle / walk / sprint
+
+### Animation pipeline
+
+- FBX animations loaded via `loadFbxAnimation()` — extracts first clip from each FBX
+- `remapAnimationClip()` normalizes bone names across different prefix conventions
+- Unmatched tracks (finger bones) filtered before creating actions
+- Crossfade transitions (0.25s) between animation states
+- Sprint uses walk animation at 1.55x timeScale
+
+### Current limitations
+
+- No directional walk blending (walkLeft/walkRight/walkBack clips loaded but not used for directional blending)
+- No rifle-specific animations during combat (rifleIdle/rifleWalk loaded but not triggered)
+- Texture map is hardcoded to Trooper model — changing models requires updating `CHARACTER_TEXTURE_MAP`
+
 ## Weapon System
 
 ### Responsibilities
 
-- Equip/drop world state
-- Auto-fire cadence (78ms interval)
-- Recoil + spray drift (progressive per shot)
-- Muzzle flash timing (45ms)
-- Tracer timing (55ms)
+- Equip/drop world state with pickup/drop mechanics
+- Auto-fire cadence (rifle: 78ms, sniper: 700ms)
+- Muzzle flash timing (rifle: 45ms, sniper: 70ms)
+- Tracer timing (70ms)
+- Weapon switching (rifle/sniper, 180ms transition)
+- Sniper rechamber (980ms)
+
+### Pickup / Drop
+
+- Player spawns empty-handed, weapon floats at a world position
+- Press **F** to pick up within 2.5 unit range
+- Press **G** to drop — weapon placed 1.8 units forward in look direction
+- `canPickup()` drives interaction prompt in HUD
 
 ### Shot processing
 
 - Shot origin and direction from camera (`getWorldPosition` + `getWorldDirection`)
-- Raycasts against target hit spheres
-- Tracer visual originates from character weapon position toward hit/miss endpoint
+- Raycasts against target hit spheres + world geometry
+- Tracer visual originates from muzzle position toward hit/miss endpoint
+- Damage zones: head (up to 125 rifle / 200 sniper), body (25 rifle / 90 sniper), leg (reduced)
 
 ### Current behavior
 
-- Hitscan rifle only
+- Two weapons: rifle (auto) and sniper (semi-auto with rechamber)
+- Switch with 1/2 keys
 - No ammo/reload
-- No multiple weapon slots
 
 ### Future ideas
 
-- Weapon presets (`rifle`, `smg`, `dmr`)
+- Weapon presets (`smg`, `dmr`)
 - Recoil pattern debug graph
 - Spread bloom vs recoil split
 

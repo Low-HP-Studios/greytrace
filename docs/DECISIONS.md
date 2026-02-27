@@ -167,3 +167,56 @@ Replace instant-disable targets with HP system. Targets have 100 HP, take 25 dam
 - Billboard HP bar (green > yellow > red)
 - Hit flash (red body) on damage
 - Auto-respawn at full HP after 2 seconds
+
+---
+
+## 2026-02-27 - FBX Trooper model + FBX animations (same format)
+
+### Decision
+
+Use `tactical guy.fbx` (Trooper) for the player character and Mixamo `.fbx` files for all animations. Dropped the earlier `Skeleton Model.glb` approach.
+
+### Why
+
+- Mixing GLB model with FBX animations caused bone name mismatches — animations loaded but didn't visually drive the mesh
+- The Skeleton Model GLB was likely a bare armature with no visible geometry
+- Using FBX for both model and animations keeps bone naming consistent (both use `characters3dcom___` prefix from Mixamo/characters3d.com)
+
+### Bone name remapping
+
+- `remapAnimationClip` normalizes bone names by stripping known prefixes (`mixamorig:`, `characters3dcom___`, `mixamorig_`) before comparing
+- Tracks targeting bones that don't exist in the model skeleton are filtered out before creating actions (eliminates finger bone warnings — model has 42 bones, animations target 53 including detailed fingers)
+
+### Texture workaround
+
+- FBXLoader logs `undefined map is not supported in three.js, skipping texture` for all 14 texture maps — the FBX uses material channel types Three.js doesn't recognize
+- Fix: `applyCharacterTextures()` runs after model load, manually loads textures via `THREE.TextureLoader` with `encodeURI()` (space in `.fbm` folder name), and assigns `map` + `normalMap` per material
+- Material names have numeric suffixes (`Body_0`, `Shoes_5`, etc.) — `findTextureEntry` uses partial matching against the texture map keys
+
+### Cloning
+
+- `SkeletonUtils.clone()` is used instead of `Group.clone(true)` to correctly preserve SkinnedMesh bone bindings
+
+### Trade-off
+
+- Texture mapping is hardcoded to the Trooper model's `.fbm` folder — switching character models requires updating `CHARACTER_TEXTURE_MAP`
+- 14 `undefined map` warnings still appear during FBX loading (before our manual fix runs) — cosmetic only
+
+---
+
+## 2026-02-27 - Player spawns empty-handed
+
+### Decision
+
+Player starts without a weapon. Walk to the floating gun and press F to pick up.
+
+### Why
+
+- More natural gameplay loop — discover the weapon in the world
+- Lets the player experience movement and camera before combat
+
+### What changed
+
+- `WeaponSystem.equipped` defaults to `false`
+- Implemented `tryPickup` (distance check, 2.5 unit range), `drop` (place in front of player), and `canPickup`
+- World gun mesh visible at spawn position until picked up

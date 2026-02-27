@@ -10,6 +10,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Perf } from "r3f-perf";
 import * as THREE from "three";
 import { AudioManager, type AudioVolumeSettings } from "./Audio";
+import { loadFbxAsset, loadFbxAnimation } from "./AssetLoader";
 import { usePlayerController, type PlayerControllerApi } from "./PlayerController";
 import {
   Targets,
@@ -106,13 +107,7 @@ type WorldRaycastHit = {
   distance: number;
 };
 
-const STATIC_COLLIDERS: CollisionRect[] = [
-  boxRect({ x: -14, z: -12 }, 2.8, 2.4),
-  boxRect({ x: 18, z: -22 }, 4.0, 2.6),
-  boxRect({ x: -26, z: 16 }, 3.2, 2.4),
-  boxRect({ x: 28, z: 24 }, 3.8, 2.8),
-  boxRect({ x: 0, z: -36 }, 5.5, 2.8),
-];
+const STATIC_COLLIDERS: CollisionRect[] = [];
 
 export function Scene({
   settings,
@@ -204,14 +199,14 @@ export function Scene({
       camera={{ fov: 65, near: 0.1, far: 650, position: [0, 3.5, 12] }}
       gl={{ antialias: true, powerPreference: "high-performance" }}
     >
-      <color attach="background" args={["#c8654e"]} />
-      <fog attach="fog" args={["#d67a5f", 82, 520]} />
-      <hemisphereLight args={["#ffb986", "#5a4a3d", 0.7]} />
-      <ambientLight intensity={0.34} />
+      <color attach="background" args={["#86c8ff"]} />
+      <fog attach="fog" args={["#f2c39b", 110, 620]} />
+      <hemisphereLight args={["#a7d6ff", "#c49c6d", 0.95]} />
+      <ambientLight intensity={0.5} />
       <directionalLight
-        position={[92, 24, -108]}
-        intensity={2.35}
-        color="#ffb46f"
+        position={[106, 34, -118]}
+        intensity={1.95}
+        color="#ffd2a2"
         castShadow={settings.shadows}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
@@ -246,6 +241,455 @@ export function Scene({
       {settings.showR3fPerf ? <Perf position="top-left" minimal /> : null}
     </Canvas>
   );
+}
+
+const CHARACTER_MODEL_URL = "/assets/models/character/Trooper/tactical guy.fbx";
+const CHARACTER_TARGET_HEIGHT = 1.65;
+const CHARACTER_YAW_OFFSET = Math.PI;
+const CHARACTER_TEXTURE_BASE = "/assets/models/character/Trooper/tactical guy.fbm/";
+const CHARACTER_TEXTURE_MAP: Record<string, { base: string; normal: string }> = {
+  Body: { base: "Body_baseColor_0.png", normal: "Body_normal_1.png" },
+  Bottom: { base: "Bottom_baseColor_2.png", normal: "Bottom_normal_3.png" },
+  Glove: { base: "Glove_baseColor_4.png", normal: "Glove_normal_5.png" },
+  material: { base: "material_baseColor_6.png", normal: "material_normal_7.png" },
+  Mask: { base: "Mask_baseColor_8.png", normal: "Mask_normal_9.png" },
+  Shoes: { base: "Shoes_baseColor_10.png", normal: "Shoes_normal_11.png" },
+  material_6: { base: "material_6_baseColor_12.png", normal: "material_6_normal_13.png" },
+};
+
+const ANIM_CLIPS: { name: string; url: string }[] = [
+  { name: "idle", url: "/assets/animations/walking/Idle.fbx" },
+  { name: "walk", url: "/assets/animations/walking/Walk Forward.fbx" },
+  { name: "walkBack", url: "/assets/animations/walking/Walk Backward.fbx" },
+  { name: "walkLeft", url: "/assets/animations/walking/Walk Left.fbx" },
+  { name: "walkRight", url: "/assets/animations/walking/Walk Right.fbx" },
+  { name: "rifleIdle", url: "/assets/animations/walking with gun/Rifle Aim Idle.fbx" },
+  { name: "rifleWalk", url: "/assets/animations/walking with gun/Rifle Aim Walk Forward Loop.fbx" },
+  { name: "rifleWalkBack", url: "/assets/animations/walking with gun/Rifle Aim Walk Backward Loop.fbx" },
+  { name: "rifleWalkLeft", url: "/assets/animations/walking with gun/Rifle Aim Walk Left Loop.fbx" },
+  { name: "rifleWalkRight", url: "/assets/animations/walking with gun/Rifle Aim Walk Right Loop.fbx" },
+];
+
+const WEAPON_MODEL_URLS: Record<WeaponKind, string> = {
+  rifle: "/assets/weapons/pack/FBX/AssaultRifle_01.fbx",
+  sniper: "/assets/weapons/pack/FBX/SniperRifle_01.fbx",
+};
+
+type WeaponModelTransform = {
+  position: [number, number, number];
+  rotation: [number, number, number];
+  scale: number;
+};
+
+const WEAPON_MODEL_TRANSFORMS: {
+  character: Record<WeaponKind, WeaponModelTransform>;
+  firstPerson: Record<WeaponKind, WeaponModelTransform>;
+  world: Record<WeaponKind, WeaponModelTransform>;
+} = {
+  character: {
+    rifle: {
+      position: [0.02, -0.03, 0],
+      rotation: [0, -Math.PI / 2, 0],
+      scale: 0.00145,
+    },
+    sniper: {
+      position: [0.02, -0.04, 0],
+      rotation: [0, -Math.PI / 2, 0],
+      scale: 0.0016,
+    },
+  },
+  firstPerson: {
+    rifle: {
+      position: [0.08, -0.04, 0.02],
+      rotation: [0, -Math.PI / 2, 0],
+      scale: 0.0015,
+    },
+    sniper: {
+      position: [0.08, -0.05, 0.02],
+      rotation: [0, -Math.PI / 2, 0],
+      scale: 0.00175,
+    },
+  },
+  world: {
+    rifle: {
+      position: [0, 0.02, 0],
+      rotation: [0, -Math.PI / 2, 0],
+      scale: 0.00145,
+    },
+    sniper: {
+      position: [0, 0.02, 0],
+      rotation: [0, -Math.PI / 2, 0],
+      scale: 0.0016,
+    },
+  },
+};
+
+type CharacterAnimState =
+  | "idle"
+  | "walk"
+  | "walkBack"
+  | "walkLeft"
+  | "walkRight"
+  | "rifleIdle"
+  | "rifleWalk"
+  | "rifleWalkBack"
+  | "rifleWalkLeft"
+  | "rifleWalkRight"
+  | "sprint";
+
+type CharacterModelResult = {
+  model: THREE.Group | null;
+  setAnimState: (state: CharacterAnimState) => void;
+};
+
+type WeaponModelResult = {
+  rifle: THREE.Group | null;
+  sniper: THREE.Group | null;
+};
+
+function useCharacterModel(): CharacterModelResult {
+  const [model, setModel] = useState<THREE.Group | null>(null);
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const actionsRef = useRef<Map<string, THREE.AnimationAction>>(new Map());
+  const currentAnimRef = useRef<string>("");
+
+  useEffect(() => {
+    let disposed = false;
+
+    (async () => {
+      const [fbxModel, SkeletonUtils, ...clips] = await Promise.all([
+        loadFbxAsset(CHARACTER_MODEL_URL),
+        import("three/examples/jsm/utils/SkeletonUtils.js"),
+        ...ANIM_CLIPS.map((a) => loadFbxAnimation(a.url, a.name)),
+      ]);
+
+      if (disposed || !fbxModel) return;
+
+      const clone = SkeletonUtils.clone(fbxModel) as THREE.Group;
+
+      const box = new THREE.Box3().setFromObject(clone);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const scale = size.y > 0 ? CHARACTER_TARGET_HEIGHT / size.y : 1;
+      clone.scale.setScalar(scale);
+
+      const scaledBox = new THREE.Box3().setFromObject(clone);
+      clone.position.y = -scaledBox.min.y;
+
+      clone.traverse((child) => {
+        if (!(child as THREE.Mesh).isMesh) return;
+        child.castShadow = true;
+        child.receiveShadow = true;
+      });
+
+      await applyCharacterTextures(clone);
+
+      const modelBoneNames = new Set<string>();
+      clone.traverse((child) => {
+        if ((child as THREE.Bone).isBone || (child as THREE.SkinnedMesh).isSkinnedMesh) {
+          modelBoneNames.add(child.name);
+        }
+      });
+
+      const mixer = new THREE.AnimationMixer(clone);
+      mixerRef.current = mixer;
+      clone.userData.__mixer = mixer;
+
+      const actions = new Map<string, THREE.AnimationAction>();
+      for (let i = 0; i < ANIM_CLIPS.length; i++) {
+        const clip = clips[i];
+        if (!clip) continue;
+        const remapped = remapAnimationClip(clip, modelBoneNames).clone();
+        removeRootMotion(remapped);
+        const totalTracks = remapped.tracks.length;
+        remapped.tracks = remapped.tracks.filter((track) => {
+          const boneName = splitTrackName(track.name).nodeName;
+          return modelBoneNames.has(boneName);
+        });
+        console.log(
+          `[Character] ${ANIM_CLIPS[i].name}: dur=${remapped.duration.toFixed(3)}s, ${totalTracks} tracks -> ${remapped.tracks.length} matched`,
+        );
+        const action = mixer.clipAction(remapped);
+        action.setLoop(THREE.LoopRepeat, Infinity);
+        actions.set(ANIM_CLIPS[i].name, action);
+      }
+      actionsRef.current = actions;
+
+      const idleAction = actions.get("idle");
+      if (idleAction) {
+        idleAction.play();
+        currentAnimRef.current = "idle";
+      }
+
+      console.log("[Character] Model bones:", [...modelBoneNames]);
+      console.log("[Character] Loaded animations:", [...actions.keys()]);
+      if (clips[0]) {
+        console.log("[Character] Sample track names:", clips[0].tracks.slice(0, 3).map((t) => t.name));
+      }
+
+      setModel(clone);
+    })();
+
+    return () => {
+      disposed = true;
+      mixerRef.current?.stopAllAction();
+    };
+  }, []);
+
+  const setAnimState = useCallback((state: CharacterAnimState) => {
+    const targetName = state === "sprint" ? "walk" : state;
+    const targetSpeed = state === "sprint" ? 1.55 : 1;
+    const stateKey = state;
+
+    if (currentAnimRef.current === stateKey) return;
+
+    const actions = actionsRef.current;
+    const target = actions.get(targetName);
+    if (!target) return;
+
+    const prevKey = currentAnimRef.current;
+    const prevName = prevKey === "sprint" ? "walk" : prevKey;
+    const prev = actions.get(prevName);
+
+    if (prev && prev !== target) {
+      prev.fadeOut(0.25);
+    }
+
+    target.timeScale = targetSpeed;
+    if (prev !== target) {
+      target.reset().fadeIn(0.25).play();
+    } else {
+      target.timeScale = targetSpeed;
+    }
+    currentAnimRef.current = stateKey;
+  }, []);
+
+  return { model, setAnimState };
+}
+
+function useWeaponModels(): WeaponModelResult {
+  const [models, setModels] = useState<WeaponModelResult>({
+    rifle: null,
+    sniper: null,
+  });
+
+  useEffect(() => {
+    let disposed = false;
+
+    (async () => {
+      const [rifle, sniper] = await Promise.all([
+        loadFbxAsset(WEAPON_MODEL_URLS.rifle),
+        loadFbxAsset(WEAPON_MODEL_URLS.sniper),
+      ]);
+      if (disposed) return;
+
+      setModels({
+        rifle,
+        sniper,
+      });
+    })();
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  return models;
+}
+
+function cloneWeaponModel(source: THREE.Group | null): THREE.Group | null {
+  if (!source) return null;
+
+  const clone = source.clone(true);
+  clone.traverse((child) => {
+    if (!(child as THREE.Mesh).isMesh) return;
+    const mesh = child as THREE.Mesh;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mesh.material = materials.map((material) => material.clone());
+  });
+  return clone;
+}
+
+type WeaponModelInstanceProps = {
+  source: THREE.Group | null;
+  transform: WeaponModelTransform;
+};
+
+function WeaponModelInstance({ source, transform }: WeaponModelInstanceProps) {
+  const instance = useMemo(() => cloneWeaponModel(source), [source]);
+  if (!instance) return null;
+
+  return (
+    <group
+      position={transform.position}
+      rotation={transform.rotation}
+      scale={[transform.scale, transform.scale, transform.scale]}
+    >
+      <primitive object={instance} />
+    </group>
+  );
+}
+
+function normalizeBoneName(name: string): string {
+  return name
+    .replace(/^mixamorig:/, "")
+    .replace(/^characters3d\.?com___/, "")
+    .replace(/^mixamorig_/, "");
+}
+
+function splitTrackName(trackName: string): { nodeName: string; property: string } {
+  // FBX rigs can include "." inside bone names (e.g. characters3d.com___Hips).
+  // Track bindings still use the final "." to separate node path from property.
+  const dotIdx = trackName.lastIndexOf(".");
+  if (dotIdx <= 0) {
+    return { nodeName: trackName, property: "" };
+  }
+  return {
+    nodeName: trackName.substring(0, dotIdx),
+    property: trackName.substring(dotIdx),
+  };
+}
+
+function remapAnimationClip(
+  clip: THREE.AnimationClip,
+  modelBoneNames: Set<string>,
+): THREE.AnimationClip {
+  const firstTrack = clip.tracks[0];
+  if (!firstTrack) return clip;
+
+  const firstBone = splitTrackName(firstTrack.name).nodeName;
+  if (modelBoneNames.has(firstBone)) return clip;
+
+  const normalizedModelMap = new Map<string, string>();
+  for (const bone of modelBoneNames) {
+    normalizedModelMap.set(normalizeBoneName(bone).toLowerCase(), bone);
+  }
+
+  const buildMapping = (): Map<string, string> | null => {
+    const mapping = new Map<string, string>();
+
+    const clipBones = new Set<string>();
+    for (const track of clip.tracks) {
+      clipBones.add(splitTrackName(track.name).nodeName);
+    }
+
+    for (const clipBone of clipBones) {
+      if (modelBoneNames.has(clipBone)) {
+        mapping.set(clipBone, clipBone);
+        continue;
+      }
+
+      const normalized = normalizeBoneName(clipBone).toLowerCase();
+      const normalMatch = normalizedModelMap.get(normalized);
+      if (normalMatch) {
+        mapping.set(clipBone, normalMatch);
+        continue;
+      }
+
+      for (const modelBone of modelBoneNames) {
+        if (modelBone.toLowerCase() === clipBone.toLowerCase()) {
+          mapping.set(clipBone, modelBone);
+          break;
+        }
+      }
+    }
+
+    return mapping.size > 0 ? mapping : null;
+  };
+
+  const mapping = buildMapping();
+  if (!mapping) {
+    console.warn("[Character] Could not remap clip:", clip.name);
+    return clip;
+  }
+
+  const remapped = clip.clone();
+  for (const track of remapped.tracks) {
+    const { nodeName: boneName, property } = splitTrackName(track.name);
+    const mapped = mapping.get(boneName);
+    if (mapped && property) {
+      track.name = mapped + property;
+    }
+  }
+  return remapped;
+}
+
+function removeRootMotion(clip: THREE.AnimationClip): void {
+  for (const track of clip.tracks) {
+    const { nodeName, property } = splitTrackName(track.name);
+    if (property !== ".position") continue;
+
+    const normalized = normalizeBoneName(nodeName).toLowerCase();
+    if (!normalized.includes("hips")) continue;
+
+    const values = track.values;
+    if (values.length < 3) continue;
+
+    const baseX = values[0];
+    const baseZ = values[2];
+    for (let i = 0; i < values.length; i += 3) {
+      values[i] = baseX;
+      values[i + 2] = baseZ;
+    }
+  }
+}
+
+async function applyCharacterTextures(model: THREE.Group): Promise<void> {
+  const textureLoader = new THREE.TextureLoader();
+  const loadTex = (url: string): Promise<THREE.Texture | null> =>
+    new Promise((resolve) => {
+      const encoded = encodeURI(url);
+      textureLoader.load(encoded, resolve, undefined, () => {
+        console.warn("[Character] Texture load failed:", encoded);
+        resolve(null);
+      });
+    });
+
+  const uniqueMaterials = new Map<string, THREE.Material>();
+  model.traverse((child) => {
+    if (!(child as THREE.Mesh).isMesh) return;
+    const mesh = child as THREE.Mesh;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const mat of mats) {
+      uniqueMaterials.set(mat.uuid, mat);
+    }
+  });
+
+  await Promise.all(
+    [...uniqueMaterials.values()].map(async (mat) => {
+      const mappable = mat as THREE.MeshPhongMaterial;
+      if (!("map" in mappable)) return;
+
+      const entry = findTextureEntry(mat.name);
+      if (!entry) return;
+
+      const [baseTex, normalTex] = await Promise.all([
+        mappable.map ? null : loadTex(CHARACTER_TEXTURE_BASE + entry.base),
+        mappable.normalMap ? null : loadTex(CHARACTER_TEXTURE_BASE + entry.normal),
+      ]);
+
+      if (baseTex) {
+        baseTex.colorSpace = THREE.SRGBColorSpace;
+        mappable.map = baseTex;
+      }
+      if (normalTex) {
+        mappable.normalMap = normalTex;
+      }
+      mappable.needsUpdate = true;
+    }),
+  );
+}
+
+function findTextureEntry(materialName: string): { base: string; normal: string } | null {
+  if (CHARACTER_TEXTURE_MAP[materialName]) return CHARACTER_TEXTURE_MAP[materialName];
+  const lower = materialName.toLowerCase();
+  for (const [key, value] of Object.entries(CHARACTER_TEXTURE_MAP)) {
+    if (key.toLowerCase() === lower) return value;
+    if (lower.includes(key.toLowerCase())) return value;
+  }
+  return null;
 }
 
 type GameplayRuntimeProps = {
@@ -289,6 +733,8 @@ function GameplayRuntime({
   const camera = useThree((state) => state.camera);
   const scene = useThree((state) => state.scene);
 
+  const { model: characterModel, setAnimState: setCharacterAnim } = useCharacterModel();
+  const weaponModels = useWeaponModels();
   const weaponRef = useRef<WeaponSystem>(new WeaponSystem());
   const audioRef = useRef<AudioManager>(new AudioManager());
   const controllerRef = useRef<PlayerControllerApi | null>(null);
@@ -314,6 +760,8 @@ function GameplayRuntime({
   const lastFirstPersonRef = useRef<boolean | null>(null);
 
   const worldGunRef = useRef<THREE.Group>(null);
+  const worldRifleModelRef = useRef<THREE.Group>(null);
+  const worldSniperModelRef = useRef<THREE.Group>(null);
   const playerCharacterRef = useRef<THREE.Group>(null);
   const characterWeaponRef = useRef<THREE.Group>(null);
   const characterRifleModelRef = useRef<THREE.Group>(null);
@@ -342,6 +790,9 @@ function GameplayRuntime({
   const lastImpactCleanupAtRef = useRef(0);
   const lastSniperRechamberActiveRef = useRef<boolean | null>(null);
   const lastSniperRechamberProgressStepRef = useRef(-1);
+  const characterWeaponAttachBoneRef = useRef<THREE.Bone | null>(null);
+  const tempCharacterWeaponAnchorWorldRef = useRef(new THREE.Vector3());
+  const tempCharacterWeaponAnchorLocalRef = useRef(new THREE.Vector3());
 
   useEffect(() => {
     targetsRef.current = targets;
@@ -382,6 +833,33 @@ function GameplayRuntime({
   useEffect(() => {
     aimingStateCallbackRef.current = onAimingStateChange;
   }, [onAimingStateChange]);
+
+  useEffect(() => {
+    if (!characterModel) {
+      characterWeaponAttachBoneRef.current = null;
+      return;
+    }
+
+    let rightHandBone: THREE.Bone | null = null;
+    characterModel.traverse((child) => {
+      if (rightHandBone || !(child as THREE.Bone).isBone) return;
+      const bone = child as THREE.Bone;
+      const normalized = normalizeBoneName(bone.name).toLowerCase();
+      if (
+        normalized === "r_hand" ||
+        normalized.includes("r_hand") ||
+        normalized.includes("right_hand") ||
+        normalized.includes("righthand")
+      ) {
+        rightHandBone = bone;
+      }
+    });
+
+    characterWeaponAttachBoneRef.current = rightHandBone;
+    if (!rightHandBone) {
+      console.warn("[Character] Could not find right-hand bone for weapon attach");
+    }
+  }, [characterModel]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -545,13 +1023,54 @@ function GameplayRuntime({
     if (playerChar) {
       const pos = controller.getPosition();
       playerChar.position.set(pos.x, pos.y, pos.z);
-      playerChar.rotation.y = controller.getYaw();
+      playerChar.rotation.y = controller.getYaw() + CHARACTER_YAW_OFFSET;
       playerChar.visible = !firstPerson;
-      // Keep child world transforms current before we sample muzzle position for tracers.
       playerChar.updateMatrixWorld(true);
     }
 
+    if (characterModel) {
+      const mixer = characterModel.userData.__mixer as THREE.AnimationMixer | undefined;
+      if (mixer) {
+        mixer.update(clampedDelta);
+      }
+
+      const moving = controller.isMoving() && controller.isGrounded();
+      const sprinting = controller.isSprinting();
+      const weaponEquipped = weapon.isEquipped();
+      const moveInput = controller.getMoveInput();
+      const moveX = moveInput.x;
+      const moveY = moveInput.y;
+      const hasDirectionalInput = Math.abs(moveX) > 0.05 || Math.abs(moveY) > 0.05;
+
+      if (!moving || !hasDirectionalInput) {
+        setCharacterAnim(weaponEquipped ? "rifleIdle" : "idle");
+      } else if (!weaponEquipped && sprinting && moveY > 0.2 && Math.abs(moveX) < 0.35) {
+        setCharacterAnim("sprint");
+      } else if (Math.abs(moveY) >= Math.abs(moveX)) {
+        if (moveY >= 0) {
+          setCharacterAnim(weaponEquipped ? "rifleWalk" : "walk");
+        } else {
+          setCharacterAnim(weaponEquipped ? "rifleWalkBack" : "walkBack");
+        }
+      } else {
+        if (moveX >= 0) {
+          setCharacterAnim(weaponEquipped ? "rifleWalkRight" : "walkRight");
+        } else {
+          setCharacterAnim(weaponEquipped ? "rifleWalkLeft" : "walkLeft");
+        }
+      }
+    }
+
     const switchState = weapon.getSwitchState(nowMs);
+    const characterWeaponAnchor = (() => {
+      const player = playerCharacterRef.current;
+      const handBone = characterWeaponAttachBoneRef.current;
+      if (!player || !handBone) return null;
+      handBone.getWorldPosition(tempCharacterWeaponAnchorWorldRef.current);
+      tempCharacterWeaponAnchorLocalRef.current.copy(tempCharacterWeaponAnchorWorldRef.current);
+      player.worldToLocal(tempCharacterWeaponAnchorLocalRef.current);
+      return tempCharacterWeaponAnchorLocalRef.current;
+    })();
     updateCharacterWeaponMesh(
       characterWeaponRef.current,
       characterRifleModelRef.current,
@@ -560,6 +1079,7 @@ function GameplayRuntime({
       weapon,
       nowMs,
       switchState,
+      characterWeaponAnchor,
     );
     updateFirstPersonWeaponMesh(
       firstPersonWeaponRef.current,
@@ -654,7 +1174,14 @@ function GameplayRuntime({
       weapon.setTracer(tracerOrigin, tempEndRef.current, nowMs);
     }
 
-    updateWorldGunMesh(worldGunRef.current, weapon, nowMs);
+    updateWorldGunMesh(
+      worldGunRef.current,
+      worldRifleModelRef.current,
+      worldSniperModelRef.current,
+      weapon,
+      nowMs,
+      switchState,
+    );
     updateTracerMesh(tracerRef.current, weapon, nowMs, tempMidRef.current, tempTracerDirRef.current);
 
     const equipped = weapon.isEquipped();
@@ -692,70 +1219,88 @@ function GameplayRuntime({
   return (
     <>
       <group ref={playerCharacterRef}>
-        {/* Torso */}
-        <mesh position={[0, 1.0, 0]} castShadow receiveShadow>
-          <boxGeometry args={[0.4, 0.55, 0.25]} />
-          <meshStandardMaterial color="#4a6b82" roughness={0.7} metalness={0.1} />
-        </mesh>
-        {/* Head */}
-        <mesh position={[0, 1.48, 0]} castShadow receiveShadow>
-          <sphereGeometry args={[0.14, 12, 12]} />
-          <meshStandardMaterial color="#e8c9a4" roughness={0.85} metalness={0} />
-        </mesh>
-        {/* Left leg */}
-        <mesh position={[-0.1, 0.3, 0]} castShadow receiveShadow>
-          <boxGeometry args={[0.14, 0.6, 0.16]} />
-          <meshStandardMaterial color="#3a4d5c" roughness={0.8} metalness={0.05} />
-        </mesh>
-        {/* Right leg */}
-        <mesh position={[0.1, 0.3, 0]} castShadow receiveShadow>
-          <boxGeometry args={[0.14, 0.6, 0.16]} />
-          <meshStandardMaterial color="#3a4d5c" roughness={0.8} metalness={0.05} />
-        </mesh>
-        {/* Left arm */}
-        <mesh position={[-0.28, 0.92, 0]} castShadow receiveShadow>
-          <boxGeometry args={[0.12, 0.48, 0.12]} />
-          <meshStandardMaterial color="#4a6b82" roughness={0.7} metalness={0.1} />
-        </mesh>
-        {/* Right arm */}
-        <mesh position={[0.28, 0.92, 0]} castShadow receiveShadow>
-          <boxGeometry args={[0.12, 0.48, 0.12]} />
-          <meshStandardMaterial color="#4a6b82" roughness={0.7} metalness={0.1} />
-        </mesh>
+        {characterModel ? (
+          <primitive object={characterModel} />
+        ) : (
+          <>
+            <mesh position={[0, 1.0, 0]} castShadow receiveShadow>
+              <boxGeometry args={[0.4, 0.55, 0.25]} />
+              <meshStandardMaterial color="#4a6b82" roughness={0.7} metalness={0.1} />
+            </mesh>
+            <mesh position={[0, 1.48, 0]} castShadow receiveShadow>
+              <sphereGeometry args={[0.14, 12, 12]} />
+              <meshStandardMaterial color="#e8c9a4" roughness={0.85} metalness={0} />
+            </mesh>
+            <mesh position={[-0.1, 0.3, 0]} castShadow receiveShadow>
+              <boxGeometry args={[0.14, 0.6, 0.16]} />
+              <meshStandardMaterial color="#3a4d5c" roughness={0.8} metalness={0.05} />
+            </mesh>
+            <mesh position={[0.1, 0.3, 0]} castShadow receiveShadow>
+              <boxGeometry args={[0.14, 0.6, 0.16]} />
+              <meshStandardMaterial color="#3a4d5c" roughness={0.8} metalness={0.05} />
+            </mesh>
+            <mesh position={[-0.28, 0.92, 0]} castShadow receiveShadow>
+              <boxGeometry args={[0.12, 0.48, 0.12]} />
+              <meshStandardMaterial color="#4a6b82" roughness={0.7} metalness={0.1} />
+            </mesh>
+            <mesh position={[0.28, 0.92, 0]} castShadow receiveShadow>
+              <boxGeometry args={[0.12, 0.48, 0.12]} />
+              <meshStandardMaterial color="#4a6b82" roughness={0.7} metalness={0.1} />
+            </mesh>
+          </>
+        )}
 
         {/* Character-held weapon */}
         <group ref={characterWeaponRef} position={[0.34, 0.82, -0.2]} visible={false}>
           <group ref={characterRifleModelRef}>
-            <mesh castShadow receiveShadow>
-              <boxGeometry args={[0.55, 0.09, 0.13]} />
-              <meshStandardMaterial color="#30363c" roughness={0.55} metalness={0.4} />
-            </mesh>
-            <mesh position={[0.16, -0.08, 0.01]} rotation={[0.15, 0, -0.2]}>
-              <boxGeometry args={[0.18, 0.17, 0.05]} />
-              <meshStandardMaterial color="#4d463f" roughness={0.85} metalness={0.1} />
-            </mesh>
-            <mesh position={[-0.24, 0.015, 0]} rotation={[0, 0, Math.PI / 2]}>
-              <cylinderGeometry args={[0.015, 0.015, 0.42, 8]} />
-              <meshStandardMaterial color="#20262b" roughness={0.4} metalness={0.6} />
-            </mesh>
+            {weaponModels.rifle ? (
+              <WeaponModelInstance
+                source={weaponModels.rifle}
+                transform={WEAPON_MODEL_TRANSFORMS.character.rifle}
+              />
+            ) : (
+              <>
+                <mesh castShadow receiveShadow>
+                  <boxGeometry args={[0.55, 0.09, 0.13]} />
+                  <meshStandardMaterial color="#30363c" roughness={0.55} metalness={0.4} />
+                </mesh>
+                <mesh position={[0.16, -0.08, 0.01]} rotation={[0.15, 0, -0.2]}>
+                  <boxGeometry args={[0.18, 0.17, 0.05]} />
+                  <meshStandardMaterial color="#4d463f" roughness={0.85} metalness={0.1} />
+                </mesh>
+                <mesh position={[-0.24, 0.015, 0]} rotation={[0, 0, Math.PI / 2]}>
+                  <cylinderGeometry args={[0.015, 0.015, 0.42, 8]} />
+                  <meshStandardMaterial color="#20262b" roughness={0.4} metalness={0.6} />
+                </mesh>
+              </>
+            )}
           </group>
           <group ref={characterSniperModelRef}>
-            <mesh castShadow receiveShadow>
-              <boxGeometry args={[0.72, 0.08, 0.11]} />
-              <meshStandardMaterial color="#2a3036" roughness={0.53} metalness={0.42} />
-            </mesh>
-            <mesh position={[0.2, -0.07, 0.01]} rotation={[0.14, 0, -0.2]}>
-              <boxGeometry args={[0.2, 0.16, 0.05]} />
-              <meshStandardMaterial color="#4a4139" roughness={0.86} metalness={0.08} />
-            </mesh>
-            <mesh position={[-0.08, 0.07, 0]}>
-              <cylinderGeometry args={[0.03, 0.03, 0.28, 12]} />
-              <meshStandardMaterial color="#1d2227" roughness={0.42} metalness={0.58} />
-            </mesh>
-            <mesh position={[-0.34, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
-              <cylinderGeometry args={[0.014, 0.014, 0.68, 10]} />
-              <meshStandardMaterial color="#1b2025" roughness={0.45} metalness={0.62} />
-            </mesh>
+            {weaponModels.sniper ? (
+              <WeaponModelInstance
+                source={weaponModels.sniper}
+                transform={WEAPON_MODEL_TRANSFORMS.character.sniper}
+              />
+            ) : (
+              <>
+                <mesh castShadow receiveShadow>
+                  <boxGeometry args={[0.72, 0.08, 0.11]} />
+                  <meshStandardMaterial color="#2a3036" roughness={0.53} metalness={0.42} />
+                </mesh>
+                <mesh position={[0.2, -0.07, 0.01]} rotation={[0.14, 0, -0.2]}>
+                  <boxGeometry args={[0.2, 0.16, 0.05]} />
+                  <meshStandardMaterial color="#4a4139" roughness={0.86} metalness={0.08} />
+                </mesh>
+                <mesh position={[-0.08, 0.07, 0]}>
+                  <cylinderGeometry args={[0.03, 0.03, 0.28, 12]} />
+                  <meshStandardMaterial color="#1d2227" roughness={0.42} metalness={0.58} />
+                </mesh>
+                <mesh position={[-0.34, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
+                  <cylinderGeometry args={[0.014, 0.014, 0.68, 10]} />
+                  <meshStandardMaterial color="#1b2025" roughness={0.45} metalness={0.62} />
+                </mesh>
+              </>
+            )}
           </group>
           <mesh ref={characterMuzzleRef} position={[-0.44, 0.02, 0]} visible={false}>
             <sphereGeometry args={[0.05, 8, 8]} />
@@ -766,45 +1311,55 @@ function GameplayRuntime({
 
       {/* FPP weapon + hands */}
       <group ref={firstPersonWeaponRef} visible={false}>
-        <mesh position={[-0.12, -0.03, 0.08]}>
-          <boxGeometry args={[0.16, 0.2, 0.13]} />
-          <meshStandardMaterial color="#4a6b82" roughness={0.72} metalness={0.08} />
-        </mesh>
-        <mesh position={[0.07, -0.05, 0.03]}>
-          <boxGeometry args={[0.16, 0.24, 0.13]} />
-          <meshStandardMaterial color="#4a6b82" roughness={0.72} metalness={0.08} />
-        </mesh>
         <group ref={firstPersonRifleModelRef}>
-          <mesh>
-            <boxGeometry args={[0.6, 0.08, 0.1]} />
-            <meshStandardMaterial color="#2e353b" roughness={0.5} metalness={0.46} />
-          </mesh>
-          <mesh position={[0.19, -0.08, 0.01]} rotation={[0.1, 0, -0.2]}>
-            <boxGeometry args={[0.18, 0.16, 0.05]} />
-            <meshStandardMaterial color="#52483f" roughness={0.84} metalness={0.1} />
-          </mesh>
-          <mesh position={[-0.27, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[0.013, 0.013, 0.45, 8]} />
-            <meshStandardMaterial color="#1f252b" roughness={0.38} metalness={0.62} />
-          </mesh>
+          {weaponModels.rifle ? (
+            <WeaponModelInstance
+              source={weaponModels.rifle}
+              transform={WEAPON_MODEL_TRANSFORMS.firstPerson.rifle}
+            />
+          ) : (
+            <>
+              <mesh>
+                <boxGeometry args={[0.6, 0.08, 0.1]} />
+                <meshStandardMaterial color="#2e353b" roughness={0.5} metalness={0.46} />
+              </mesh>
+              <mesh position={[0.19, -0.08, 0.01]} rotation={[0.1, 0, -0.2]}>
+                <boxGeometry args={[0.18, 0.16, 0.05]} />
+                <meshStandardMaterial color="#52483f" roughness={0.84} metalness={0.1} />
+              </mesh>
+              <mesh position={[-0.27, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
+                <cylinderGeometry args={[0.013, 0.013, 0.45, 8]} />
+                <meshStandardMaterial color="#1f252b" roughness={0.38} metalness={0.62} />
+              </mesh>
+            </>
+          )}
         </group>
         <group ref={firstPersonSniperModelRef}>
-          <mesh>
-            <boxGeometry args={[0.82, 0.085, 0.095]} />
-            <meshStandardMaterial color="#2a2f34" roughness={0.5} metalness={0.48} />
-          </mesh>
-          <mesh position={[0.22, -0.08, 0.01]} rotation={[0.12, 0, -0.22]}>
-            <boxGeometry args={[0.2, 0.17, 0.05]} />
-            <meshStandardMaterial color="#4f453a" roughness={0.86} metalness={0.09} />
-          </mesh>
-          <mesh position={[-0.06, 0.07, 0]}>
-            <cylinderGeometry args={[0.032, 0.032, 0.3, 12]} />
-            <meshStandardMaterial color="#1a2025" roughness={0.4} metalness={0.6} />
-          </mesh>
-          <mesh position={[-0.38, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[0.013, 0.013, 0.72, 10]} />
-            <meshStandardMaterial color="#1b2025" roughness={0.42} metalness={0.62} />
-          </mesh>
+          {weaponModels.sniper ? (
+            <WeaponModelInstance
+              source={weaponModels.sniper}
+              transform={WEAPON_MODEL_TRANSFORMS.firstPerson.sniper}
+            />
+          ) : (
+            <>
+              <mesh>
+                <boxGeometry args={[0.82, 0.085, 0.095]} />
+                <meshStandardMaterial color="#2a2f34" roughness={0.5} metalness={0.48} />
+              </mesh>
+              <mesh position={[0.22, -0.08, 0.01]} rotation={[0.12, 0, -0.22]}>
+                <boxGeometry args={[0.2, 0.17, 0.05]} />
+                <meshStandardMaterial color="#4f453a" roughness={0.86} metalness={0.09} />
+              </mesh>
+              <mesh position={[-0.06, 0.07, 0]}>
+                <cylinderGeometry args={[0.032, 0.032, 0.3, 12]} />
+                <meshStandardMaterial color="#1a2025" roughness={0.4} metalness={0.6} />
+              </mesh>
+              <mesh position={[-0.38, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
+                <cylinderGeometry args={[0.013, 0.013, 0.72, 10]} />
+                <meshStandardMaterial color="#1b2025" roughness={0.42} metalness={0.62} />
+              </mesh>
+            </>
+          )}
         </group>
         <mesh ref={firstPersonMuzzleRef} position={[-0.5, 0.01, 0]} visible={false}>
           <sphereGeometry args={[0.045, 8, 8]} />
@@ -814,18 +1369,37 @@ function GameplayRuntime({
 
       {/* World gun (dropped state) */}
       <group ref={worldGunRef} visible>
-        <mesh castShadow receiveShadow>
-          <boxGeometry args={[0.7, 0.12, 0.18]} />
-          <meshStandardMaterial color="#30363c" roughness={0.6} metalness={0.35} />
-        </mesh>
-        <mesh position={[0.22, -0.08, 0]} castShadow receiveShadow>
-          <boxGeometry args={[0.22, 0.18, 0.06]} />
-          <meshStandardMaterial color="#514942" roughness={0.85} metalness={0.1} />
-        </mesh>
-        <mesh position={[-0.22, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
-          <cylinderGeometry args={[0.02, 0.02, 0.55, 10]} />
-          <meshStandardMaterial color="#1e2328" roughness={0.5} metalness={0.55} />
-        </mesh>
+        <group ref={worldRifleModelRef}>
+          {weaponModels.rifle ? (
+            <WeaponModelInstance
+              source={weaponModels.rifle}
+              transform={WEAPON_MODEL_TRANSFORMS.world.rifle}
+            />
+          ) : (
+            <>
+              <mesh castShadow receiveShadow>
+                <boxGeometry args={[0.7, 0.12, 0.18]} />
+                <meshStandardMaterial color="#30363c" roughness={0.6} metalness={0.35} />
+              </mesh>
+              <mesh position={[0.22, -0.08, 0]} castShadow receiveShadow>
+                <boxGeometry args={[0.22, 0.18, 0.06]} />
+                <meshStandardMaterial color="#514942" roughness={0.85} metalness={0.1} />
+              </mesh>
+              <mesh position={[-0.22, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
+                <cylinderGeometry args={[0.02, 0.02, 0.55, 10]} />
+                <meshStandardMaterial color="#1e2328" roughness={0.5} metalness={0.55} />
+              </mesh>
+            </>
+          )}
+        </group>
+        <group ref={worldSniperModelRef}>
+          {weaponModels.sniper ? (
+            <WeaponModelInstance
+              source={weaponModels.sniper}
+              transform={WEAPON_MODEL_TRANSFORMS.world.sniper}
+            />
+          ) : null}
+        </group>
       </group>
 
       <mesh ref={tracerRef} visible={false} frustumCulled={false} renderOrder={8}>
@@ -851,13 +1425,15 @@ type MapEnvironmentProps = {
 function MapEnvironment({ shadows }: MapEnvironmentProps) {
   const sandTexture = useMemo(() => createSandTexture(), []);
   const oceanTexture = useMemo(() => createOceanTexture(), []);
+  const skyTexture = useMemo(() => createSkyTexture(), []);
 
   useEffect(() => {
     return () => {
+      skyTexture?.dispose();
       sandTexture?.dispose();
       oceanTexture?.dispose();
     };
-  }, [oceanTexture, sandTexture]);
+  }, [oceanTexture, sandTexture, skyTexture]);
 
   useFrame((_, delta) => {
     if (!oceanTexture) {
@@ -875,16 +1451,25 @@ function MapEnvironment({ shadows }: MapEnvironmentProps) {
 
   return (
     <group>
-      <mesh position={[128, 20, -148]}>
-        <sphereGeometry args={[8.6, 20, 20]} />
-        <meshBasicMaterial color="#ffb66d" />
-      </mesh>
-      <mesh position={[128, 20, -148]}>
-        <sphereGeometry args={[13.5, 20, 20]} />
-        <meshBasicMaterial color="#ff7f4e" transparent opacity={0.17} depthWrite={false} />
+      <mesh>
+        <sphereGeometry args={[560, 48, 32]} />
+        <meshBasicMaterial map={skyTexture ?? undefined} side={THREE.BackSide} depthWrite={false} fog={false} />
       </mesh>
 
-      <EveningClouds />
+      <group position={[124, 24, -174]}>
+        <mesh>
+          <sphereGeometry args={[5.2, 28, 28]} />
+          <meshBasicMaterial color="#ffe0b0" />
+        </mesh>
+        <mesh>
+          <sphereGeometry args={[8.4, 26, 26]} />
+          <meshBasicMaterial color="#ffc78f" transparent opacity={0.24} depthWrite={false} />
+        </mesh>
+        <mesh>
+          <sphereGeometry args={[11.8, 24, 24]} />
+          <meshBasicMaterial color="#ffad78" transparent opacity={0.11} depthWrite={false} />
+        </mesh>
+      </group>
 
       <mesh
         position={[WALKABLE_CENTER_X, OCEAN_LEVEL_Y, WALKABLE_CENTER_Z]}
@@ -932,9 +1517,9 @@ function MapEnvironment({ shadows }: MapEnvironmentProps) {
       >
         <planeGeometry args={[WALKABLE_SIZE_X, WALKABLE_SIZE_Z]} />
         <meshStandardMaterial
-          color="#d1ad72"
+          color="#ebd6a8"
           map={sandTexture ?? undefined}
-          roughness={0.99}
+          roughness={0.97}
           metalness={0}
         />
       </mesh>
@@ -976,82 +1561,45 @@ function MapEnvironment({ shadows }: MapEnvironmentProps) {
         <meshStandardMaterial color="#6f593f" roughness={0.93} metalness={0.02} />
       </mesh>
 
-      <CoverBlock position={[-14, 1.2, -12]} size={[2.8, 2.4, 2.4]} shadows={shadows} color="#b7bcc3" />
-      <CoverBlock position={[18, 1.3, -22]} size={[4, 2.6, 2.6]} shadows={shadows} color="#a8b6c0" />
-      <CoverBlock position={[-26, 1.2, 16]} size={[3.2, 2.4, 2.4]} shadows={shadows} color="#bcc7d0" />
-      <CoverBlock position={[28, 1.4, 24]} size={[3.8, 2.8, 2.8]} shadows={shadows} color="#c9c1b0" />
-      <CoverBlock position={[0, 1.4, -36]} size={[5.5, 2.8, 2.8]} shadows={shadows} color="#d2c9b8" />
-
-      <mesh position={[0, 0.02, -58]} receiveShadow={shadows} userData={{ bulletHittable: true }}>
-        <boxGeometry args={[42, 0.05, 16]} />
-        <meshStandardMaterial color="#7f8d95" roughness={0.95} metalness={0} />
-      </mesh>
     </group>
   );
 }
 
-type CloudClusterSpec = {
-  position: [number, number, number];
-  scale: number;
-  yaw: number;
-  color: string;
-};
+function createSkyTexture(): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
 
-const EVENING_CLOUDS: CloudClusterSpec[] = [
-  { position: [-96, 40, -156], scale: 10, yaw: 0.2, color: "#f6c4a4" },
-  { position: [-34, 47, -118], scale: 12, yaw: -0.35, color: "#ffd2b4" },
-  { position: [34, 52, -176], scale: 13, yaw: 0.45, color: "#ffcab0" },
-  { position: [102, 42, -114], scale: 10.5, yaw: -0.25, color: "#efb090" },
-  { position: [148, 33, -208], scale: 15, yaw: 0.1, color: "#e99874" },
-  { position: [-150, 36, -78], scale: 9.5, yaw: -0.1, color: "#f1ba97" },
-];
+  const width = 512;
+  const height = 1024;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
 
-function EveningClouds() {
-  return (
-    <group>
-      {EVENING_CLOUDS.map((cloud) => (
-        <CloudCluster key={`${cloud.position[0]}-${cloud.position[2]}`} cloud={cloud} />
-      ))}
-    </group>
-  );
-}
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return null;
+  }
 
-function CloudCluster({ cloud }: { cloud: CloudClusterSpec }) {
-  const puffs: Array<{
-    position: [number, number, number];
-    scale: [number, number, number];
-  }> = [
-    { position: [-0.65, 0.02, 0.12], scale: [0.9, 0.45, 0.75] },
-    { position: [-0.2, 0.12, -0.08], scale: [1, 0.52, 0.9] },
-    { position: [0.25, 0.1, 0.05], scale: [0.95, 0.48, 0.82] },
-    { position: [0.72, 0, -0.12], scale: [0.78, 0.4, 0.7] },
-    { position: [0.05, -0.05, 0.28], scale: [0.9, 0.35, 0.65] },
-  ];
+  const gradient = ctx.createLinearGradient(0, 0, 0, height);
+  gradient.addColorStop(0, "#7ec2ff");
+  gradient.addColorStop(0.42, "#a8d7ff");
+  gradient.addColorStop(0.66, "#f6b894");
+  gradient.addColorStop(0.86, "#dd8b67");
+  gradient.addColorStop(1, "#b7654c");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
 
-  return (
-    <group
-      position={cloud.position}
-      rotation={[0, cloud.yaw, 0]}
-      scale={[cloud.scale, cloud.scale * 0.6, cloud.scale]}
-    >
-      {puffs.map((puff, index) => (
-        <mesh
-          key={`${index}-${puff.position[0]}`}
-          position={puff.position}
-          scale={puff.scale}
-        >
-          <sphereGeometry args={[1, 14, 12]} />
-          <meshStandardMaterial
-            color={cloud.color}
-            roughness={1}
-            metalness={0}
-            transparent
-            opacity={0.88}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
+  const haze = ctx.createLinearGradient(0, height * 0.62, 0, height);
+  haze.addColorStop(0, "rgba(255, 228, 193, 0)");
+  haze.addColorStop(1, "rgba(255, 170, 122, 0.36)");
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, height * 0.62, width, height * 0.38);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
 }
 
 function createSandTexture(): THREE.CanvasTexture | null {
@@ -1070,7 +1618,7 @@ function createSandTexture(): THREE.CanvasTexture | null {
   }
 
   const rng = createSeededRandom(90210);
-  ctx.fillStyle = "#cda66a";
+  ctx.fillStyle = "#e4cf9f";
   ctx.fillRect(0, 0, size, size);
 
   for (let i = 0; i < 2600; i += 1) {
@@ -1079,9 +1627,9 @@ function createSandTexture(): THREE.CanvasTexture | null {
     const radius = 0.35 + rng() * 1.1;
     const alpha = 0.08 + rng() * 0.18;
     const tone = rng();
-    const r = tone > 0.7 ? 244 : tone > 0.35 ? 214 : 158;
-    const g = tone > 0.7 ? 218 : tone > 0.35 ? 179 : 129;
-    const b = tone > 0.7 ? 170 : tone > 0.35 ? 126 : 84;
+    const r = tone > 0.7 ? 249 : tone > 0.35 ? 232 : 196;
+    const g = tone > 0.7 ? 237 : tone > 0.35 ? 212 : 175;
+    const b = tone > 0.7 ? 203 : tone > 0.35 ? 178 : 141;
     ctx.beginPath();
     ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
     ctx.arc(x, y, radius, 0, Math.PI * 2);
@@ -1095,7 +1643,7 @@ function createSandTexture(): THREE.CanvasTexture | null {
     const phase = rng() * Math.PI * 2;
     ctx.beginPath();
     ctx.lineWidth = 1 + rng() * 1.5;
-    ctx.strokeStyle = `rgba(255, 236, 205, ${0.03 + rng() * 0.04})`;
+    ctx.strokeStyle = `rgba(255, 247, 225, ${0.035 + rng() * 0.05})`;
 
     for (let x = -8; x <= size + 8; x += 6) {
       const rippleY = y + Math.sin(x / wavelength + phase) * amplitude;
@@ -1202,6 +1750,7 @@ function CoverBlock({ position, size, shadows, color }: CoverBlockProps) {
     </mesh>
   );
 }
+void CoverBlock;
 
 function BuildingShell({ shadows }: { shadows: boolean }) {
   const leftSouthWidth = (BUILDING_WIDTH - DOOR_GAP_WIDTH) / 2;
@@ -1299,56 +1848,9 @@ function BuildingShell({ shadows }: { shadows: boolean }) {
 void BuildingShell;
 
 function StressBoxes({ count, shadows }: { count: StressModeCount; shadows: boolean }) {
-  const instances = useMemo(() => {
-    if (count === 0) {
-      return [] as Array<{
-        position: [number, number, number];
-        scale: [number, number, number];
-        color: string;
-      }>;
-    }
-
-    const next: Array<{
-      position: [number, number, number];
-      scale: [number, number, number];
-      color: string;
-    }> = [];
-    const side = Math.ceil(Math.sqrt(count));
-    for (let i = 0; i < count; i += 1) {
-      const row = Math.floor(i / side);
-      const col = i % side;
-      const x = -18 + col * 1.8;
-      const z = 10 + row * 1.8;
-      const height = 0.4 + ((i % 5) * 0.22 + 0.2);
-      next.push({
-        position: [x, height / 2, z],
-        scale: [0.9, height, 0.9],
-        color: i % 2 === 0 ? "#a3b6c0" : "#b8c7c7",
-      });
-    }
-    return next;
-  }, [count]);
-
-  if (instances.length === 0) {
-    return null;
-  }
-
-  return (
-    <group>
-      {instances.map((instance, index) => (
-        <mesh
-          key={`${index}-${instance.position[0]}-${instance.position[2]}`}
-          position={instance.position}
-          castShadow={shadows}
-          receiveShadow={shadows}
-          userData={{ bulletHittable: true }}
-        >
-          <boxGeometry args={instance.scale} />
-          <meshStandardMaterial color={instance.color} roughness={0.8} metalness={0.08} />
-        </mesh>
-      ))}
-    </group>
-  );
+  void count;
+  void shadows;
+  return null;
 }
 
 function BulletImpactMarks({ impacts }: { impacts: BulletImpactMark[] }) {
@@ -1401,8 +1903,11 @@ function resolveShotDamage(shot: WeaponShotEvent, targetHit: TargetRaycastHit): 
 
 function updateWorldGunMesh(
   mesh: THREE.Group | null,
+  rifleModel: THREE.Group | null,
+  sniperModel: THREE.Group | null,
   weapon: WeaponSystem,
   nowMs: number,
+  switchState: WeaponSwitchState,
 ) {
   if (!mesh) {
     return;
@@ -1411,7 +1916,21 @@ function updateWorldGunMesh(
   const visible = !weapon.isEquipped();
   mesh.visible = visible;
   if (!visible) {
+    if (rifleModel) {
+      rifleModel.visible = false;
+    }
+    if (sniperModel) {
+      sniperModel.visible = false;
+    }
     return;
+  }
+
+  const displayedWeapon = resolveDisplayedWeapon(weapon, switchState);
+  if (rifleModel) {
+    rifleModel.visible = displayedWeapon === "rifle";
+  }
+  if (sniperModel) {
+    sniperModel.visible = displayedWeapon === "sniper";
   }
 
   const droppedPosition = weapon.getDroppedPosition();
@@ -1431,6 +1950,7 @@ function updateCharacterWeaponMesh(
   weapon: WeaponSystem,
   nowMs: number,
   switchState: WeaponSwitchState,
+  anchorPosition: THREE.Vector3 | null,
 ) {
   if (!weaponGroup) {
     return;
@@ -1453,8 +1973,16 @@ function updateCharacterWeaponMesh(
 
   const displayedWeapon = resolveDisplayedWeapon(weapon, switchState);
   const switchBlend = switchState.active ? Math.sin(Math.PI * switchState.progress) : 0;
-  weaponGroup.position.set(0.34, 0.82 - switchBlend * 0.18, -0.2 + switchBlend * 0.06);
-  weaponGroup.rotation.set(-switchBlend * 0.42, switchBlend * 0.05, -switchBlend * 0.12);
+  if (anchorPosition) {
+    weaponGroup.position.copy(anchorPosition);
+    weaponGroup.position.x += 0.08;
+    weaponGroup.position.y -= 0.05 + switchBlend * 0.08;
+    weaponGroup.position.z += 0.02 + switchBlend * 0.04;
+    weaponGroup.rotation.set(0.15 - switchBlend * 0.42, Math.PI * 0.45 + switchBlend * 0.05, -0.25);
+  } else {
+    weaponGroup.position.set(0.34, 0.82 - switchBlend * 0.18, -0.2 + switchBlend * 0.06);
+    weaponGroup.rotation.set(-switchBlend * 0.42, switchBlend * 0.05, -switchBlend * 0.12);
+  }
 
   if (rifleModel) {
     rifleModel.visible = displayedWeapon === "rifle";
@@ -1628,17 +2156,6 @@ function raycastBulletWorld(
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
-}
-
-function boxRect(center: { x: number; z: number }, width: number, depth: number): CollisionRect {
-  const halfW = width / 2;
-  const halfD = depth / 2;
-  return {
-    minX: center.x - halfW,
-    maxX: center.x + halfW,
-    minZ: center.z - halfD,
-    maxZ: center.z + halfD,
-  };
 }
 
 const Z_AXIS = new THREE.Vector3(0, 0, 1);

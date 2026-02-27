@@ -1,6 +1,13 @@
-import type * as THREE from "three";
+import * as THREE from "three";
+
+export type GltfResult = {
+  scene: THREE.Group;
+  animations: THREE.AnimationClip[];
+};
 
 const glbCache = new Map<string, Promise<THREE.Group | null>>();
+const gltfFullCache = new Map<string, Promise<GltfResult | null>>();
+const fbxCache = new Map<string, Promise<THREE.Group | null>>();
 const audioBufferCache = new Map<string, Promise<AudioBuffer | null>>();
 
 export function loadGlbAsset(url: string): Promise<THREE.Group | null> {
@@ -25,6 +32,107 @@ export function loadGlbAsset(url: string): Promise<THREE.Group | null> {
   })();
 
   glbCache.set(url, request);
+  return request;
+}
+
+export function loadGlbWithAnimations(url: string): Promise<GltfResult | null> {
+  const cached = gltfFullCache.get(url);
+  if (cached) return cached;
+
+  const request = (async () => {
+    try {
+      const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+      const loader = new GLTFLoader();
+      const gltf = await new Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }>(
+        (resolve, reject) => {
+          loader.load(url, resolve, undefined, reject);
+        },
+      );
+      return { scene: gltf.scene, animations: gltf.animations };
+    } catch {
+      return null;
+    }
+  })();
+
+  gltfFullCache.set(url, request);
+  return request;
+}
+
+const fbxAnimCache = new Map<string, Promise<THREE.AnimationClip | null>>();
+
+function pickFbxMotionClip(clips: THREE.AnimationClip[]): THREE.AnimationClip | null {
+  if (clips.length === 0) return null;
+
+  // Characters3D exports include a short "T-Pose" clip at index 0.
+  // Prefer a non-T-pose motion clip when present.
+  const motion = clips.find((clip) => {
+    const lowerName = clip.name.toLowerCase();
+    return !lowerName.includes("t-pose") && clip.duration > 0.1 && clip.tracks.length > 0;
+  });
+  if (motion) return motion;
+
+  // Fallback: choose the longest clip so we still get something useful.
+  let longest = clips[0];
+  for (let i = 1; i < clips.length; i++) {
+    if (clips[i].duration > longest.duration) {
+      longest = clips[i];
+    }
+  }
+  return longest;
+}
+
+export function loadFbxAnimation(url: string, clipName?: string): Promise<THREE.AnimationClip | null> {
+  const cacheKey = `${url}::${clipName ?? ""}`;
+  const cached = fbxAnimCache.get(cacheKey);
+  if (cached) return cached;
+
+  const request = (async () => {
+    try {
+      const { FBXLoader } = await import("three/examples/jsm/loaders/FBXLoader.js");
+      const loader = new FBXLoader();
+      const fbx = await new Promise<THREE.Group>((resolve, reject) => {
+        loader.load(url, resolve, undefined, reject);
+      });
+      const sourceClip = pickFbxMotionClip(fbx.animations);
+      if (!sourceClip) return null;
+
+      // Clone so renaming does not mutate shared loader instances.
+      const clip = sourceClip.clone();
+      if (clipName) clip.name = clipName;
+      return clip;
+    } catch (e) {
+      console.warn("[AssetLoader] FBX animation load failed:", url, e);
+      return null;
+    }
+  })();
+
+  fbxAnimCache.set(cacheKey, request);
+  return request;
+}
+
+export function loadFbxAsset(url: string): Promise<THREE.Group | null> {
+  const cached = fbxCache.get(url);
+  if (cached) {
+    return cached;
+  }
+
+  const request = (async () => {
+    try {
+      const { FBXLoader } = await import("three/examples/jsm/loaders/FBXLoader.js");
+      const loader = new FBXLoader();
+      const resourcePath = url.substring(0, url.lastIndexOf("/") + 1);
+      loader.setResourcePath(resourcePath);
+      const fbx = await new Promise<THREE.Group>((resolve, reject) => {
+        loader.load(url, resolve, undefined, reject);
+      });
+      return fbx;
+    } catch (e) {
+      console.warn("[AssetLoader] FBX load failed:", url, e);
+      return null;
+    }
+  })();
+
+  fbxCache.set(url, request);
   return request;
 }
 

@@ -33,6 +33,7 @@ export type PlayerControllerApi = {
   addRecoil: (pitchRadians: number, yawRadians: number) => void;
   getPosition: () => THREE.Vector3;
   getYaw: () => number;
+  getMoveInput: () => THREE.Vector2;
   isFirstPerson: () => boolean;
   isADS: () => boolean;
   isSprinting: () => boolean;
@@ -450,7 +451,7 @@ export function usePlayerController({
     adsLerpRef.current = THREE.MathUtils.damp(adsLerpRef.current, adsTarget, 12, delta);
     const adsT = adsLerpRef.current;
     const sniperADS = activeWeapon === "sniper" ? adsT : 0;
-    const viewTarget = firstPersonRef.current ? 1 : 0;
+    const viewTarget = firstPersonRef.current || adsRef.current ? 1 : 0;
     viewModeLerpRef.current = THREE.MathUtils.damp(
       viewModeLerpRef.current,
       viewTarget,
@@ -568,6 +569,7 @@ export function usePlayerController({
     },
     getPosition: () => positionRef.current,
     getYaw: () => yawRef.current,
+    getMoveInput: () => moveInputRef.current,
     isFirstPerson: () =>
       firstPersonRef.current
         ? viewModeLerpRef.current >= FPP_ENTER_VISUAL_THRESHOLD

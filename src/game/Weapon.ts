@@ -62,10 +62,14 @@ export type WeaponSwitchState = {
   remainingMs: number;
 };
 
+const PICKUP_RANGE = 2.5;
+const DROP_FORWARD_DISTANCE = 1.8;
+const DROP_HEIGHT = 0.35;
+
 export class WeaponSystem {
-  private equipped = true;
+  private equipped = false;
   private activeWeapon: WeaponKind = "rifle";
-  private droppedPosition = new THREE.Vector3(1.5, 0.35, 3.5);
+  private droppedPosition = new THREE.Vector3(1.5, DROP_HEIGHT, 3.5);
   private triggerHeld = false;
   private nextShotInMs = 0;
   private shotIndex = 0;
@@ -195,19 +199,33 @@ export class WeaponSystem {
   }
 
   tryPickup(playerPosition: THREE.Vector3): boolean {
-    void playerPosition;
-    return false;
+    if (this.equipped) return false;
+    const dx = playerPosition.x - this.droppedPosition.x;
+    const dz = playerPosition.z - this.droppedPosition.z;
+    if (dx * dx + dz * dz > PICKUP_RANGE * PICKUP_RANGE) return false;
+    this.equipped = true;
+    return true;
   }
 
   drop(playerPosition: THREE.Vector3, cameraForward: THREE.Vector3): boolean {
-    void playerPosition;
-    void cameraForward;
-    return false;
+    if (!this.equipped) return false;
+    this.equipped = false;
+    this.droppedPosition.set(
+      playerPosition.x + cameraForward.x * DROP_FORWARD_DISTANCE,
+      DROP_HEIGHT,
+      playerPosition.z + cameraForward.z * DROP_FORWARD_DISTANCE,
+    );
+    this.setTriggerHeld(false);
+    this.muzzleFlashUntil = 0;
+    this.clearTracer();
+    return true;
   }
 
   canPickup(playerPosition: THREE.Vector3): boolean {
-    void playerPosition;
-    return false;
+    if (this.equipped) return false;
+    const dx = playerPosition.x - this.droppedPosition.x;
+    const dz = playerPosition.z - this.droppedPosition.z;
+    return dx * dx + dz * dz <= PICKUP_RANGE * PICKUP_RANGE;
   }
 
   isEquipped(): boolean {
@@ -270,6 +288,6 @@ export class WeaponSystem {
 }
 
 export const DEFAULT_WEAPON_WORLD_STATE: WeaponWorldState = {
-  equipped: true,
-  droppedPosition: null,
+  equipped: false,
+  droppedPosition: [1.5, DROP_HEIGHT, 3.5],
 };

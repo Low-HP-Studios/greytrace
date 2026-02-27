@@ -317,6 +317,7 @@ export function GameRoot() {
 
   const hitMarkerVisible = hitMarker.until > performance.now();
   const sniperScopeActive = activeWeapon === "sniper" && aimingState.ads && !isPaused;
+  const rifleScopeActive = activeWeapon === "rifle" && aimingState.ads && !isPaused;
   const stressLabel = stressCount === 0 ? "Off" : `${stressCount} boxes`;
   const lockLabel = player.pointerLocked ? "Live look mode" : "Paused / cursor shown";
   const crosshairStyle =
@@ -431,7 +432,7 @@ export function GameRoot() {
         ) : null}
 
         <div className="center-stack">
-          {!isPaused && !sniperScopeActive ? (
+          {!isPaused && !sniperScopeActive && !rifleScopeActive ? (
             <div
               className={`crosshair ${activeWeapon === "sniper" ? "sniper-hip" : "rifle"} ${
                 activeWeapon === "sniper" && sniperRechamber.active ? "rechambering" : ""
@@ -451,17 +452,25 @@ export function GameRoot() {
               ) : null}
             </div>
           ) : null}
+          {rifleScopeActive ? (
+            <div className="rifle-ads-overlay">
+              <div className="rifle-ads-ring" />
+              <div className="rifle-ads-dot" />
+            </div>
+          ) : null}
           {sniperScopeActive ? (
             <div className="sniper-scope-overlay" style={crosshairStyle}>
-              <div className="scope-vignette" />
-              <div className="scope-reticle">
-                <span className="scope-line vertical" />
-                <span className="scope-line horizontal" />
-                <span className="scope-center-dot" />
-                <span className="scope-hash hash-1" />
-                <span className="scope-hash hash-2" />
-                <span className="scope-hash hash-3" />
-                {sniperRechamber.active ? <span className="scope-rechamber" /> : null}
+              <div className="scope-outside" />
+              <div className="scope-lens">
+                <div className="scope-reticle">
+                  <span className="scope-line vertical" />
+                  <span className="scope-line horizontal" />
+                  <span className="scope-center-dot" />
+                  <span className="scope-hash hash-1" />
+                  <span className="scope-hash hash-2" />
+                  <span className="scope-hash hash-3" />
+                  {sniperRechamber.active ? <span className="scope-rechamber" /> : null}
+                </div>
               </div>
             </div>
           ) : null}

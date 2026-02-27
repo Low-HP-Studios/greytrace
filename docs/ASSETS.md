@@ -2,12 +2,16 @@
 
 ## Current State
 
-- Placeholder geometry is used for map, gun, and targets
+- **Character model**: Trooper FBX (`public/assets/models/character/Trooper/tactical guy.fbx`) with manual texture loading from `.fbm` folder
+- **Animations**: Mixamo FBX files for walking, strafing, and rifle aim (7 clips total)
+- Placeholder geometry still used for map, gun, and targets
 - Audio uses WebAudio synth fallback unless files are added
 
 ## Asset Locations
 
 - Models: `public/assets/models/`
+- Character textures: `public/assets/models/character/Trooper/tactical guy.fbm/`
+- Animations: `public/assets/animations/` (walking, walking with gun, turning)
 - Audio: `public/assets/audio/`
 - Attribution file: `public/assets/ATTRIBUTION.md`
 
@@ -17,7 +21,23 @@
 - Record source + license in `public/assets/ATTRIBUTION.md`
 - Prefer keeping originals and documenting edits/conversions
 
-## Import Pipeline (Planned / Partial)
+## Import Pipeline
+
+### Character Model (FBX)
+
+- Model: `tactical guy.fbx` loaded via `loadFbxAsset()` with `SkeletonUtils.clone()`
+- Textures: 7 materials (Body, Bottom, Glove, material/vest, Mask, Shoes, material_6) — each with baseColor + normal map
+- FBXLoader can't auto-apply textures (unsupported map channel type) — `applyCharacterTextures()` manually loads them via `TextureLoader` with `encodeURI()` for space-safe URLs
+- Texture map defined in `CHARACTER_TEXTURE_MAP` in `Scene.tsx`
+
+### Animations (FBX)
+
+- Mixamo FBX files in `public/assets/animations/`
+- Each FBX contains a full rig but only `fbx.animations[0]` is extracted
+- Bone names normalized via `normalizeBoneName()` (strips `mixamorig:`, `characters3dcom___` prefixes)
+- Tracks for bones absent from the model (finger detail) are filtered out before creating actions
+- Current clips: idle, walk, walkBack, walkLeft, walkRight, rifleIdle, rifleWalk
+- Available but unused: sprint, walk start/stop, diagonal walks, turning, rifle aim strafe
 
 ### Models (GLB)
 
