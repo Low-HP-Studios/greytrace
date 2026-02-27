@@ -1,11 +1,11 @@
 :root {
   color-scheme: dark;
   font-family: "Rajdhani", "Segoe UI", system-ui, sans-serif;
-  --bg-0: #080d12;
-  --bg-1: #0f171f;
-  --bg-2: #172430;
-  --panel: rgba(9, 14, 19, 0.84);
-  --panel-strong: rgba(11, 18, 24, 0.92);
+  --bg-0: #101922;
+  --bg-1: #15212c;
+  --bg-2: #1d2c39;
+  --panel: rgba(10, 17, 23, 0.93);
+  --panel-strong: rgba(11, 18, 24, 0.97);
   --line: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 173, 66, 0.34);
   --text: #eaf2f7;
@@ -29,7 +29,7 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #06090c;
+  background: #121a24;
 }
 
 body {
@@ -45,9 +45,9 @@ code {
   width: 100%;
   height: 100%;
   background:
-    radial-gradient(circle at 12% 10%, rgba(255, 169, 72, 0.16), transparent 32%),
-    radial-gradient(circle at 85% 12%, rgba(90, 188, 255, 0.14), transparent 38%),
-    linear-gradient(180deg, #0a1015 0%, #05080b 100%);
+    radial-gradient(circle at 12% 10%, rgba(255, 169, 72, 0.2), transparent 34%),
+    radial-gradient(circle at 85% 12%, rgba(90, 188, 255, 0.2), transparent 40%),
+    linear-gradient(180deg, #16222d 0%, #101923 100%);
 }
 
 .app-shell::before {
@@ -90,7 +90,7 @@ code {
   pointer-events: auto;
   border-radius: 16px;
   border: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(19, 28, 37, 0.78), rgba(8, 13, 18, 0.9));
+  background: linear-gradient(180deg, rgba(20, 31, 41, 0.93), rgba(10, 16, 22, 0.97));
   backdrop-filter: blur(14px) saturate(130%);
   box-shadow: var(--shadow-xl);
   color: var(--text);
@@ -182,46 +182,21 @@ code {
 .brand-lockup {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
   line-height: 1;
 }
 
-.brand-lockup.large {
-  gap: 8px;
-}
-
-.brand-block {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  height: 24px;
-  padding: 0 7px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 171, 66, 0.32);
-  background: linear-gradient(180deg, rgba(255, 171, 66, 0.22), rgba(255, 171, 66, 0.08));
-  color: #ffe1af;
+.brand-word {
+  color: #ffe4bc;
   font-weight: 800;
-  letter-spacing: 0.14em;
-}
-
-.brand-lockup.large .brand-block {
-  min-width: 64px;
-  height: 30px;
-  border-radius: 10px;
-  font-size: 14px;
-}
-
-.brand-mark {
   font-size: 18px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  color: #f6fbff;
+  letter-spacing: 0.14em;
   text-shadow: 0 0 10px rgba(255, 171, 66, 0.16);
+  text-transform: uppercase;
 }
 
-.brand-lockup.large .brand-mark {
-  font-size: 24px;
+.brand-lockup.large .brand-word {
+  font-size: 20px;
+  letter-spacing: 0.16em;
 }
 
 .status-pill {
@@ -285,6 +260,7 @@ code {
   grid-column: 2;
   grid-row: 1;
   align-self: start;
+  justify-self: end;
 }
 
 .corner-bottom-left {
@@ -311,69 +287,78 @@ code {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 18px;
-  height: 18px;
   transform: translate(-50%, -50%);
-  opacity: 0.95;
   pointer-events: none;
   --sniper-cycle-progress: 1;
 }
 
-.crosshair::before,
-.crosshair::after {
-  content: "";
+.crosshair.rifle {
+  width: clamp(4px, 0.4vw, 8px);
+  height: clamp(4px, 0.4vw, 8px);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.84);
+  background: rgba(248, 253, 255, 0.96);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.66),
+    0 0 5px rgba(255, 179, 88, 0.24);
+}
+
+.crosshair.sniper-hip {
+  width: 0;
+  height: 0;
+}
+
+.sniper-hip-lines {
+  position: relative;
+  width: 0;
+  height: 0;
+}
+
+.sniper-hip-lines .line {
   position: absolute;
-  background: rgba(246, 251, 255, 0.95);
+  display: block;
+  border-radius: 999px;
+  background: #6ec8ff;
   box-shadow:
-    0 0 4px rgba(0, 0, 0, 0.8),
-    0 0 10px rgba(255, 173, 66, 0.2);
-  z-index: 2;
+    0 0 0 1px rgba(0, 0, 0, 0.66),
+    0 0 8px rgba(66, 197, 255, 0.42);
 }
 
-.crosshair::before {
-  left: 8px;
-  top: 2px;
-  width: 2px;
-  height: 14px;
+.sniper-hip-lines .line.top,
+.sniper-hip-lines .line.bottom {
+  width: clamp(2px, 0.16vw, 3px);
+  height: clamp(8px, 0.72vw, 13px);
+  left: 50%;
+  transform: translateX(-50%);
 }
 
-.crosshair::after {
-  top: 8px;
-  left: 2px;
-  width: 14px;
-  height: 2px;
+.sniper-hip-lines .line.left,
+.sniper-hip-lines .line.right {
+  width: clamp(8px, 0.74vw, 14px);
+  height: clamp(2px, 0.16vw, 3px);
+  top: 50%;
+  transform: translateY(-50%);
 }
 
-.crosshair.sniper {
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 50%;
-  box-shadow:
-    0 0 14px rgba(0, 0, 0, 0.52),
-    inset 0 0 0 1px rgba(255, 171, 66, 0.16);
-  background: radial-gradient(circle, rgba(255, 171, 66, 0.95) 0 1.2px, transparent 2px);
+.sniper-hip-lines .line.top {
+  top: calc(clamp(6px, 0.55vw, 10px) * -1 - clamp(8px, 0.72vw, 13px));
 }
 
-.crosshair.sniper::before {
-  left: 16px;
-  top: 2px;
-  width: 1px;
-  height: 30px;
-  background: rgba(255, 255, 255, 0.72);
+.sniper-hip-lines .line.bottom {
+  top: clamp(6px, 0.55vw, 10px);
 }
 
-.crosshair.sniper::after {
-  top: 16px;
-  left: 2px;
-  width: 30px;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.72);
+.sniper-hip-lines .line.left {
+  left: calc(clamp(6px, 0.55vw, 10px) * -1 - clamp(8px, 0.74vw, 14px));
+}
+
+.sniper-hip-lines .line.right {
+  left: clamp(6px, 0.55vw, 10px);
 }
 
 .crosshair-progress {
   position: absolute;
-  inset: -6px;
+  inset: clamp(-11px, -0.95vw, -8px);
   border-radius: 50%;
   opacity: 0;
   z-index: 1;
@@ -387,8 +372,108 @@ code {
   transition: opacity 100ms ease;
 }
 
-.crosshair.sniper.rechambering .crosshair-progress.active {
+.crosshair.sniper-hip.rechambering .crosshair-progress.active {
   opacity: 1;
+}
+
+.sniper-scope-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --scope-size: min(79vh, 79vw);
+}
+
+.scope-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      circle at center,
+      transparent 0 calc(var(--scope-size) / 2),
+      rgba(0, 0, 0, 0.9) calc(var(--scope-size) / 2 + 2px)
+    );
+}
+
+.scope-reticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--scope-size);
+  height: var(--scope-size);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid rgba(6, 8, 11, 0.92);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 0 0 1px rgba(0, 0, 0, 0.74);
+}
+
+.scope-line {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.88);
+}
+
+.scope-line.vertical {
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+
+.scope-line.horizontal {
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: 2px;
+  transform: translateY(-50%);
+}
+
+.scope-center-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: clamp(4px, 0.4vw, 7px);
+  height: clamp(4px, 0.4vw, 7px);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #ff455a;
+  box-shadow: 0 0 8px rgba(255, 69, 90, 0.65);
+}
+
+.scope-hash {
+  position: absolute;
+  left: 50%;
+  width: clamp(10px, 0.9vw, 16px);
+  height: 2px;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.88);
+}
+
+.scope-hash.hash-1 {
+  top: calc(50% + clamp(26px, 2.4vw, 38px));
+}
+
+.scope-hash.hash-2 {
+  top: calc(50% + clamp(52px, 4.6vw, 74px));
+}
+
+.scope-hash.hash-3 {
+  top: calc(50% + clamp(78px, 6.8vw, 108px));
+}
+
+.scope-rechamber {
+  position: absolute;
+  inset: clamp(-10px, -0.8vw, -6px);
+  border-radius: 50%;
+  opacity: 0.92;
+  background: conic-gradient(
+    from -90deg,
+    rgba(255, 171, 66, 0.9) calc(var(--sniper-cycle-progress) * 1turn),
+    rgba(255, 171, 66, 0.12) 0
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
 }
 
 .hit-marker {
@@ -398,8 +483,8 @@ code {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 26px;
-  height: 26px;
+  width: clamp(10px, 0.95vw, 14px);
+  height: clamp(10px, 0.95vw, 14px);
   transform: translate(-50%, -50%);
   opacity: 0;
   transition: opacity 80ms ease;
@@ -414,38 +499,36 @@ code {
 .hit-marker::after {
   content: "";
   position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(
-      45deg,
-      transparent 47%,
-      var(--hit-marker-color) 47%,
-      var(--hit-marker-color) 53%,
-      transparent 53%
-    ),
-    linear-gradient(
-      -45deg,
-      transparent 47%,
-      var(--hit-marker-color) 47%,
-      var(--hit-marker-color) 53%,
-      transparent 53%
-    );
-  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 5px var(--hit-marker-glow));
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 1px;
+  background: var(--hit-marker-color);
+  transform-origin: center;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.72)) drop-shadow(0 0 4px var(--hit-marker-glow));
   transform: scale(var(--hit-marker-scale));
+}
+
+.hit-marker::before {
+  transform: translate(-50%, -50%) rotate(45deg) scale(var(--hit-marker-scale));
+}
+
+.hit-marker::after {
+  transform: translate(-50%, -50%) rotate(-45deg) scale(var(--hit-marker-scale));
 }
 
 .hit-marker.head {
   --hit-marker-color: #ff7581;
   --hit-marker-glow: rgba(255, 111, 122, 0.72);
-  --hit-marker-scale: 1.06;
+  --hit-marker-scale: 1.03;
 }
 
 .hit-marker.kill {
   --hit-marker-color: #ffd27e;
   --hit-marker-glow: rgba(255, 171, 66, 0.95);
-  --hit-marker-scale: 1.18;
-  width: 34px;
-  height: 34px;
+  --hit-marker-scale: 1.1;
+  width: clamp(12px, 1.1vw, 17px);
+  height: clamp(12px, 1.1vw, 17px);
 }
 
 .hit-marker.kill::after {
@@ -471,29 +554,65 @@ code {
 
 .pause-menu {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(1080px, calc(100vw - 28px));
-  max-width: 1080px;
-  min-height: min(680px, calc(100vh - 28px));
-  max-height: calc(100vh - 28px);
+  inset: 0;
+  transform: none;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
   padding: 0;
-  border-radius: 20px;
+  border-radius: 0;
   border-color: rgba(255, 171, 66, 0.18);
   background:
-    linear-gradient(180deg, rgba(10, 15, 20, 0.96), rgba(7, 10, 14, 0.96));
+    linear-gradient(180deg, rgba(12, 20, 27, 0.97), rgba(8, 13, 19, 0.98));
   box-shadow:
-    0 35px 90px rgba(0, 0, 0, 0.6),
+    0 30px 80px rgba(0, 0, 0, 0.6),
     inset 0 0 0 1px rgba(255, 255, 255, 0.03);
   pointer-events: auto;
+  overflow: hidden;
+}
+
+.pause-close-btn {
+  position: absolute;
+  right: 14px;
+  top: 12px;
+  z-index: 3;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.36);
+  color: #f3fbff;
+  font-size: 22px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+.pause-close-btn:hover {
+  border-color: rgba(255, 171, 66, 0.38);
+  background: rgba(255, 171, 66, 0.2);
+}
+
+.pause-close-btn:focus-visible {
+  outline: 2px solid rgba(255, 171, 66, 0.7);
+  outline-offset: 2px;
+}
+
+.pause-close-btn:active {
+  transform: translateY(1px);
 }
 
 .pause-shell {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
-  min-height: inherit;
-  max-height: inherit;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .pause-sidebar {
@@ -505,6 +624,8 @@ code {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   gap: 12px;
+  min-height: 0;
+  overflow: auto;
 }
 
 .pause-logo p {
@@ -595,6 +716,7 @@ code {
 
 .pause-content {
   min-width: 0;
+  min-height: 0;
   padding: 16px;
   display: grid;
   grid-template-rows: auto 1fr;
@@ -1064,10 +1186,12 @@ code {
   }
 
   .pause-menu {
-    width: calc(100vw - 16px);
-    min-height: calc(100vh - 16px);
-    max-height: calc(100vh - 16px);
-    border-radius: 16px;
+    border-radius: 0;
+  }
+
+  .pause-close-btn {
+    right: 10px;
+    top: 8px;
   }
 
   .pause-shell {

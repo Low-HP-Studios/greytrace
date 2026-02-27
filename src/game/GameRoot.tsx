@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { DEFAULT_AUDIO_VOLUMES, type AudioVolumeSettings } from "./Audio";
 import { PerfHUD } from "./PerfHUD";
-import { Scene, type HitMarkerKind } from "./Scene";
+import { Scene, type AimingState, type HitMarkerKind } from "./Scene";
 import type { SniperRechamberState, WeaponKind } from "./Weapon";
 import {
   DEFAULT_AIM_SENSITIVITY_SETTINGS,
@@ -69,19 +69,156 @@ const OVERLAY_ROWS: Array<{ key: keyof HudOverlayToggles; label: string; hint: s
   { key: "performance", label: "Performance panel", hint: "Top-right perf HUD" },
 ];
 
+const SETTINGS_STORAGE_KEY = "pindg.settings.v1";
+
+const DEFAULT_GAME_SETTINGS: GameSettings = {
+  shadows: true,
+  pixelRatioScale: 1,
+  showR3fPerf: false,
+  sensitivity: { ...DEFAULT_AIM_SENSITIVITY_SETTINGS },
+  keybinds: { ...DEFAULT_CONTROL_BINDINGS },
+};
+
+type PersistedSettings = {
+  settings: GameSettings;
+  hudPanels: HudOverlayToggles;
+  stressCount: StressModeCount;
+  audioVolumes: AudioVolumeSettings;
+};
+
+function createDefaultPersistedSettings(): PersistedSettings {
+  return {
+    settings: {
+      ...DEFAULT_GAME_SETTINGS,
+      sensitivity: { ...DEFAULT_AIM_SENSITIVITY_SETTINGS },
+      keybinds: { ...DEFAULT_CONTROL_BINDINGS },
+    },
+    hudPanels: { ...DEFAULT_HUD_OVERLAY_TOGGLES },
+    stressCount: 0,
+    audioVolumes: { ...DEFAULT_AUDIO_VOLUMES },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function readString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function readClampedNumber(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, value));
+}
+
+function readPixelRatioScale(value: unknown, fallback: PixelRatioScale): PixelRatioScale {
+  return PIXEL_RATIO_OPTIONS.includes(value as PixelRatioScale) ? (value as PixelRatioScale) : fallback;
+}
+
+function readStressModeCount(value: unknown, fallback: StressModeCount): StressModeCount {
+  return STRESS_STEPS.includes(value as StressModeCount) ? (value as StressModeCount) : fallback;
+}
+
+function parsePersistedSettings(value: unknown): PersistedSettings {
+  const defaults = createDefaultPersistedSettings();
+  if (!isRecord(value)) {
+    return defaults;
+  }
+
+  const settings = isRecord(value.settings) ? value.settings : {};
+  const sensitivity = isRecord(settings.sensitivity) ? settings.sensitivity : {};
+  const keybinds = isRecord(settings.keybinds) ? settings.keybinds : {};
+  const hudPanels = isRecord(value.hudPanels) ? value.hudPanels : {};
+  const audioVolumes = isRecord(value.audioVolumes) ? value.audioVolumes : {};
+
+  return {
+    settings: {
+      shadows: readBoolean(settings.shadows, defaults.settings.shadows),
+      pixelRatioScale: readPixelRatioScale(settings.pixelRatioScale, defaults.settings.pixelRatioScale),
+      showR3fPerf: readBoolean(settings.showR3fPerf, defaults.settings.showR3fPerf),
+      sensitivity: {
+        look: readClampedNumber(sensitivity.look, 20, 250, defaults.settings.sensitivity.look),
+        rifleAds: readClampedNumber(sensitivity.rifleAds, 20, 200, defaults.settings.sensitivity.rifleAds),
+        sniperAds: readClampedNumber(sensitivity.sniperAds, 15, 180, defaults.settings.sensitivity.sniperAds),
+        vertical: readClampedNumber(sensitivity.vertical, 50, 200, defaults.settings.sensitivity.vertical),
+      },
+      keybinds: {
+        moveForward: readString(keybinds.moveForward, defaults.settings.keybinds.moveForward),
+        moveBackward: readString(keybinds.moveBackward, defaults.settings.keybinds.moveBackward),
+        moveLeft: readString(keybinds.moveLeft, defaults.settings.keybinds.moveLeft),
+        moveRight: readString(keybinds.moveRight, defaults.settings.keybinds.moveRight),
+        sprint: readString(keybinds.sprint, defaults.settings.keybinds.sprint),
+        jump: readString(keybinds.jump, defaults.settings.keybinds.jump),
+        pickup: readString(keybinds.pickup, defaults.settings.keybinds.pickup),
+        drop: readString(keybinds.drop, defaults.settings.keybinds.drop),
+        reset: readString(keybinds.reset, defaults.settings.keybinds.reset),
+        equipRifle: readString(keybinds.equipRifle, defaults.settings.keybinds.equipRifle),
+        equipSniper: readString(keybinds.equipSniper, defaults.settings.keybinds.equipSniper),
+        toggleView: readString(keybinds.toggleView, defaults.settings.keybinds.toggleView),
+        shoulderLeft: readString(keybinds.shoulderLeft, defaults.settings.keybinds.shoulderLeft),
+        shoulderRight: readString(keybinds.shoulderRight, defaults.settings.keybinds.shoulderRight),
+      },
+    },
+    hudPanels: {
+      practice: readBoolean(hudPanels.practice, defaults.hudPanels.practice),
+      controls: readBoolean(hudPanels.controls, defaults.hudPanels.controls),
+      settings: readBoolean(hudPanels.settings, defaults.hudPanels.settings),
+      performance: readBoolean(hudPanels.performance, defaults.hudPanels.performance),
+    },
+    stressCount: readStressModeCount(value.stressCount, defaults.stressCount),
+    audioVolumes: {
+      master: readClampedNumber(audioVolumes.master, 0, 1, defaults.audioVolumes.master),
+      gunshot: readClampedNumber(audioVolumes.gunshot, 0, 1, defaults.audioVolumes.gunshot),
+      footsteps: readClampedNumber(audioVolumes.footsteps, 0, 1, defaults.audioVolumes.footsteps),
+      hit: readClampedNumber(audioVolumes.hit, 0, 1, defaults.audioVolumes.hit),
+    },
+  };
+}
+
+function loadPersistedSettings(): PersistedSettings {
+  const fallback = createDefaultPersistedSettings();
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  try {
+    const rawSettings = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!rawSettings) {
+      return fallback;
+    }
+    return parsePersistedSettings(JSON.parse(rawSettings));
+  } catch {
+    return fallback;
+  }
+}
+
+function savePersistedSettings(settings: PersistedSettings) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // Ignore storage write failures (private mode/quota) and keep game usable.
+  }
+}
+
 export function GameRoot() {
-  const [settings, setSettings] = useState<GameSettings>({
-    shadows: true,
-    pixelRatioScale: 1,
-    showR3fPerf: false,
-    sensitivity: { ...DEFAULT_AIM_SENSITIVITY_SETTINGS },
-    keybinds: { ...DEFAULT_CONTROL_BINDINGS },
-  });
-  const [hudPanels, setHudPanels] = useState<HudOverlayToggles>({ ...DEFAULT_HUD_OVERLAY_TOGGLES });
+  const persistedSettings = useMemo(loadPersistedSettings, []);
+  const [settings, setSettings] = useState<GameSettings>(persistedSettings.settings);
+  const [hudPanels, setHudPanels] = useState<HudOverlayToggles>(persistedSettings.hudPanels);
   const [menuTab, setMenuTab] = useState<PauseMenuTab>("gameplay");
   const [bindingCapture, setBindingCapture] = useState<BindingKey | null>(null);
-  const [stressCount, setStressCount] = useState<StressModeCount>(0);
-  const [audioVolumes, setAudioVolumes] = useState<AudioVolumeSettings>(DEFAULT_AUDIO_VOLUMES);
+  const [stressCount, setStressCount] = useState<StressModeCount>(persistedSettings.stressCount);
+  const [audioVolumes, setAudioVolumes] = useState<AudioVolumeSettings>(persistedSettings.audioVolumes);
   const [perfMetrics, setPerfMetrics] = useState<PerfMetrics>(DEFAULT_PERF_METRICS);
   const [player, setPlayer] = useState<PlayerSnapshot>(DEFAULT_PLAYER_SNAPSHOT);
   const [weaponEquipped, setWeaponEquipped] = useState(true);
@@ -91,11 +228,32 @@ export function GameRoot() {
     progress: 1,
     remainingMs: 0,
   });
+  const [aimingState, setAimingState] = useState<AimingState>({
+    ads: false,
+    firstPerson: false,
+  });
+  const [resumePointerLockRequestId, setResumePointerLockRequestId] = useState(0);
   const [hitMarker, setHitMarker] = useState<{ until: number; kind: HitMarkerKind }>({
     until: 0,
     kind: "body",
   });
   const isPaused = !player.pointerLocked;
+
+  const handleCloseMenuAndResume = useCallback(() => {
+    setBindingCapture(null);
+    const canvas = document.querySelector(".game-canvas");
+    if (canvas instanceof HTMLCanvasElement) {
+      try {
+        const result = canvas.requestPointerLock();
+        if (result && typeof result.then === "function") {
+          void result.catch(() => {});
+        }
+      } catch {
+        // Controller fallback path below handles Tauri/broken pointer-lock scenarios.
+      }
+    }
+    setResumePointerLockRequestId((previous) => previous + 1);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -112,6 +270,15 @@ export function GameRoot() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    savePersistedSettings({
+      settings,
+      hudPanels,
+      stressCount,
+      audioVolumes,
+    });
+  }, [settings, hudPanels, stressCount, audioVolumes]);
 
   useEffect(() => {
     if (!bindingCapture) {
@@ -149,10 +316,11 @@ export function GameRoot() {
   }, [bindingCapture, isPaused]);
 
   const hitMarkerVisible = hitMarker.until > performance.now();
+  const sniperScopeActive = activeWeapon === "sniper" && aimingState.ads && !isPaused;
   const stressLabel = stressCount === 0 ? "Off" : `${stressCount} boxes`;
   const lockLabel = player.pointerLocked ? "Live look mode" : "Paused / cursor shown";
   const crosshairStyle =
-    activeWeapon === "sniper"
+    activeWeapon === "sniper" && (sniperRechamber.active || sniperScopeActive)
       ? ({
           ["--sniper-cycle-progress" as string]: `${sniperRechamber.progress}`,
         } as CSSProperties)
@@ -201,6 +369,7 @@ export function GameRoot() {
         settings={settings}
         audioVolumes={audioVolumes}
         stressCount={stressCount}
+        resumePointerLockRequestId={resumePointerLockRequestId}
         onPerfMetrics={setPerfMetrics}
         onPlayerSnapshot={setPlayer}
         onHitMarker={(kind) =>
@@ -212,16 +381,16 @@ export function GameRoot() {
         onWeaponEquippedChange={setWeaponEquipped}
         onActiveWeaponChange={setActiveWeapon}
         onSniperRechamberChange={setSniperRechamber}
+        onAimingStateChange={setAimingState}
       />
 
       <div className="ui-overlay">
         {hudPanels.practice ? (
           <div className="corner-top-left panel tactical-panel practice-panel">
-            <div className="panel-eyebrow">PindG / Practice Range</div>
+            <div className="panel-eyebrow">PINDG / Practice Range</div>
             <div className="panel-title-row">
-              <div className="brand-lockup" aria-label="PindG logo">
-                <span className="brand-block">PIN</span>
-                <span className="brand-mark">dG</span>
+              <div className="brand-lockup" aria-label="PINDG logo">
+                <span className="brand-word">PINDG</span>
               </div>
               <div className="status-pill">
                 <span className={`status-dot ${player.pointerLocked ? "locked" : ""}`} />
@@ -262,16 +431,38 @@ export function GameRoot() {
         ) : null}
 
         <div className="center-stack">
-          {!isPaused ? (
+          {!isPaused && !sniperScopeActive ? (
             <div
-              className={`crosshair ${activeWeapon === "sniper" ? "sniper" : "rifle"} ${
+              className={`crosshair ${activeWeapon === "sniper" ? "sniper-hip" : "rifle"} ${
                 activeWeapon === "sniper" && sniperRechamber.active ? "rechambering" : ""
               }`}
               style={crosshairStyle}
             >
               {activeWeapon === "sniper" ? (
+                <div className="sniper-hip-lines" aria-hidden="true">
+                  <span className="line top" />
+                  <span className="line right" />
+                  <span className="line bottom" />
+                  <span className="line left" />
+                </div>
+              ) : null}
+              {activeWeapon === "sniper" && sniperRechamber.active ? (
                 <div className={`crosshair-progress ${sniperRechamber.active ? "active" : ""}`} />
               ) : null}
+            </div>
+          ) : null}
+          {sniperScopeActive ? (
+            <div className="sniper-scope-overlay" style={crosshairStyle}>
+              <div className="scope-vignette" />
+              <div className="scope-reticle">
+                <span className="scope-line vertical" />
+                <span className="scope-line horizontal" />
+                <span className="scope-center-dot" />
+                <span className="scope-hash hash-1" />
+                <span className="scope-hash hash-2" />
+                <span className="scope-hash hash-3" />
+                {sniperRechamber.active ? <span className="scope-rechamber" /> : null}
+              </div>
             </div>
           ) : null}
           {!isPaused ? (
@@ -280,12 +471,19 @@ export function GameRoot() {
 
           {isPaused ? (
             <div className="pause-menu panel tactical-panel" role="dialog" aria-label="Pause menu">
+              <button
+                type="button"
+                className="pause-close-btn"
+                aria-label="Close settings and resume game"
+                onClick={handleCloseMenuAndResume}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
               <div className="pause-shell">
                 <aside className="pause-sidebar" aria-label="Menu sections">
                   <div className="pause-logo">
                     <div className="brand-lockup large" aria-hidden="true">
-                      <span className="brand-block">PIN</span>
-                      <span className="brand-mark">dG</span>
+                      <span className="brand-word">PINDG</span>
                     </div>
                     <p className="muted">Training lobby. Legacy bugs included at no extra cost.</p>
                   </div>
@@ -319,7 +517,7 @@ export function GameRoot() {
                     ))}
                   </div>
                   <div className="pause-footer-note muted">
-                    Click anywhere in the scene to resume. <code>Esc</code> pauses.
+                    Press <code>Esc</code> to pause again after resuming.
                   </div>
                 </aside>
 
@@ -585,7 +783,7 @@ export function GameRoot() {
                         />
                         <SwitchRow
                           label="r3f-perf Overlay"
-                          hint="Developer perf overlay (separate from PindG perf panel)"
+                          hint="Developer perf overlay (separate from PINDG perf panel)"
                           checked={settings.showR3fPerf}
                           onChange={(checked) =>
                             setSettings((prev) => ({

@@ -24,6 +24,7 @@ import {
   type SniperRechamberState,
   type WeaponKind,
   type WeaponShotEvent,
+  type WeaponSwitchState,
 } from "./Weapon";
 import type {
   CollisionRect,
@@ -39,15 +40,21 @@ type SceneProps = {
   settings: GameSettings;
   audioVolumes: AudioVolumeSettings;
   stressCount: StressModeCount;
+  resumePointerLockRequestId: number;
   onPlayerSnapshot: (snapshot: PlayerSnapshot) => void;
   onPerfMetrics: (metrics: PerfMetrics) => void;
   onHitMarker: (kind: HitMarkerKind) => void;
   onWeaponEquippedChange: (equipped: boolean) => void;
   onActiveWeaponChange: (weapon: WeaponKind) => void;
   onSniperRechamberChange: (state: SniperRechamberState) => void;
+  onAimingStateChange: (state: AimingState) => void;
 };
 
 export type HitMarkerKind = "body" | "head" | "kill";
+export type AimingState = {
+  ads: boolean;
+  firstPerson: boolean;
+};
 
 const WORLD_BOUNDS: WorldBounds = {
   minX: -80,
@@ -75,6 +82,9 @@ const WALL_THICKNESS = 0.35;
 const DOOR_GAP_WIDTH = 2.2;
 const DOOR_HEIGHT = 2.2;
 const TRACER_DISTANCE = 260;
+const TRACER_CAMERA_START_OFFSET = 0.32;
+const TRACER_MUZZLE_FORWARD_OFFSET = 0.09;
+const MIN_TRACER_DISTANCE = 10;
 const TARGET_FLASH_MS = 180;
 const MAX_BULLET_IMPACT_MARKS = 160;
 const BULLET_IMPACT_LIFETIME_MS = 5000;
@@ -108,12 +118,14 @@ export function Scene({
   settings,
   audioVolumes,
   stressCount,
+  resumePointerLockRequestId,
   onPlayerSnapshot,
   onPerfMetrics,
   onHitMarker,
   onWeaponEquippedChange,
   onActiveWeaponChange,
   onSniperRechamberChange,
+  onAimingStateChange,
 }: SceneProps) {
   const [targets, setTargets] = useState<TargetState[]>(() => createDefaultTargets());
   const resetTimeoutsRef = useRef<Map<string, number>>(new Map());
@@ -217,6 +229,7 @@ export function Scene({
         collisionRects={STATIC_COLLIDERS}
         worldBounds={WORLD_BOUNDS}
         audioVolumes={audioVolumes}
+        resumePointerLockRequestId={resumePointerLockRequestId}
         sensitivity={settings.sensitivity}
         keybinds={settings.keybinds}
         targets={targets}
@@ -228,6 +241,7 @@ export function Scene({
         onWeaponEquippedChange={onWeaponEquippedChange}
         onActiveWeaponChange={onActiveWeaponChange}
         onSniperRechamberChange={onSniperRechamberChange}
+        onAimingStateChange={onAimingStateChange}
       />
       {settings.showR3fPerf ? <Perf position="top-left" minimal /> : null}
     </Canvas>
@@ -238,6 +252,7 @@ type GameplayRuntimeProps = {
   collisionRects: CollisionRect[];
   worldBounds: WorldBounds;
   audioVolumes: AudioVolumeSettings;
+  resumePointerLockRequestId: number;
   sensitivity: GameSettings["sensitivity"];
   keybinds: GameSettings["keybinds"];
   targets: TargetState[];
@@ -249,12 +264,14 @@ type GameplayRuntimeProps = {
   onWeaponEquippedChange: (equipped: boolean) => void;
   onActiveWeaponChange: (weapon: WeaponKind) => void;
   onSniperRechamberChange: (state: SniperRechamberState) => void;
+  onAimingStateChange: (state: AimingState) => void;
 };
 
 function GameplayRuntime({
   collisionRects,
   worldBounds,
   audioVolumes,
+  resumePointerLockRequestId,
   sensitivity,
   keybinds,
   targets,
@@ -266,6 +283,7 @@ function GameplayRuntime({
   onWeaponEquippedChange,
   onActiveWeaponChange,
   onSniperRechamberChange,
+  onAimingStateChange,
 }: GameplayRuntimeProps) {
   const gl = useThree((state) => state.gl);
   const camera = useThree((state) => state.camera);
@@ -285,17 +303,26 @@ function GameplayRuntime({
   const weaponEquippedCallbackRef = useRef(onWeaponEquippedChange);
   const activeWeaponCallbackRef = useRef(onActiveWeaponChange);
   const sniperRechamberCallbackRef = useRef(onSniperRechamberChange);
+  const aimingStateCallbackRef = useRef(onAimingStateChange);
 
   const perfAccumulatorRef = useRef(0);
   const fpsFrameCountRef = useRef(0);
   const fpsTimeRef = useRef(0);
   const lastWeaponEquippedRef = useRef<boolean | null>(null);
   const lastActiveWeaponRef = useRef<WeaponKind | null>(null);
+  const lastADSRef = useRef<boolean | null>(null);
+  const lastFirstPersonRef = useRef<boolean | null>(null);
 
   const worldGunRef = useRef<THREE.Group>(null);
   const playerCharacterRef = useRef<THREE.Group>(null);
   const characterWeaponRef = useRef<THREE.Group>(null);
+  const characterRifleModelRef = useRef<THREE.Group>(null);
+  const characterSniperModelRef = useRef<THREE.Group>(null);
   const characterMuzzleRef = useRef<THREE.Mesh>(null);
+  const firstPersonWeaponRef = useRef<THREE.Group>(null);
+  const firstPersonRifleModelRef = useRef<THREE.Group>(null);
+  const firstPersonSniperModelRef = useRef<THREE.Group>(null);
+  const firstPersonMuzzleRef = useRef<THREE.Mesh>(null);
   const tracerRef = useRef<THREE.Mesh>(null);
 
   const tempEndRef = useRef(new THREE.Vector3());
@@ -307,6 +334,9 @@ function GameplayRuntime({
   const tempImpactNormalMatrixRef = useRef(new THREE.Matrix3());
   const tempImpactQuaternionRef = useRef(new THREE.Quaternion());
   const tempImpactPositionRef = useRef(new THREE.Vector3());
+  const tempCameraForwardRef = useRef(new THREE.Vector3());
+  const tempCameraRightRef = useRef(new THREE.Vector3());
+  const tempCameraUpRef = useRef(new THREE.Vector3());
   const raycasterRef = useRef(new THREE.Raycaster());
   const impactIdRef = useRef(0);
   const lastImpactCleanupAtRef = useRef(0);
@@ -348,6 +378,10 @@ function GameplayRuntime({
   useEffect(() => {
     sniperRechamberCallbackRef.current = onSniperRechamberChange;
   }, [onSniperRechamberChange]);
+
+  useEffect(() => {
+    aimingStateCallbackRef.current = onAimingStateChange;
+  }, [onAimingStateChange]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -401,11 +435,11 @@ function GameplayRuntime({
     onAction: (action) => {
       const weapon = weaponRef.current;
       if (action === "equipRifle") {
-        weapon.switchWeapon("rifle");
+        weapon.switchWeapon("rifle", performance.now());
         return;
       }
       if (action === "equipSniper") {
-        weapon.switchWeapon("sniper");
+        weapon.switchWeapon("sniper", performance.now());
         return;
       }
       if (action === "reset") {
@@ -455,6 +489,13 @@ function GameplayRuntime({
 
   controllerRef.current = controller;
 
+  useEffect(() => {
+    if (resumePointerLockRequestId <= 0) {
+      return;
+    }
+    controllerRef.current?.requestPointerLock();
+  }, [resumePointerLockRequestId]);
+
   useFrame((_, delta) => {
     const clampedDelta = Math.min(delta, 1 / 20);
     const nowMs = performance.now();
@@ -487,6 +528,19 @@ function GameplayRuntime({
     );
 
     const firstPerson = controller.isFirstPerson();
+    const adsActive = controller.isADS();
+    if (
+      lastADSRef.current !== adsActive ||
+      lastFirstPersonRef.current !== firstPerson
+    ) {
+      lastADSRef.current = adsActive;
+      lastFirstPersonRef.current = firstPerson;
+      aimingStateCallbackRef.current({
+        ads: adsActive,
+        firstPerson,
+      });
+    }
+
     const playerChar = playerCharacterRef.current;
     if (playerChar) {
       const pos = controller.getPosition();
@@ -496,6 +550,32 @@ function GameplayRuntime({
       // Keep child world transforms current before we sample muzzle position for tracers.
       playerChar.updateMatrixWorld(true);
     }
+
+    const switchState = weapon.getSwitchState(nowMs);
+    updateCharacterWeaponMesh(
+      characterWeaponRef.current,
+      characterRifleModelRef.current,
+      characterSniperModelRef.current,
+      characterMuzzleRef.current,
+      weapon,
+      nowMs,
+      switchState,
+    );
+    updateFirstPersonWeaponMesh(
+      firstPersonWeaponRef.current,
+      firstPersonRifleModelRef.current,
+      firstPersonSniperModelRef.current,
+      firstPersonMuzzleRef.current,
+      weapon,
+      nowMs,
+      camera,
+      firstPerson,
+      adsActive,
+      switchState,
+      tempCameraForwardRef.current,
+      tempCameraRightRef.current,
+      tempCameraUpRef.current,
+    );
 
     const shots = weapon.update(clampedDelta, nowMs, camera);
     for (const shot of shots) {
@@ -520,7 +600,19 @@ function GameplayRuntime({
         (!worldHit || targetHit.distance <= worldHit.distance + BULLET_HIT_EPSILON);
 
       const tracerOrigin = tempTracerOriginRef.current;
-      tracerOrigin.copy(shot.origin);
+      const firstPersonMuzzle = firstPersonMuzzleRef.current;
+      const thirdPersonMuzzle = characterMuzzleRef.current;
+      const useFirstPersonMuzzle = firstPerson && !!firstPersonMuzzle && firstPersonWeaponRef.current?.visible;
+      const useThirdPersonMuzzle = !firstPerson && !!thirdPersonMuzzle && playerChar?.visible;
+      if (useFirstPersonMuzzle && firstPersonMuzzle) {
+        firstPersonMuzzle.getWorldPosition(tracerOrigin);
+        tracerOrigin.addScaledVector(shot.direction, TRACER_MUZZLE_FORWARD_OFFSET);
+      } else if (useThirdPersonMuzzle && thirdPersonMuzzle) {
+        thirdPersonMuzzle.getWorldPosition(tracerOrigin);
+        tracerOrigin.addScaledVector(shot.direction, TRACER_MUZZLE_FORWARD_OFFSET);
+      } else {
+        tracerOrigin.copy(shot.origin);
+      }
 
       if (targetHit && targetVisible) {
         tempEndRef.current.copy(targetHit.point);
@@ -545,11 +637,24 @@ function GameplayRuntime({
           .addScaledVector(shot.direction, TRACER_DISTANCE);
       }
 
+      if (
+        !useFirstPersonMuzzle &&
+        !useThirdPersonMuzzle &&
+        tracerOrigin.distanceToSquared(tempEndRef.current) > (TRACER_CAMERA_START_OFFSET + 0.04) ** 2
+      ) {
+        tracerOrigin.addScaledVector(shot.direction, TRACER_CAMERA_START_OFFSET);
+      }
+
+      const tracerDistance = tracerOrigin.distanceTo(tempEndRef.current);
+      if (tracerDistance < MIN_TRACER_DISTANCE) {
+        weapon.clearTracer();
+        continue;
+      }
+
       weapon.setTracer(tracerOrigin, tempEndRef.current, nowMs);
     }
 
     updateWorldGunMesh(worldGunRef.current, weapon, nowMs);
-    updateCharacterWeaponMesh(characterWeaponRef.current, characterMuzzleRef.current, weapon, nowMs);
     updateTracerMesh(tracerRef.current, weapon, nowMs, tempMidRef.current, tempTracerDirRef.current);
 
     const equipped = weapon.isEquipped();
@@ -620,23 +725,91 @@ function GameplayRuntime({
 
         {/* Character-held weapon */}
         <group ref={characterWeaponRef} position={[0.34, 0.82, -0.2]} visible={false}>
-          <mesh castShadow receiveShadow>
-            <boxGeometry args={[0.55, 0.09, 0.13]} />
-            <meshStandardMaterial color="#30363c" roughness={0.55} metalness={0.4} />
-          </mesh>
-          <mesh position={[0.16, -0.08, 0.01]} rotation={[0.15, 0, -0.2]}>
-            <boxGeometry args={[0.18, 0.17, 0.05]} />
-            <meshStandardMaterial color="#4d463f" roughness={0.85} metalness={0.1} />
-          </mesh>
-          <mesh position={[-0.24, 0.015, 0]} rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[0.015, 0.015, 0.42, 8]} />
-            <meshStandardMaterial color="#20262b" roughness={0.4} metalness={0.6} />
-          </mesh>
+          <group ref={characterRifleModelRef}>
+            <mesh castShadow receiveShadow>
+              <boxGeometry args={[0.55, 0.09, 0.13]} />
+              <meshStandardMaterial color="#30363c" roughness={0.55} metalness={0.4} />
+            </mesh>
+            <mesh position={[0.16, -0.08, 0.01]} rotation={[0.15, 0, -0.2]}>
+              <boxGeometry args={[0.18, 0.17, 0.05]} />
+              <meshStandardMaterial color="#4d463f" roughness={0.85} metalness={0.1} />
+            </mesh>
+            <mesh position={[-0.24, 0.015, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.015, 0.015, 0.42, 8]} />
+              <meshStandardMaterial color="#20262b" roughness={0.4} metalness={0.6} />
+            </mesh>
+          </group>
+          <group ref={characterSniperModelRef}>
+            <mesh castShadow receiveShadow>
+              <boxGeometry args={[0.72, 0.08, 0.11]} />
+              <meshStandardMaterial color="#2a3036" roughness={0.53} metalness={0.42} />
+            </mesh>
+            <mesh position={[0.2, -0.07, 0.01]} rotation={[0.14, 0, -0.2]}>
+              <boxGeometry args={[0.2, 0.16, 0.05]} />
+              <meshStandardMaterial color="#4a4139" roughness={0.86} metalness={0.08} />
+            </mesh>
+            <mesh position={[-0.08, 0.07, 0]}>
+              <cylinderGeometry args={[0.03, 0.03, 0.28, 12]} />
+              <meshStandardMaterial color="#1d2227" roughness={0.42} metalness={0.58} />
+            </mesh>
+            <mesh position={[-0.34, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.014, 0.014, 0.68, 10]} />
+              <meshStandardMaterial color="#1b2025" roughness={0.45} metalness={0.62} />
+            </mesh>
+          </group>
           <mesh ref={characterMuzzleRef} position={[-0.44, 0.02, 0]} visible={false}>
             <sphereGeometry args={[0.05, 8, 8]} />
             <meshBasicMaterial color="#ffd085" transparent opacity={0.9} />
           </mesh>
         </group>
+      </group>
+
+      {/* FPP weapon + hands */}
+      <group ref={firstPersonWeaponRef} visible={false}>
+        <mesh position={[-0.12, -0.03, 0.08]}>
+          <boxGeometry args={[0.16, 0.2, 0.13]} />
+          <meshStandardMaterial color="#4a6b82" roughness={0.72} metalness={0.08} />
+        </mesh>
+        <mesh position={[0.07, -0.05, 0.03]}>
+          <boxGeometry args={[0.16, 0.24, 0.13]} />
+          <meshStandardMaterial color="#4a6b82" roughness={0.72} metalness={0.08} />
+        </mesh>
+        <group ref={firstPersonRifleModelRef}>
+          <mesh>
+            <boxGeometry args={[0.6, 0.08, 0.1]} />
+            <meshStandardMaterial color="#2e353b" roughness={0.5} metalness={0.46} />
+          </mesh>
+          <mesh position={[0.19, -0.08, 0.01]} rotation={[0.1, 0, -0.2]}>
+            <boxGeometry args={[0.18, 0.16, 0.05]} />
+            <meshStandardMaterial color="#52483f" roughness={0.84} metalness={0.1} />
+          </mesh>
+          <mesh position={[-0.27, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.013, 0.013, 0.45, 8]} />
+            <meshStandardMaterial color="#1f252b" roughness={0.38} metalness={0.62} />
+          </mesh>
+        </group>
+        <group ref={firstPersonSniperModelRef}>
+          <mesh>
+            <boxGeometry args={[0.82, 0.085, 0.095]} />
+            <meshStandardMaterial color="#2a2f34" roughness={0.5} metalness={0.48} />
+          </mesh>
+          <mesh position={[0.22, -0.08, 0.01]} rotation={[0.12, 0, -0.22]}>
+            <boxGeometry args={[0.2, 0.17, 0.05]} />
+            <meshStandardMaterial color="#4f453a" roughness={0.86} metalness={0.09} />
+          </mesh>
+          <mesh position={[-0.06, 0.07, 0]}>
+            <cylinderGeometry args={[0.032, 0.032, 0.3, 12]} />
+            <meshStandardMaterial color="#1a2025" roughness={0.4} metalness={0.6} />
+          </mesh>
+          <mesh position={[-0.38, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.013, 0.013, 0.72, 10]} />
+            <meshStandardMaterial color="#1b2025" roughness={0.42} metalness={0.62} />
+          </mesh>
+        </group>
+        <mesh ref={firstPersonMuzzleRef} position={[-0.5, 0.01, 0]} visible={false}>
+          <sphereGeometry args={[0.045, 8, 8]} />
+          <meshBasicMaterial color="#ffd085" transparent opacity={0.95} />
+        </mesh>
       </group>
 
       {/* World gun (dropped state) */}
@@ -655,9 +828,15 @@ function GameplayRuntime({
         </mesh>
       </group>
 
-      <mesh ref={tracerRef} visible={false}>
-        <boxGeometry args={[0.02, 0.02, 1]} />
-        <meshBasicMaterial color="#ff3b30" transparent opacity={0.9} />
+      <mesh ref={tracerRef} visible={false} frustumCulled={false} renderOrder={8}>
+        <boxGeometry args={[0.008, 0.008, 1]} />
+        <meshBasicMaterial
+          color="#ffd95f"
+          transparent
+          opacity={0.95}
+          depthWrite={false}
+          toneMapped={false}
+        />
       </mesh>
 
       <BulletImpactMarks impacts={impactMarks} />
@@ -1246,9 +1425,12 @@ function updateWorldGunMesh(
 
 function updateCharacterWeaponMesh(
   weaponGroup: THREE.Group | null,
+  rifleModel: THREE.Group | null,
+  sniperModel: THREE.Group | null,
   muzzleFlashMesh: THREE.Mesh | null,
   weapon: WeaponSystem,
   nowMs: number,
+  switchState: WeaponSwitchState,
 ) {
   if (!weaponGroup) {
     return;
@@ -1257,15 +1439,119 @@ function updateCharacterWeaponMesh(
   const equipped = weapon.isEquipped();
   weaponGroup.visible = equipped;
   if (!equipped) {
+    if (rifleModel) {
+      rifleModel.visible = false;
+    }
+    if (sniperModel) {
+      sniperModel.visible = false;
+    }
     if (muzzleFlashMesh) {
       muzzleFlashMesh.visible = false;
     }
     return;
   }
 
+  const displayedWeapon = resolveDisplayedWeapon(weapon, switchState);
+  const switchBlend = switchState.active ? Math.sin(Math.PI * switchState.progress) : 0;
+  weaponGroup.position.set(0.34, 0.82 - switchBlend * 0.18, -0.2 + switchBlend * 0.06);
+  weaponGroup.rotation.set(-switchBlend * 0.42, switchBlend * 0.05, -switchBlend * 0.12);
+
+  if (rifleModel) {
+    rifleModel.visible = displayedWeapon === "rifle";
+  }
+  if (sniperModel) {
+    sniperModel.visible = displayedWeapon === "sniper";
+  }
+
   if (muzzleFlashMesh) {
+    if (displayedWeapon === "sniper") {
+      muzzleFlashMesh.position.set(-0.66, 0.02, 0);
+      muzzleFlashMesh.scale.setScalar(1.15);
+    } else {
+      muzzleFlashMesh.position.set(-0.44, 0.02, 0);
+      muzzleFlashMesh.scale.setScalar(1);
+    }
     muzzleFlashMesh.visible = weapon.hasMuzzleFlash(nowMs);
   }
+}
+
+function updateFirstPersonWeaponMesh(
+  weaponGroup: THREE.Group | null,
+  rifleModel: THREE.Group | null,
+  sniperModel: THREE.Group | null,
+  muzzleFlashMesh: THREE.Mesh | null,
+  weapon: WeaponSystem,
+  nowMs: number,
+  camera: THREE.Camera,
+  firstPerson: boolean,
+  adsActive: boolean,
+  switchState: WeaponSwitchState,
+  tempForward: THREE.Vector3,
+  tempRight: THREE.Vector3,
+  tempUp: THREE.Vector3,
+) {
+  if (!weaponGroup) {
+    return;
+  }
+
+  const equipped = weapon.isEquipped();
+  const visible = equipped && firstPerson;
+  weaponGroup.visible = visible;
+  if (!visible) {
+    if (rifleModel) {
+      rifleModel.visible = false;
+    }
+    if (sniperModel) {
+      sniperModel.visible = false;
+    }
+    if (muzzleFlashMesh) {
+      muzzleFlashMesh.visible = false;
+    }
+    return;
+  }
+
+  const displayedWeapon = resolveDisplayedWeapon(weapon, switchState);
+  const switchBlend = switchState.active ? Math.sin(Math.PI * switchState.progress) : 0;
+  const adsT = adsActive ? 1 : 0;
+
+  if (rifleModel) {
+    rifleModel.visible = displayedWeapon === "rifle";
+  }
+  if (sniperModel) {
+    sniperModel.visible = displayedWeapon === "sniper";
+  }
+
+  tempForward.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  tempUp.set(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+  tempRight.crossVectors(tempForward, tempUp).normalize();
+
+  weaponGroup.position.copy(camera.position);
+  weaponGroup.position.addScaledVector(tempForward, 0.46 - adsT * 0.16);
+  weaponGroup.position.addScaledVector(tempRight, 0.2 - adsT * 0.15);
+  weaponGroup.position.addScaledVector(tempUp, -0.2 - adsT * 0.08 - switchBlend * 0.12);
+  weaponGroup.quaternion.copy(camera.quaternion);
+  weaponGroup.rotateY(Math.PI / 2);
+  weaponGroup.rotateX(-0.05 - switchBlend * 0.22);
+  weaponGroup.rotateZ(-0.08 + switchBlend * 0.12);
+  weaponGroup.updateMatrixWorld(true);
+
+  if (muzzleFlashMesh) {
+    if (displayedWeapon === "sniper") {
+      muzzleFlashMesh.position.set(-0.62, 0.02, 0);
+      muzzleFlashMesh.scale.setScalar(1.2);
+    } else {
+      muzzleFlashMesh.position.set(-0.5, 0.01, 0);
+      muzzleFlashMesh.scale.setScalar(1);
+    }
+    muzzleFlashMesh.visible = weapon.hasMuzzleFlash(nowMs);
+  }
+}
+
+function resolveDisplayedWeapon(weapon: WeaponSystem, switchState: WeaponSwitchState): WeaponKind {
+  if (!switchState.active) {
+    return weapon.getActiveWeapon();
+  }
+  return switchState.progress < 0.5 ? switchState.from : switchState.to;
 }
 
 function updateTracerMesh(

@@ -24,7 +24,8 @@ type TracerState = {
   until: number;
 };
 
-const TRACER_LIFETIME_MS = 55;
+const TRACER_LIFETIME_MS = 70;
+const WEAPON_SWITCH_DURATION_MS = 180;
 
 type WeaponConfig = {
   fireIntervalMs: number;
@@ -53,6 +54,14 @@ export type SniperRechamberState = {
   remainingMs: number;
 };
 
+export type WeaponSwitchState = {
+  active: boolean;
+  progress: number;
+  from: WeaponKind;
+  to: WeaponKind;
+  remainingMs: number;
+};
+
 export class WeaponSystem {
   private equipped = true;
   private activeWeapon: WeaponKind = "rifle";
@@ -64,6 +73,10 @@ export class WeaponSystem {
   private tracer: TracerState | null = null;
   private sniperRechamberStartedAtMs = 0;
   private sniperRechamberUntilMs = 0;
+  private pendingWeapon: WeaponKind | null = null;
+  private switchFromWeapon: WeaponKind = "rifle";
+  private switchStartedAtMs = 0;
+  private switchUntilMs = 0;
 
   setTriggerHeld(next: boolean) {
     this.triggerHeld = next;
@@ -75,7 +88,8 @@ export class WeaponSystem {
 
   update(deltaSeconds: number, nowMs: number, camera: THREE.Camera): WeaponShotEvent[] {
     const shotEvents: WeaponShotEvent[] = [];
-    if (!this.equipped || !this.triggerHeld) {
+    this.applyPendingSwitch(nowMs);
+    if (!this.equipped || !this.triggerHeld || this.isSwitching(nowMs)) {
       return shotEvents;
     }
 
@@ -123,17 +137,48 @@ export class WeaponSystem {
     return shotEvents;
   }
 
-  switchWeapon(next: WeaponKind): boolean {
-    if (this.activeWeapon === next) {
+  switchWeapon(next: WeaponKind, nowMs: number): boolean {
+    if (this.pendingWeapon === next || (this.activeWeapon === next && !this.isSwitching(nowMs))) {
       return false;
     }
-    this.activeWeapon = next;
+    this.applyPendingSwitch(nowMs);
+    this.switchFromWeapon = this.activeWeapon;
+    this.pendingWeapon = next;
+    this.switchStartedAtMs = nowMs;
+    this.switchUntilMs = nowMs + WEAPON_SWITCH_DURATION_MS;
     this.setTriggerHeld(false);
+    this.sniperRechamberStartedAtMs = 0;
+    this.sniperRechamberUntilMs = 0;
+    this.muzzleFlashUntil = nowMs;
+    this.clearTracer();
     return true;
   }
 
   getActiveWeapon(): WeaponKind {
     return this.activeWeapon;
+  }
+
+  getSwitchState(nowMs: number): WeaponSwitchState {
+    this.applyPendingSwitch(nowMs);
+    if (!this.pendingWeapon || this.switchUntilMs <= nowMs) {
+      return {
+        active: false,
+        progress: 1,
+        from: this.activeWeapon,
+        to: this.activeWeapon,
+        remainingMs: 0,
+      };
+    }
+
+    const durationMs = Math.max(1, this.switchUntilMs - this.switchStartedAtMs);
+    const elapsedMs = Math.max(0, nowMs - this.switchStartedAtMs);
+    return {
+      active: true,
+      progress: Math.min(1, elapsedMs / durationMs),
+      from: this.switchFromWeapon,
+      to: this.pendingWeapon,
+      remainingMs: Math.max(0, this.switchUntilMs - nowMs),
+    };
   }
 
   getSniperRechamberState(nowMs: number): SniperRechamberState {
@@ -196,6 +241,10 @@ export class WeaponSystem {
     this.tracer.until = nowMs + TRACER_LIFETIME_MS;
   }
 
+  clearTracer() {
+    this.tracer = null;
+  }
+
   getActiveTracer(nowMs: number): TracerState | null {
     if (!this.tracer || this.tracer.until <= nowMs) {
       return null;
@@ -205,6 +254,18 @@ export class WeaponSystem {
 
   hasMuzzleFlash(nowMs: number): boolean {
     return this.equipped && this.muzzleFlashUntil > nowMs;
+  }
+
+  private applyPendingSwitch(nowMs: number) {
+    if (!this.pendingWeapon || nowMs < this.switchUntilMs) {
+      return;
+    }
+    this.activeWeapon = this.pendingWeapon;
+    this.pendingWeapon = null;
+  }
+
+  private isSwitching(nowMs: number) {
+    return !!this.pendingWeapon && nowMs < this.switchUntilMs;
   }
 }
 
