@@ -617,11 +617,11 @@ function resolveLookSensitivity(
   activeWeapon: WeaponKind,
   adsActive: boolean,
 ) {
-  const baseMultiplier = clamp(sensitivity.look, 1, 400) / 100;
+  const baseMultiplier = clamp(sensitivity.look, 0.01, 5);
   const adsMultiplier = adsActive
-    ? clamp(activeWeapon === "sniper" ? sensitivity.sniperAds : sensitivity.rifleAds, 1, 400) / 100
+    ? clamp(activeWeapon === "sniper" ? sensitivity.sniperAds : sensitivity.rifleAds, 0.01, 5)
     : 1;
-  const verticalMultiplier = clamp(sensitivity.vertical, 20, 300) / 100;
+  const verticalMultiplier = clamp(sensitivity.vertical, 0.1, 3);
   const horizontal = LOOK_SENSITIVITY * baseMultiplier * adsMultiplier;
 
   return {

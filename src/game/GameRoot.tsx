@@ -118,6 +118,13 @@ function readClampedNumber(value: unknown, min: number, max: number, fallback: n
   return Math.min(max, Math.max(min, value));
 }
 
+function migratePercent(value: unknown): unknown {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 5) {
+    return value / 100;
+  }
+  return value;
+}
+
 function readPixelRatioScale(value: unknown, fallback: PixelRatioScale): PixelRatioScale {
   return PIXEL_RATIO_OPTIONS.includes(value as PixelRatioScale) ? (value as PixelRatioScale) : fallback;
 }
@@ -144,10 +151,10 @@ function parsePersistedSettings(value: unknown): PersistedSettings {
       pixelRatioScale: readPixelRatioScale(settings.pixelRatioScale, defaults.settings.pixelRatioScale),
       showR3fPerf: readBoolean(settings.showR3fPerf, defaults.settings.showR3fPerf),
       sensitivity: {
-        look: readClampedNumber(sensitivity.look, 20, 250, defaults.settings.sensitivity.look),
-        rifleAds: readClampedNumber(sensitivity.rifleAds, 20, 200, defaults.settings.sensitivity.rifleAds),
-        sniperAds: readClampedNumber(sensitivity.sniperAds, 15, 180, defaults.settings.sensitivity.sniperAds),
-        vertical: readClampedNumber(sensitivity.vertical, 50, 200, defaults.settings.sensitivity.vertical),
+        look: readClampedNumber(migratePercent(sensitivity.look), 0.05, 3, defaults.settings.sensitivity.look),
+        rifleAds: readClampedNumber(migratePercent(sensitivity.rifleAds), 0.05, 2.5, defaults.settings.sensitivity.rifleAds),
+        sniperAds: readClampedNumber(migratePercent(sensitivity.sniperAds), 0.05, 2, defaults.settings.sensitivity.sniperAds),
+        vertical: readClampedNumber(migratePercent(sensitivity.vertical), 0.3, 2, defaults.settings.sensitivity.vertical),
       },
       keybinds: {
         moveForward: readString(keybinds.moveForward, defaults.settings.keybinds.moveForward),
@@ -346,8 +353,8 @@ export function GameRoot() {
     );
   }, [settings.keybinds]);
 
-  const effectiveRifleAds = Math.round((settings.sensitivity.look * settings.sensitivity.rifleAds) / 100);
-  const effectiveSniperAds = Math.round((settings.sensitivity.look * settings.sensitivity.sniperAds) / 100);
+  const effectiveRifleAds = (settings.sensitivity.look * settings.sensitivity.rifleAds).toFixed(2);
+  const effectiveSniperAds = (settings.sensitivity.look * settings.sensitivity.sniperAds).toFixed(2);
   const visibleOverlayCount = Object.values(hudPanels).filter(Boolean).length;
 
   const controlsPreview = useMemo(() => {
@@ -613,15 +620,14 @@ export function GameRoot() {
                     <div className="menu-sections">
                       <MenuSection
                         title="Look Sensitivity"
-                        blurb="PUBG-style split: base camera sensitivity plus separate ADS multipliers for rifle and sniper."
+                        blurb="Valorant-style decimals: lower = slower. Great for high-DPI mice."
                       >
                         <RangeField
                           label="Camera / Free Look"
                           value={settings.sensitivity.look}
-                          min={20}
-                          max={250}
-                          step={1}
-                          suffix="%"
+                          min={0.05}
+                          max={3}
+                          step={0.01}
                           onChange={(value) =>
                             setSettings((prev) => ({
                               ...prev,
@@ -632,10 +638,9 @@ export function GameRoot() {
                         <RangeField
                           label="Rifle ADS"
                           value={settings.sensitivity.rifleAds}
-                          min={20}
-                          max={200}
-                          step={1}
-                          suffix="%"
+                          min={0.05}
+                          max={2.5}
+                          step={0.01}
                           onChange={(value) =>
                             setSettings((prev) => ({
                               ...prev,
@@ -646,10 +651,9 @@ export function GameRoot() {
                         <RangeField
                           label="Sniper ADS"
                           value={settings.sensitivity.sniperAds}
-                          min={15}
-                          max={180}
-                          step={1}
-                          suffix="%"
+                          min={0.05}
+                          max={2}
+                          step={0.01}
                           onChange={(value) =>
                             setSettings((prev) => ({
                               ...prev,
@@ -660,10 +664,9 @@ export function GameRoot() {
                         <RangeField
                           label="Vertical Multiplier"
                           value={settings.sensitivity.vertical}
-                          min={50}
-                          max={200}
-                          step={1}
-                          suffix="%"
+                          min={0.3}
+                          max={2}
+                          step={0.01}
                           onChange={(value) =>
                             setSettings((prev) => ({
                               ...prev,
@@ -672,8 +675,8 @@ export function GameRoot() {
                           }
                         />
                         <div className="settings-chip-wrap">
-                          <span className="pill-chip">Effective Rifle ADS: {effectiveRifleAds}%</span>
-                          <span className="pill-chip">Effective Sniper ADS: {effectiveSniperAds}%</span>
+                          <span className="pill-chip">Effective Rifle ADS: {effectiveRifleAds}</span>
+                          <span className="pill-chip">Effective Sniper ADS: {effectiveSniperAds}</span>
                           <span className="pill-chip">Applies live while aiming</span>
                         </div>
                       </MenuSection>
@@ -1017,12 +1020,15 @@ type RangeFieldProps = {
 };
 
 function RangeField({ label, value, min, max, step, suffix, onChange }: RangeFieldProps) {
+  const decimals = step < 1 ? Math.max(0, Math.ceil(-Math.log10(step))) : 0;
+  const display = decimals > 0 ? value.toFixed(decimals) : String(value);
+
   return (
     <div className="range-field">
       <div className="range-label-row">
         <span className="field-label">{label}</span>
         <span className="range-value">
-          {value}
+          {display}
           {suffix ?? ""}
         </span>
       </div>

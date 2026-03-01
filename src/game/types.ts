@@ -9,10 +9,10 @@ export type AimSensitivitySettings = {
 };
 
 export const DEFAULT_AIM_SENSITIVITY_SETTINGS: AimSensitivitySettings = {
-  look: 100,
-  rifleAds: 80,
-  sniperAds: 55,
-  vertical: 100,
+  look: 1.0,
+  rifleAds: 0.8,
+  sniperAds: 0.55,
+  vertical: 1.0,
 };
 
 export type ControlBindings = {
