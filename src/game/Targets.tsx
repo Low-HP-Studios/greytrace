@@ -65,6 +65,7 @@ export function raycastTargets(
   origin: THREE.Vector3,
   direction: THREE.Vector3,
   targets: TargetState[],
+  maxDistance = Number.POSITIVE_INFINITY,
 ): TargetRaycastHit | null {
   let closestHit: TargetRaycastHit | null = null;
 
@@ -85,6 +86,9 @@ export function raycastTargets(
     let targetClosestHit: TargetRaycastHit | null = null;
     for (const partHit of partHits) {
       if (!partHit) {
+        continue;
+      }
+      if (partHit.distance > maxDistance) {
         continue;
       }
       if (!targetClosestHit || partHit.distance < targetClosestHit.distance) {

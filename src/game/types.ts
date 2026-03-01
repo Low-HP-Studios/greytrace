@@ -63,12 +63,32 @@ export const DEFAULT_HUD_OVERLAY_TOGGLES: HudOverlayToggles = {
   performance: true,
 };
 
+export type WeaponAlignmentOffset = {
+  posX: number;
+  posY: number;
+  posZ: number;
+  rotX: number;
+  rotY: number;
+  rotZ: number;
+};
+
+export const DEFAULT_WEAPON_ALIGNMENT: WeaponAlignmentOffset = {
+  posX: 0,
+  posY: 0,
+  posZ: 0,
+  rotX: 0,
+  rotY: 0,
+  rotZ: 0,
+};
+
 export type GameSettings = {
   shadows: boolean;
   pixelRatioScale: PixelRatioScale;
   showR3fPerf: boolean;
   sensitivity: AimSensitivitySettings;
   keybinds: ControlBindings;
+  fov: number;
+  weaponAlignment: WeaponAlignmentOffset;
 };
 
 export type PerfMetrics = {

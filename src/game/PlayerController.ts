@@ -22,6 +22,7 @@ type UsePlayerControllerOptions = {
   worldBounds: WorldBounds;
   sensitivity: AimSensitivitySettings;
   keybinds: ControlBindings;
+  fov: number;
   onAction: (action: PlayerAction) => void;
   onPlayerSnapshot: (snapshot: PlayerSnapshot) => void;
   onTriggerChange: (firing: boolean) => void;
@@ -70,7 +71,6 @@ const SHOULDER_OFFSET_SNIPER_ADS = 0.16;
 const AIM_LOOK_DISTANCE = 120;
 const FIRST_PERSON_CAMERA_HEIGHT = 1.55;
 const FIRST_PERSON_CAMERA_FORWARD_OFFSET = 0.06;
-const BASE_CAMERA_FOV = 65;
 const RIFLE_ADS_FOV = 58;
 const SNIPER_ADS_FOV = 26;
 const VIEW_MODE_TRANSITION_SPEED = 10;
@@ -84,6 +84,7 @@ export function usePlayerController({
   worldBounds,
   sensitivity,
   keybinds,
+  fov,
   onAction,
   onPlayerSnapshot,
   onTriggerChange,
@@ -130,6 +131,7 @@ export function usePlayerController({
   const activeWeaponGetterRef = useRef(getActiveWeapon);
   const sensitivityRef = useRef(sensitivity);
   const keybindsRef = useRef(keybinds);
+  const fovRef = useRef(fov);
 
   useEffect(() => {
     actionCallbackRef.current = onAction;
@@ -158,6 +160,10 @@ export function usePlayerController({
   useEffect(() => {
     keybindsRef.current = keybinds;
   }, [keybinds]);
+
+  useEffect(() => {
+    fovRef.current = fov;
+  }, [fov]);
 
   const fallbackActiveRef = useRef(false);
 
@@ -521,8 +527,9 @@ export function usePlayerController({
     camera.position.copy(tppCameraPos).lerp(fppCameraPos, viewT);
 
     if ("isPerspectiveCamera" in camera && camera.isPerspectiveCamera) {
+      const baseFov = fovRef.current;
       const adsFovTarget = activeWeapon === "sniper" ? SNIPER_ADS_FOV : RIFLE_ADS_FOV;
-      const targetFov = THREE.MathUtils.lerp(BASE_CAMERA_FOV, adsFovTarget, adsT);
+      const targetFov = THREE.MathUtils.lerp(baseFov, adsFovTarget, adsT);
       const perspectiveCamera = camera as THREE.PerspectiveCamera;
       const nextFov = THREE.MathUtils.damp(perspectiveCamera.fov, targetFov, 14, delta);
       if (Math.abs(nextFov - perspectiveCamera.fov) > 0.01) {

@@ -34,6 +34,7 @@ import type {
   PlayerSnapshot,
   StressModeCount,
   TargetState,
+  WeaponAlignmentOffset,
   WorldBounds,
 } from "./types";
 
@@ -239,6 +240,8 @@ export function Scene({
         resumePointerLockRequestId={resumePointerLockRequestId}
         sensitivity={settings.sensitivity}
         keybinds={settings.keybinds}
+        fov={settings.fov}
+        weaponAlignment={settings.weaponAlignment}
         targets={targets}
         onTargetHit={handleTargetHit}
         onResetTargets={handleResetTargets}
@@ -295,7 +298,6 @@ type WeaponModelTransform = {
 
 const WEAPON_MODEL_TRANSFORMS: {
   character: Record<WeaponKind, WeaponModelTransform>;
-  firstPerson: Record<WeaponKind, WeaponModelTransform>;
   world: Record<WeaponKind, WeaponModelTransform>;
 } = {
   character: {
@@ -308,18 +310,6 @@ const WEAPON_MODEL_TRANSFORMS: {
       position: [0.02, -0.04, 0],
       rotation: [0, -Math.PI / 2, 0],
       scale: 0.0016,
-    },
-  },
-  firstPerson: {
-    rifle: {
-      position: [0.08, -0.04, 0.02],
-      rotation: [0, -Math.PI / 2, 0],
-      scale: 0.0015,
-    },
-    sniper: {
-      position: [0.08, -0.05, 0.02],
-      rotation: [0, -Math.PI / 2, 0],
-      scale: 0.00175,
     },
   },
   world: {
@@ -715,15 +705,17 @@ async function applyCharacterTextures(model: THREE.Group): Promise<void> {
       if (!entry) return;
 
       const [baseTex, normalTex] = await Promise.all([
-        mappable.map ? null : loadTex(CHARACTER_TEXTURE_BASE + entry.base),
-        mappable.normalMap ? null : loadTex(CHARACTER_TEXTURE_BASE + entry.normal),
+        loadTex(CHARACTER_TEXTURE_BASE + entry.base),
+        loadTex(CHARACTER_TEXTURE_BASE + entry.normal),
       ]);
 
       if (baseTex) {
+        if (mappable.map) mappable.map.dispose();
         baseTex.colorSpace = THREE.SRGBColorSpace;
         mappable.map = baseTex;
       }
       if (normalTex) {
+        if (mappable.normalMap) mappable.normalMap.dispose();
         mappable.normalMap = normalTex;
       }
       mappable.needsUpdate = true;
@@ -748,6 +740,8 @@ type GameplayRuntimeProps = {
   resumePointerLockRequestId: number;
   sensitivity: GameSettings["sensitivity"];
   keybinds: GameSettings["keybinds"];
+  fov: number;
+  weaponAlignment: WeaponAlignmentOffset;
   targets: TargetState[];
   onTargetHit: (targetId: string, damage: number, nowMs: number) => void;
   onResetTargets: () => void;
@@ -767,6 +761,8 @@ function GameplayRuntime({
   resumePointerLockRequestId,
   sensitivity,
   keybinds,
+  fov,
+  weaponAlignment,
   targets,
   onTargetHit,
   onResetTargets,
@@ -817,10 +813,6 @@ function GameplayRuntime({
   const characterRifleModelRef = useRef<THREE.Group>(null);
   const characterSniperModelRef = useRef<THREE.Group>(null);
   const characterMuzzleRef = useRef<THREE.Mesh>(null);
-  const firstPersonWeaponRef = useRef<THREE.Group>(null);
-  const firstPersonRifleModelRef = useRef<THREE.Group>(null);
-  const firstPersonSniperModelRef = useRef<THREE.Group>(null);
-  const firstPersonMuzzleRef = useRef<THREE.Mesh>(null);
   const tracerRef = useRef<THREE.Mesh>(null);
 
   const tempEndRef = useRef(new THREE.Vector3());
@@ -836,9 +828,6 @@ function GameplayRuntime({
   const tempBloodBitangentRef = useRef(new THREE.Vector3());
   const tempBloodSpreadOffsetRef = useRef(new THREE.Vector3());
   const tempBloodRollQuaternionRef = useRef(new THREE.Quaternion());
-  const tempCameraForwardRef = useRef(new THREE.Vector3());
-  const tempCameraRightRef = useRef(new THREE.Vector3());
-  const tempCameraUpRef = useRef(new THREE.Vector3());
   const raycasterRef = useRef(new THREE.Raycaster());
   const impactIdRef = useRef(0);
   const bloodSplatIdRef = useRef(0);
@@ -846,8 +835,9 @@ function GameplayRuntime({
   const lastSniperRechamberActiveRef = useRef<boolean | null>(null);
   const lastSniperRechamberProgressStepRef = useRef(-1);
   const characterWeaponAttachBoneRef = useRef<THREE.Bone | null>(null);
+  const characterHeadBoneRef = useRef<THREE.Bone | null>(null);
   const tempCharacterWeaponAnchorWorldRef = useRef(new THREE.Vector3());
-  const tempCharacterWeaponAnchorLocalRef = useRef(new THREE.Vector3());
+  const tempBoneWorldQuatRef = useRef(new THREE.Quaternion());
 
   useEffect(() => {
     targetsRef.current = targets;
@@ -892,25 +882,41 @@ function GameplayRuntime({
   useEffect(() => {
     if (!characterModel) {
       characterWeaponAttachBoneRef.current = null;
+      characterHeadBoneRef.current = null;
       return;
     }
 
     let rightHandBone: THREE.Bone | null = null;
+    let headBone: THREE.Bone | null = null;
     characterModel.traverse((child) => {
-      if (rightHandBone || !(child as THREE.Bone).isBone) return;
+      if (!(child as THREE.Bone).isBone) return;
       const bone = child as THREE.Bone;
       const normalized = normalizeBoneName(bone.name).toLowerCase();
       if (
-        normalized === "r_hand" ||
-        normalized.includes("r_hand") ||
-        normalized.includes("right_hand") ||
-        normalized.includes("righthand")
+        !rightHandBone &&
+        (normalized === "r_hand" ||
+          normalized === "righthand" ||
+          normalized === "right_hand" ||
+          normalized === "hand_r" ||
+          normalized === "hand.r" ||
+          normalized.includes("r_hand") ||
+          normalized.includes("right_hand") ||
+          normalized.includes("righthand") ||
+          normalized.includes("hand_r"))
       ) {
         rightHandBone = bone;
+      }
+      if (
+        !headBone &&
+        (normalized === "head" || normalized === "head_end" || normalized.includes("head"))
+      ) {
+        if (normalized === "head") headBone = bone;
+        else if (!headBone) headBone = bone;
       }
     });
 
     characterWeaponAttachBoneRef.current = rightHandBone;
+    characterHeadBoneRef.current = headBone;
     if (!rightHandBone) {
       console.warn("[Character] Could not find right-hand bone for weapon attach");
     }
@@ -1022,6 +1028,7 @@ function GameplayRuntime({
     worldBounds,
     sensitivity,
     keybinds,
+    fov,
     onAction: (action) => {
       const weapon = weaponRef.current;
       if (action === "equipRifle") {
@@ -1170,8 +1177,13 @@ function GameplayRuntime({
       const pos = controller.getPosition();
       playerChar.position.set(pos.x, pos.y, pos.z);
       playerChar.rotation.y = controller.getYaw() + CHARACTER_YAW_OFFSET;
-      playerChar.visible = !firstPerson;
+      playerChar.visible = true;
       playerChar.updateMatrixWorld(true);
+    }
+
+    const headBone = characterHeadBoneRef.current;
+    if (headBone) {
+      headBone.scale.setScalar(firstPerson ? 0 : 1);
     }
 
     if (characterModel) {
@@ -1183,13 +1195,14 @@ function GameplayRuntime({
 
     const switchState = weapon.getSwitchState(nowMs);
     const characterWeaponAnchor = (() => {
-      const player = playerCharacterRef.current;
       const handBone = characterWeaponAttachBoneRef.current;
-      if (!player || !handBone) return null;
+      if (!handBone) return null;
       handBone.getWorldPosition(tempCharacterWeaponAnchorWorldRef.current);
-      tempCharacterWeaponAnchorLocalRef.current.copy(tempCharacterWeaponAnchorWorldRef.current);
-      player.worldToLocal(tempCharacterWeaponAnchorLocalRef.current);
-      return tempCharacterWeaponAnchorLocalRef.current;
+      handBone.getWorldQuaternion(tempBoneWorldQuatRef.current);
+      return {
+        position: tempCharacterWeaponAnchorWorldRef.current,
+        quaternion: tempBoneWorldQuatRef.current,
+      };
     })();
     updateCharacterWeaponMesh(
       characterWeaponRef.current,
@@ -1200,21 +1213,7 @@ function GameplayRuntime({
       nowMs,
       switchState,
       characterWeaponAnchor,
-    );
-    updateFirstPersonWeaponMesh(
-      firstPersonWeaponRef.current,
-      firstPersonRifleModelRef.current,
-      firstPersonSniperModelRef.current,
-      firstPersonMuzzleRef.current,
-      weapon,
-      nowMs,
-      camera,
-      firstPerson,
-      adsActive,
-      switchState,
-      tempCameraForwardRef.current,
-      tempCameraRightRef.current,
-      tempCameraUpRef.current,
+      weaponAlignment,
     );
 
     const shots = weapon.update(clampedDelta, nowMs, camera);
@@ -1240,15 +1239,9 @@ function GameplayRuntime({
         (!worldHit || targetHit.distance <= worldHit.distance + BULLET_HIT_EPSILON);
 
       const tracerOrigin = tempTracerOriginRef.current;
-      const firstPersonMuzzle = firstPersonMuzzleRef.current;
-      const thirdPersonMuzzle = characterMuzzleRef.current;
-      const useFirstPersonMuzzle = firstPerson && !!firstPersonMuzzle && firstPersonWeaponRef.current?.visible;
-      const useThirdPersonMuzzle = !firstPerson && !!thirdPersonMuzzle && playerChar?.visible;
-      if (useFirstPersonMuzzle && firstPersonMuzzle) {
-        firstPersonMuzzle.getWorldPosition(tracerOrigin);
-        tracerOrigin.addScaledVector(shot.direction, TRACER_MUZZLE_FORWARD_OFFSET);
-      } else if (useThirdPersonMuzzle && thirdPersonMuzzle) {
-        thirdPersonMuzzle.getWorldPosition(tracerOrigin);
+      const muzzle = characterMuzzleRef.current;
+      if (muzzle && playerChar?.visible) {
+        muzzle.getWorldPosition(tracerOrigin);
         tracerOrigin.addScaledVector(shot.direction, TRACER_MUZZLE_FORWARD_OFFSET);
       } else {
         tracerOrigin.copy(shot.origin);
@@ -1276,9 +1269,9 @@ function GameplayRuntime({
           .addScaledVector(shot.direction, TRACER_DISTANCE);
       }
 
+      const usedMuzzle = muzzle && playerChar?.visible;
       if (
-        !useFirstPersonMuzzle &&
-        !useThirdPersonMuzzle &&
+        !usedMuzzle &&
         tracerOrigin.distanceToSquared(tempEndRef.current) > (TRACER_CAMERA_START_OFFSET + 0.04) ** 2
       ) {
         tracerOrigin.addScaledVector(shot.direction, TRACER_CAMERA_START_OFFSET);
@@ -1369,120 +1362,63 @@ function GameplayRuntime({
           </>
         )}
 
-        {/* Character-held weapon */}
-        <group ref={characterWeaponRef} position={[0.34, 0.82, -0.2]} visible={false}>
-          <group ref={characterRifleModelRef}>
-            {weaponModels.rifle ? (
-              <WeaponModelInstance
-                source={weaponModels.rifle}
-                transform={WEAPON_MODEL_TRANSFORMS.character.rifle}
-              />
-            ) : (
-              <>
-                <mesh castShadow receiveShadow>
-                  <boxGeometry args={[0.55, 0.09, 0.13]} />
-                  <meshStandardMaterial color="#30363c" roughness={0.55} metalness={0.4} />
-                </mesh>
-                <mesh position={[0.16, -0.08, 0.01]} rotation={[0.15, 0, -0.2]}>
-                  <boxGeometry args={[0.18, 0.17, 0.05]} />
-                  <meshStandardMaterial color="#4d463f" roughness={0.85} metalness={0.1} />
-                </mesh>
-                <mesh position={[-0.24, 0.015, 0]} rotation={[0, 0, Math.PI / 2]}>
-                  <cylinderGeometry args={[0.015, 0.015, 0.42, 8]} />
-                  <meshStandardMaterial color="#20262b" roughness={0.4} metalness={0.6} />
-                </mesh>
-              </>
-            )}
-          </group>
-          <group ref={characterSniperModelRef}>
-            {weaponModels.sniper ? (
-              <WeaponModelInstance
-                source={weaponModels.sniper}
-                transform={WEAPON_MODEL_TRANSFORMS.character.sniper}
-              />
-            ) : (
-              <>
-                <mesh castShadow receiveShadow>
-                  <boxGeometry args={[0.72, 0.08, 0.11]} />
-                  <meshStandardMaterial color="#2a3036" roughness={0.53} metalness={0.42} />
-                </mesh>
-                <mesh position={[0.2, -0.07, 0.01]} rotation={[0.14, 0, -0.2]}>
-                  <boxGeometry args={[0.2, 0.16, 0.05]} />
-                  <meshStandardMaterial color="#4a4139" roughness={0.86} metalness={0.08} />
-                </mesh>
-                <mesh position={[-0.08, 0.07, 0]}>
-                  <cylinderGeometry args={[0.03, 0.03, 0.28, 12]} />
-                  <meshStandardMaterial color="#1d2227" roughness={0.42} metalness={0.58} />
-                </mesh>
-                <mesh position={[-0.34, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
-                  <cylinderGeometry args={[0.014, 0.014, 0.68, 10]} />
-                  <meshStandardMaterial color="#1b2025" roughness={0.45} metalness={0.62} />
-                </mesh>
-              </>
-            )}
-          </group>
-          <mesh ref={characterMuzzleRef} position={[-0.44, 0.02, 0]} visible={false}>
-            <sphereGeometry args={[0.05, 8, 8]} />
-            <meshBasicMaterial color="#ffd085" transparent opacity={0.9} />
-          </mesh>
-        </group>
       </group>
 
-      {/* FPP weapon + hands */}
-      <group ref={firstPersonWeaponRef} visible={false}>
-        <group ref={firstPersonRifleModelRef}>
+      {/* Character-held weapon (world-space, driven by hand bone) */}
+      <group ref={characterWeaponRef} visible={false}>
+        <group ref={characterRifleModelRef}>
           {weaponModels.rifle ? (
             <WeaponModelInstance
               source={weaponModels.rifle}
-              transform={WEAPON_MODEL_TRANSFORMS.firstPerson.rifle}
+              transform={WEAPON_MODEL_TRANSFORMS.character.rifle}
             />
           ) : (
             <>
-              <mesh>
-                <boxGeometry args={[0.6, 0.08, 0.1]} />
-                <meshStandardMaterial color="#2e353b" roughness={0.5} metalness={0.46} />
+              <mesh castShadow receiveShadow>
+                <boxGeometry args={[0.55, 0.09, 0.13]} />
+                <meshStandardMaterial color="#30363c" roughness={0.55} metalness={0.4} />
               </mesh>
-              <mesh position={[0.19, -0.08, 0.01]} rotation={[0.1, 0, -0.2]}>
-                <boxGeometry args={[0.18, 0.16, 0.05]} />
-                <meshStandardMaterial color="#52483f" roughness={0.84} metalness={0.1} />
+              <mesh position={[0.16, -0.08, 0.01]} rotation={[0.15, 0, -0.2]}>
+                <boxGeometry args={[0.18, 0.17, 0.05]} />
+                <meshStandardMaterial color="#4d463f" roughness={0.85} metalness={0.1} />
               </mesh>
-              <mesh position={[-0.27, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
-                <cylinderGeometry args={[0.013, 0.013, 0.45, 8]} />
-                <meshStandardMaterial color="#1f252b" roughness={0.38} metalness={0.62} />
+              <mesh position={[-0.24, 0.015, 0]} rotation={[0, 0, Math.PI / 2]}>
+                <cylinderGeometry args={[0.015, 0.015, 0.42, 8]} />
+                <meshStandardMaterial color="#20262b" roughness={0.4} metalness={0.6} />
               </mesh>
             </>
           )}
         </group>
-        <group ref={firstPersonSniperModelRef}>
+        <group ref={characterSniperModelRef}>
           {weaponModels.sniper ? (
             <WeaponModelInstance
               source={weaponModels.sniper}
-              transform={WEAPON_MODEL_TRANSFORMS.firstPerson.sniper}
+              transform={WEAPON_MODEL_TRANSFORMS.character.sniper}
             />
           ) : (
             <>
-              <mesh>
-                <boxGeometry args={[0.82, 0.085, 0.095]} />
-                <meshStandardMaterial color="#2a2f34" roughness={0.5} metalness={0.48} />
+              <mesh castShadow receiveShadow>
+                <boxGeometry args={[0.72, 0.08, 0.11]} />
+                <meshStandardMaterial color="#2a3036" roughness={0.53} metalness={0.42} />
               </mesh>
-              <mesh position={[0.22, -0.08, 0.01]} rotation={[0.12, 0, -0.22]}>
-                <boxGeometry args={[0.2, 0.17, 0.05]} />
-                <meshStandardMaterial color="#4f453a" roughness={0.86} metalness={0.09} />
+              <mesh position={[0.2, -0.07, 0.01]} rotation={[0.14, 0, -0.2]}>
+                <boxGeometry args={[0.2, 0.16, 0.05]} />
+                <meshStandardMaterial color="#4a4139" roughness={0.86} metalness={0.08} />
               </mesh>
-              <mesh position={[-0.06, 0.07, 0]}>
-                <cylinderGeometry args={[0.032, 0.032, 0.3, 12]} />
-                <meshStandardMaterial color="#1a2025" roughness={0.4} metalness={0.6} />
+              <mesh position={[-0.08, 0.07, 0]}>
+                <cylinderGeometry args={[0.03, 0.03, 0.28, 12]} />
+                <meshStandardMaterial color="#1d2227" roughness={0.42} metalness={0.58} />
               </mesh>
-              <mesh position={[-0.38, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
-                <cylinderGeometry args={[0.013, 0.013, 0.72, 10]} />
-                <meshStandardMaterial color="#1b2025" roughness={0.42} metalness={0.62} />
+              <mesh position={[-0.34, 0.01, 0]} rotation={[0, 0, Math.PI / 2]}>
+                <cylinderGeometry args={[0.014, 0.014, 0.68, 10]} />
+                <meshStandardMaterial color="#1b2025" roughness={0.45} metalness={0.62} />
               </mesh>
             </>
           )}
         </group>
-        <mesh ref={firstPersonMuzzleRef} position={[-0.5, 0.01, 0]} visible={false}>
-          <sphereGeometry args={[0.045, 8, 8]} />
-          <meshBasicMaterial color="#ffd085" transparent opacity={0.95} />
+        <mesh ref={characterMuzzleRef} position={[-0.44, 0.02, 0]} visible={false}>
+          <sphereGeometry args={[0.05, 8, 8]} />
+          <meshBasicMaterial color="#ffd085" transparent opacity={0.9} />
         </mesh>
       </group>
 
@@ -2098,7 +2034,8 @@ function updateCharacterWeaponMesh(
   weapon: WeaponSystem,
   nowMs: number,
   switchState: WeaponSwitchState,
-  anchorPosition: THREE.Vector3 | null,
+  anchor: { position: THREE.Vector3; quaternion: THREE.Quaternion } | null,
+  alignment: WeaponAlignmentOffset,
 ) {
   if (!weaponGroup) {
     return;
@@ -2121,12 +2058,20 @@ function updateCharacterWeaponMesh(
 
   const displayedWeapon = resolveDisplayedWeapon(weapon, switchState);
   const switchBlend = switchState.active ? Math.sin(Math.PI * switchState.progress) : 0;
-  if (anchorPosition) {
-    weaponGroup.position.copy(anchorPosition);
-    weaponGroup.position.x += 0.08;
-    weaponGroup.position.y -= 0.05 + switchBlend * 0.08;
-    weaponGroup.position.z += 0.02 + switchBlend * 0.04;
-    weaponGroup.rotation.set(0.15 - switchBlend * 0.42, Math.PI * 0.45 + switchBlend * 0.05, -0.25);
+  if (anchor) {
+    weaponGroup.position.copy(anchor.position);
+    weaponGroup.quaternion.copy(anchor.quaternion);
+    // Apply alignment in hand-local space so movement/turning does not cause world-axis drift.
+    weaponGroup.translateX(alignment.posX);
+    weaponGroup.translateY(alignment.posY);
+    weaponGroup.translateZ(alignment.posZ);
+    weaponGroup.rotateX(alignment.rotX);
+    weaponGroup.rotateY(alignment.rotY);
+    weaponGroup.rotateZ(alignment.rotZ);
+    if (switchBlend > 0) {
+      weaponGroup.translateY(-switchBlend * 0.06);
+      weaponGroup.rotateX(-switchBlend * 0.35);
+    }
   } else {
     weaponGroup.position.set(0.34, 0.82 - switchBlend * 0.18, -0.2 + switchBlend * 0.06);
     weaponGroup.rotation.set(-switchBlend * 0.42, switchBlend * 0.05, -switchBlend * 0.12);
@@ -2145,78 +2090,6 @@ function updateCharacterWeaponMesh(
       muzzleFlashMesh.scale.setScalar(1.15);
     } else {
       muzzleFlashMesh.position.set(-0.44, 0.02, 0);
-      muzzleFlashMesh.scale.setScalar(1);
-    }
-    muzzleFlashMesh.visible = weapon.hasMuzzleFlash(nowMs);
-  }
-}
-
-function updateFirstPersonWeaponMesh(
-  weaponGroup: THREE.Group | null,
-  rifleModel: THREE.Group | null,
-  sniperModel: THREE.Group | null,
-  muzzleFlashMesh: THREE.Mesh | null,
-  weapon: WeaponSystem,
-  nowMs: number,
-  camera: THREE.Camera,
-  firstPerson: boolean,
-  adsActive: boolean,
-  switchState: WeaponSwitchState,
-  tempForward: THREE.Vector3,
-  tempRight: THREE.Vector3,
-  tempUp: THREE.Vector3,
-) {
-  if (!weaponGroup) {
-    return;
-  }
-
-  const equipped = weapon.isEquipped();
-  const visible = equipped && firstPerson;
-  weaponGroup.visible = visible;
-  if (!visible) {
-    if (rifleModel) {
-      rifleModel.visible = false;
-    }
-    if (sniperModel) {
-      sniperModel.visible = false;
-    }
-    if (muzzleFlashMesh) {
-      muzzleFlashMesh.visible = false;
-    }
-    return;
-  }
-
-  const displayedWeapon = resolveDisplayedWeapon(weapon, switchState);
-  const switchBlend = switchState.active ? Math.sin(Math.PI * switchState.progress) : 0;
-  const adsT = adsActive ? 1 : 0;
-
-  if (rifleModel) {
-    rifleModel.visible = displayedWeapon === "rifle";
-  }
-  if (sniperModel) {
-    sniperModel.visible = displayedWeapon === "sniper";
-  }
-
-  tempForward.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-  tempUp.set(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
-  tempRight.crossVectors(tempForward, tempUp).normalize();
-
-  weaponGroup.position.copy(camera.position);
-  weaponGroup.position.addScaledVector(tempForward, 0.46 - adsT * 0.16);
-  weaponGroup.position.addScaledVector(tempRight, 0.2 - adsT * 0.15);
-  weaponGroup.position.addScaledVector(tempUp, -0.2 - adsT * 0.08 - switchBlend * 0.12);
-  weaponGroup.quaternion.copy(camera.quaternion);
-  weaponGroup.rotateY(Math.PI / 2);
-  weaponGroup.rotateX(-0.05 - switchBlend * 0.22);
-  weaponGroup.rotateZ(-0.08 + switchBlend * 0.12);
-  weaponGroup.updateMatrixWorld(true);
-
-  if (muzzleFlashMesh) {
-    if (displayedWeapon === "sniper") {
-      muzzleFlashMesh.position.set(-0.62, 0.02, 0);
-      muzzleFlashMesh.scale.setScalar(1.2);
-    } else {
-      muzzleFlashMesh.position.set(-0.5, 0.01, 0);
       muzzleFlashMesh.scale.setScalar(1);
     }
     muzzleFlashMesh.visible = weapon.hasMuzzleFlash(nowMs);

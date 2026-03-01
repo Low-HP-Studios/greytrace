@@ -1,15 +1,22 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { DEFAULT_AUDIO_VOLUMES, type AudioVolumeSettings } from "./Audio";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { type AudioVolumeSettings, DEFAULT_AUDIO_VOLUMES } from "./Audio";
 import { PerfHUD } from "./PerfHUD";
-import { Scene, type AimingState, type HitMarkerKind } from "./Scene";
+import { type AimingState, type HitMarkerKind, Scene } from "./Scene";
 import type { SniperRechamberState, WeaponKind } from "./Weapon";
 import {
+  type ControlBindings,
   DEFAULT_AIM_SENSITIVITY_SETTINGS,
   DEFAULT_CONTROL_BINDINGS,
   DEFAULT_HUD_OVERLAY_TOGGLES,
   DEFAULT_PERF_METRICS,
   DEFAULT_PLAYER_SNAPSHOT,
-  type ControlBindings,
+  DEFAULT_WEAPON_ALIGNMENT,
   type GameSettings,
   type HudOverlayToggles,
   type PerfMetrics,
@@ -21,7 +28,13 @@ import {
 const STRESS_STEPS: StressModeCount[] = [0, 50, 100, 200];
 const PIXEL_RATIO_OPTIONS: PixelRatioScale[] = [0.75, 1, 1.25];
 
-type PauseMenuTab = "practice" | "gameplay" | "audio" | "controls" | "graphics" | "hud";
+type PauseMenuTab =
+  | "practice"
+  | "gameplay"
+  | "audio"
+  | "controls"
+  | "graphics"
+  | "hud";
 type BindingKey = keyof ControlBindings;
 
 type MenuTabOption = {
@@ -62,11 +75,25 @@ const BINDING_ROWS: BindingDefinition[] = [
   { key: "drop", label: "Drop", hint: "Drop weapon" },
 ];
 
-const OVERLAY_ROWS: Array<{ key: keyof HudOverlayToggles; label: string; hint: string }> = [
+const OVERLAY_ROWS: Array<
+  { key: keyof HudOverlayToggles; label: string; hint: string }
+> = [
   { key: "practice", label: "Practice panel", hint: "Top-left range status" },
-  { key: "controls", label: "Controls panel", hint: "Bottom-left shortcut list" },
-  { key: "settings", label: "Settings panel", hint: "Bottom-right quick settings" },
-  { key: "performance", label: "Performance panel", hint: "Top-right perf HUD" },
+  {
+    key: "controls",
+    label: "Controls panel",
+    hint: "Bottom-left shortcut list",
+  },
+  {
+    key: "settings",
+    label: "Settings panel",
+    hint: "Bottom-right quick settings",
+  },
+  {
+    key: "performance",
+    label: "Performance panel",
+    hint: "Top-right perf HUD",
+  },
 ];
 
 const SETTINGS_STORAGE_KEY = "pindg.settings.v1";
@@ -77,6 +104,8 @@ const DEFAULT_GAME_SETTINGS: GameSettings = {
   showR3fPerf: false,
   sensitivity: { ...DEFAULT_AIM_SENSITIVITY_SETTINGS },
   keybinds: { ...DEFAULT_CONTROL_BINDINGS },
+  fov: 65,
+  weaponAlignment: { ...DEFAULT_WEAPON_ALIGNMENT },
 };
 
 type PersistedSettings = {
@@ -92,6 +121,7 @@ function createDefaultPersistedSettings(): PersistedSettings {
       ...DEFAULT_GAME_SETTINGS,
       sensitivity: { ...DEFAULT_AIM_SENSITIVITY_SETTINGS },
       keybinds: { ...DEFAULT_CONTROL_BINDINGS },
+      weaponAlignment: { ...DEFAULT_WEAPON_ALIGNMENT },
     },
     hudPanels: { ...DEFAULT_HUD_OVERLAY_TOGGLES },
     stressCount: 0,
@@ -111,7 +141,12 @@ function readString(value: unknown, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
-function readClampedNumber(value: unknown, min: number, max: number, fallback: number): number {
+function readClampedNumber(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return fallback;
   }
@@ -125,12 +160,22 @@ function migratePercent(value: unknown): unknown {
   return value;
 }
 
-function readPixelRatioScale(value: unknown, fallback: PixelRatioScale): PixelRatioScale {
-  return PIXEL_RATIO_OPTIONS.includes(value as PixelRatioScale) ? (value as PixelRatioScale) : fallback;
+function readPixelRatioScale(
+  value: unknown,
+  fallback: PixelRatioScale,
+): PixelRatioScale {
+  return PIXEL_RATIO_OPTIONS.includes(value as PixelRatioScale)
+    ? (value as PixelRatioScale)
+    : fallback;
 }
 
-function readStressModeCount(value: unknown, fallback: StressModeCount): StressModeCount {
-  return STRESS_STEPS.includes(value as StressModeCount) ? (value as StressModeCount) : fallback;
+function readStressModeCount(
+  value: unknown,
+  fallback: StressModeCount,
+): StressModeCount {
+  return STRESS_STEPS.includes(value as StressModeCount)
+    ? (value as StressModeCount)
+    : fallback;
 }
 
 function parsePersistedSettings(value: unknown): PersistedSettings {
@@ -140,50 +185,165 @@ function parsePersistedSettings(value: unknown): PersistedSettings {
   }
 
   const settings = isRecord(value.settings) ? value.settings : {};
-  const sensitivity = isRecord(settings.sensitivity) ? settings.sensitivity : {};
+  const sensitivity = isRecord(settings.sensitivity)
+    ? settings.sensitivity
+    : {};
   const keybinds = isRecord(settings.keybinds) ? settings.keybinds : {};
+  const weaponAlignment = isRecord(settings.weaponAlignment)
+    ? settings.weaponAlignment
+    : {};
   const hudPanels = isRecord(value.hudPanels) ? value.hudPanels : {};
   const audioVolumes = isRecord(value.audioVolumes) ? value.audioVolumes : {};
 
   return {
     settings: {
       shadows: readBoolean(settings.shadows, defaults.settings.shadows),
-      pixelRatioScale: readPixelRatioScale(settings.pixelRatioScale, defaults.settings.pixelRatioScale),
-      showR3fPerf: readBoolean(settings.showR3fPerf, defaults.settings.showR3fPerf),
+      pixelRatioScale: readPixelRatioScale(
+        settings.pixelRatioScale,
+        defaults.settings.pixelRatioScale,
+      ),
+      showR3fPerf: readBoolean(
+        settings.showR3fPerf,
+        defaults.settings.showR3fPerf,
+      ),
+      fov: readClampedNumber(settings.fov, 40, 120, defaults.settings.fov),
       sensitivity: {
-        look: readClampedNumber(migratePercent(sensitivity.look), 0.05, 3, defaults.settings.sensitivity.look),
-        rifleAds: readClampedNumber(migratePercent(sensitivity.rifleAds), 0.05, 2.5, defaults.settings.sensitivity.rifleAds),
-        sniperAds: readClampedNumber(migratePercent(sensitivity.sniperAds), 0.05, 2, defaults.settings.sensitivity.sniperAds),
-        vertical: readClampedNumber(migratePercent(sensitivity.vertical), 0.3, 2, defaults.settings.sensitivity.vertical),
+        look: readClampedNumber(
+          migratePercent(sensitivity.look),
+          0.05,
+          3,
+          defaults.settings.sensitivity.look,
+        ),
+        rifleAds: readClampedNumber(
+          migratePercent(sensitivity.rifleAds),
+          0.05,
+          2.5,
+          defaults.settings.sensitivity.rifleAds,
+        ),
+        sniperAds: readClampedNumber(
+          migratePercent(sensitivity.sniperAds),
+          0.05,
+          2,
+          defaults.settings.sensitivity.sniperAds,
+        ),
+        vertical: readClampedNumber(
+          migratePercent(sensitivity.vertical),
+          0.3,
+          2,
+          defaults.settings.sensitivity.vertical,
+        ),
       },
       keybinds: {
-        moveForward: readString(keybinds.moveForward, defaults.settings.keybinds.moveForward),
-        moveBackward: readString(keybinds.moveBackward, defaults.settings.keybinds.moveBackward),
-        moveLeft: readString(keybinds.moveLeft, defaults.settings.keybinds.moveLeft),
-        moveRight: readString(keybinds.moveRight, defaults.settings.keybinds.moveRight),
+        moveForward: readString(
+          keybinds.moveForward,
+          defaults.settings.keybinds.moveForward,
+        ),
+        moveBackward: readString(
+          keybinds.moveBackward,
+          defaults.settings.keybinds.moveBackward,
+        ),
+        moveLeft: readString(
+          keybinds.moveLeft,
+          defaults.settings.keybinds.moveLeft,
+        ),
+        moveRight: readString(
+          keybinds.moveRight,
+          defaults.settings.keybinds.moveRight,
+        ),
         sprint: readString(keybinds.sprint, defaults.settings.keybinds.sprint),
         jump: readString(keybinds.jump, defaults.settings.keybinds.jump),
         pickup: readString(keybinds.pickup, defaults.settings.keybinds.pickup),
         drop: readString(keybinds.drop, defaults.settings.keybinds.drop),
         reset: readString(keybinds.reset, defaults.settings.keybinds.reset),
-        equipRifle: readString(keybinds.equipRifle, defaults.settings.keybinds.equipRifle),
-        equipSniper: readString(keybinds.equipSniper, defaults.settings.keybinds.equipSniper),
-        toggleView: readString(keybinds.toggleView, defaults.settings.keybinds.toggleView),
-        shoulderLeft: readString(keybinds.shoulderLeft, defaults.settings.keybinds.shoulderLeft),
-        shoulderRight: readString(keybinds.shoulderRight, defaults.settings.keybinds.shoulderRight),
+        equipRifle: readString(
+          keybinds.equipRifle,
+          defaults.settings.keybinds.equipRifle,
+        ),
+        equipSniper: readString(
+          keybinds.equipSniper,
+          defaults.settings.keybinds.equipSniper,
+        ),
+        toggleView: readString(
+          keybinds.toggleView,
+          defaults.settings.keybinds.toggleView,
+        ),
+        shoulderLeft: readString(
+          keybinds.shoulderLeft,
+          defaults.settings.keybinds.shoulderLeft,
+        ),
+        shoulderRight: readString(
+          keybinds.shoulderRight,
+          defaults.settings.keybinds.shoulderRight,
+        ),
+      },
+      weaponAlignment: {
+        posX: readClampedNumber(
+          weaponAlignment.posX,
+          -0.5,
+          0.5,
+          defaults.settings.weaponAlignment.posX,
+        ),
+        posY: readClampedNumber(
+          weaponAlignment.posY,
+          -0.5,
+          0.5,
+          defaults.settings.weaponAlignment.posY,
+        ),
+        posZ: readClampedNumber(
+          weaponAlignment.posZ,
+          -0.5,
+          0.5,
+          defaults.settings.weaponAlignment.posZ,
+        ),
+        rotX: readClampedNumber(
+          weaponAlignment.rotX,
+          -Math.PI,
+          Math.PI,
+          defaults.settings.weaponAlignment.rotX,
+        ),
+        rotY: readClampedNumber(
+          weaponAlignment.rotY,
+          -Math.PI,
+          Math.PI,
+          defaults.settings.weaponAlignment.rotY,
+        ),
+        rotZ: readClampedNumber(
+          weaponAlignment.rotZ,
+          -Math.PI,
+          Math.PI,
+          defaults.settings.weaponAlignment.rotZ,
+        ),
       },
     },
     hudPanels: {
       practice: readBoolean(hudPanels.practice, defaults.hudPanels.practice),
       controls: readBoolean(hudPanels.controls, defaults.hudPanels.controls),
       settings: readBoolean(hudPanels.settings, defaults.hudPanels.settings),
-      performance: readBoolean(hudPanels.performance, defaults.hudPanels.performance),
+      performance: readBoolean(
+        hudPanels.performance,
+        defaults.hudPanels.performance,
+      ),
     },
     stressCount: readStressModeCount(value.stressCount, defaults.stressCount),
     audioVolumes: {
-      master: readClampedNumber(audioVolumes.master, 0, 1, defaults.audioVolumes.master),
-      gunshot: readClampedNumber(audioVolumes.gunshot, 0, 1, defaults.audioVolumes.gunshot),
-      footsteps: readClampedNumber(audioVolumes.footsteps, 0, 1, defaults.audioVolumes.footsteps),
+      master: readClampedNumber(
+        audioVolumes.master,
+        0,
+        1,
+        defaults.audioVolumes.master,
+      ),
+      gunshot: readClampedNumber(
+        audioVolumes.gunshot,
+        0,
+        1,
+        defaults.audioVolumes.gunshot,
+      ),
+      footsteps: readClampedNumber(
+        audioVolumes.footsteps,
+        0,
+        1,
+        defaults.audioVolumes.footsteps,
+      ),
       hit: readClampedNumber(audioVolumes.hit, 0, 1, defaults.audioVolumes.hit),
     },
   };
@@ -220,13 +380,23 @@ function savePersistedSettings(settings: PersistedSettings) {
 
 export function GameRoot() {
   const persistedSettings = useMemo(loadPersistedSettings, []);
-  const [settings, setSettings] = useState<GameSettings>(persistedSettings.settings);
-  const [hudPanels, setHudPanels] = useState<HudOverlayToggles>(persistedSettings.hudPanels);
+  const [settings, setSettings] = useState<GameSettings>(
+    persistedSettings.settings,
+  );
+  const [hudPanels, setHudPanels] = useState<HudOverlayToggles>(
+    persistedSettings.hudPanels,
+  );
   const [menuTab, setMenuTab] = useState<PauseMenuTab>("gameplay");
   const [bindingCapture, setBindingCapture] = useState<BindingKey | null>(null);
-  const [stressCount, setStressCount] = useState<StressModeCount>(persistedSettings.stressCount);
-  const [audioVolumes, setAudioVolumes] = useState<AudioVolumeSettings>(persistedSettings.audioVolumes);
-  const [perfMetrics, setPerfMetrics] = useState<PerfMetrics>(DEFAULT_PERF_METRICS);
+  const [stressCount, setStressCount] = useState<StressModeCount>(
+    persistedSettings.stressCount,
+  );
+  const [audioVolumes, setAudioVolumes] = useState<AudioVolumeSettings>(
+    persistedSettings.audioVolumes,
+  );
+  const [perfMetrics, setPerfMetrics] = useState<PerfMetrics>(
+    DEFAULT_PERF_METRICS,
+  );
   const [player, setPlayer] = useState<PlayerSnapshot>(DEFAULT_PLAYER_SNAPSHOT);
   const [weaponEquipped, setWeaponEquipped] = useState(true);
   const [activeWeapon, setActiveWeapon] = useState<WeaponKind>("rifle");
@@ -239,8 +409,12 @@ export function GameRoot() {
     ads: false,
     firstPerson: false,
   });
-  const [resumePointerLockRequestId, setResumePointerLockRequestId] = useState(0);
-  const [hitMarker, setHitMarker] = useState<{ until: number; kind: HitMarkerKind }>({
+  const [resumePointerLockRequestId, setResumePointerLockRequestId] = useState(
+    0,
+  );
+  const [hitMarker, setHitMarker] = useState<
+    { until: number; kind: HitMarkerKind }
+  >({
     until: 0,
     kind: "body",
   });
@@ -323,15 +497,19 @@ export function GameRoot() {
   }, [bindingCapture, isPaused]);
 
   const hitMarkerVisible = hitMarker.until > performance.now();
-  const sniperScopeActive = activeWeapon === "sniper" && aimingState.ads && !isPaused;
-  const rifleScopeActive = activeWeapon === "rifle" && aimingState.ads && !isPaused;
+  const sniperScopeActive = activeWeapon === "sniper" && aimingState.ads &&
+    !isPaused;
+  const rifleScopeActive = activeWeapon === "rifle" && aimingState.ads &&
+    !isPaused;
   const stressLabel = stressCount === 0 ? "Off" : `${stressCount} boxes`;
-  const lockLabel = player.pointerLocked ? "Live look mode" : "Paused / cursor shown";
+  const lockLabel = player.pointerLocked
+    ? "Live look mode"
+    : "Paused / cursor shown";
   const crosshairStyle =
     activeWeapon === "sniper" && (sniperRechamber.active || sniperScopeActive)
       ? ({
-          ["--sniper-cycle-progress" as string]: `${sniperRechamber.progress}`,
-        } as CSSProperties)
+        ["--sniper-cycle-progress" as string]: `${sniperRechamber.progress}`,
+      } as CSSProperties)
       : undefined;
 
   const playerSummary = useMemo(() => {
@@ -349,18 +527,24 @@ export function GameRoot() {
       codeCounts.set(code, (codeCounts.get(code) ?? 0) + 1);
     }
     return new Set(
-      [...codeCounts.entries()].filter(([, count]) => count > 1).map(([code]) => code),
+      [...codeCounts.entries()].filter(([, count]) => count > 1).map(([code]) =>
+        code
+      ),
     );
   }, [settings.keybinds]);
 
-  const effectiveRifleAds = (settings.sensitivity.look * settings.sensitivity.rifleAds).toFixed(2);
-  const effectiveSniperAds = (settings.sensitivity.look * settings.sensitivity.sniperAds).toFixed(2);
+  const effectiveRifleAds =
+    (settings.sensitivity.look * settings.sensitivity.rifleAds).toFixed(2);
+  const effectiveSniperAds =
+    (settings.sensitivity.look * settings.sensitivity.sniperAds).toFixed(2);
   const visibleOverlayCount = Object.values(hudPanels).filter(Boolean).length;
 
   const controlsPreview = useMemo(() => {
     const b = settings.keybinds;
     return [
-      `${formatKeyCode(b.moveForward)}/${formatKeyCode(b.moveLeft)}/${formatKeyCode(b.moveBackward)}/${formatKeyCode(b.moveRight)} move`,
+      `${formatKeyCode(b.moveForward)}/${formatKeyCode(b.moveLeft)}/${
+        formatKeyCode(b.moveBackward)
+      }/${formatKeyCode(b.moveRight)} move`,
       `${formatKeyCode(b.sprint)} sprint`,
       `${formatKeyCode(b.jump)} jump`,
       `${formatKeyCode(b.toggleView)} FPP/TPP`,
@@ -383,9 +567,9 @@ export function GameRoot() {
         onHitMarker={(kind) =>
           setHitMarker({
             kind,
-            until: performance.now() + (kind === "kill" ? 170 : kind === "head" ? 120 : 90),
-          })
-        }
+            until: performance.now() +
+              (kind === "kill" ? 170 : kind === "head" ? 120 : 90),
+          })}
         onWeaponEquippedChange={setWeaponEquipped}
         onActiveWeaponChange={setActiveWeapon}
         onSniperRechamberChange={setSniperRechamber}
@@ -393,557 +577,864 @@ export function GameRoot() {
       />
 
       <div className="ui-overlay">
-        {hudPanels.practice ? (
-          <div className="corner-top-left panel tactical-panel practice-panel">
-            <div className="panel-eyebrow">PINDG / Practice Range</div>
-            <div className="panel-title-row">
-              <div className="brand-lockup" aria-label="PINDG logo">
-                <span className="brand-word">PINDG</span>
+        {hudPanels.practice
+          ? (
+            <div className="corner-top-left panel tactical-panel practice-panel">
+              <div className="panel-eyebrow">PINDG / Practice Range</div>
+              <div className="panel-title-row">
+                <div className="brand-lockup" aria-label="PINDG logo">
+                  <span className="brand-word">PINDG</span>
+                </div>
+                <div className="status-pill">
+                  <span
+                    className={`status-dot ${
+                      player.pointerLocked ? "locked" : ""
+                    }`}
+                  />
+                  <span>{lockLabel}</span>
+                </div>
               </div>
-              <div className="status-pill">
-                <span className={`status-dot ${player.pointerLocked ? "locked" : ""}`} />
-                <span>{lockLabel}</span>
-              </div>
+              <dl className="stat-grid stat-grid-wide">
+                <dt>Player</dt>
+                <dd>
+                  {playerSummary.x}, {playerSummary.y}, {playerSummary.z}
+                </dd>
+                <dt>Speed</dt>
+                <dd>{playerSummary.speed} u/s</dd>
+                <dt>State</dt>
+                <dd>
+                  {player.grounded
+                    ? player.moving
+                      ? player.sprinting ? "Sprint" : "Walk"
+                      : "Idle"
+                    : "Jump / Air"}
+                </dd>
+                <dt>Interact</dt>
+                <dd>{player.canInteract ? "Pickup ready" : "-"}</dd>
+                <dt>Weapon</dt>
+                <dd>
+                  {weaponEquipped
+                    ? (activeWeapon === "sniper" ? "Sniper" : "Rifle")
+                    : "None"}
+                </dd>
+                <dt>Range Load</dt>
+                <dd>{stressLabel}</dd>
+              </dl>
             </div>
-            <dl className="stat-grid stat-grid-wide">
-              <dt>Player</dt>
-              <dd>
-                {playerSummary.x}, {playerSummary.y}, {playerSummary.z}
-              </dd>
-              <dt>Speed</dt>
-              <dd>{playerSummary.speed} u/s</dd>
-              <dt>State</dt>
-              <dd>
-                {player.grounded
-                  ? player.moving
-                    ? player.sprinting
-                      ? "Sprint"
-                      : "Walk"
-                    : "Idle"
-                  : "Jump / Air"}
-              </dd>
-              <dt>Interact</dt>
-              <dd>{player.canInteract ? "Pickup ready" : "-"}</dd>
-              <dt>Weapon</dt>
-              <dd>{weaponEquipped ? (activeWeapon === "sniper" ? "Sniper" : "Rifle") : "None"}</dd>
-              <dt>Range Load</dt>
-              <dd>{stressLabel}</dd>
-            </dl>
-          </div>
-        ) : null}
+          )
+          : null}
 
-        {hudPanels.performance ? (
-          <div className="corner-top-right">
-            <PerfHUD metrics={perfMetrics} visible />
-          </div>
-        ) : null}
+        {hudPanels.performance
+          ? (
+            <div className="corner-top-right">
+              <PerfHUD metrics={perfMetrics} visible />
+            </div>
+          )
+          : null}
 
         <div className="center-stack">
-          {!isPaused && !sniperScopeActive && !rifleScopeActive ? (
-            <div
-              className={`crosshair ${activeWeapon === "sniper" ? "sniper-hip" : "rifle"} ${
-                activeWeapon === "sniper" && sniperRechamber.active ? "rechambering" : ""
-              }`}
-              style={crosshairStyle}
-            >
-              {activeWeapon === "sniper" ? (
-                <div className="sniper-hip-lines" aria-hidden="true">
-                  <span className="line top" />
-                  <span className="line right" />
-                  <span className="line bottom" />
-                  <span className="line left" />
-                </div>
-              ) : null}
-              {activeWeapon === "sniper" && sniperRechamber.active ? (
-                <div className={`crosshair-progress ${sniperRechamber.active ? "active" : ""}`} />
-              ) : null}
-            </div>
-          ) : null}
-          {rifleScopeActive ? (
-            <div className="rifle-ads-overlay">
-              <div className="rifle-ads-ring" />
-              <div className="rifle-ads-dot" />
-            </div>
-          ) : null}
-          {sniperScopeActive ? (
-            <div className="sniper-scope-overlay" style={crosshairStyle}>
-              <div className="scope-outside" />
-              <div className="scope-lens">
-                <div className="scope-reticle">
-                  <span className="scope-line vertical" />
-                  <span className="scope-line horizontal" />
-                  <span className="scope-center-dot" />
-                  <span className="scope-hash hash-1" />
-                  <span className="scope-hash hash-2" />
-                  <span className="scope-hash hash-3" />
-                  {sniperRechamber.active ? <span className="scope-rechamber" /> : null}
+          {!isPaused && !sniperScopeActive && !rifleScopeActive
+            ? (
+              <div
+                className={`crosshair ${
+                  activeWeapon === "sniper" ? "sniper-hip" : "rifle"
+                } ${
+                  activeWeapon === "sniper" && sniperRechamber.active
+                    ? "rechambering"
+                    : ""
+                }`}
+                style={crosshairStyle}
+              >
+                {activeWeapon === "sniper"
+                  ? (
+                    <div className="sniper-hip-lines" aria-hidden="true">
+                      <span className="line top" />
+                      <span className="line right" />
+                      <span className="line bottom" />
+                      <span className="line left" />
+                    </div>
+                  )
+                  : null}
+                {activeWeapon === "sniper" && sniperRechamber.active
+                  ? (
+                    <div
+                      className={`crosshair-progress ${
+                        sniperRechamber.active ? "active" : ""
+                      }`}
+                    />
+                  )
+                  : null}
+              </div>
+            )
+            : null}
+          {rifleScopeActive
+            ? (
+              <div className="rifle-ads-overlay">
+                <div className="rifle-ads-ring" />
+                <div className="rifle-ads-dot" />
+              </div>
+            )
+            : null}
+          {sniperScopeActive
+            ? (
+              <div className="sniper-scope-overlay" style={crosshairStyle}>
+                <div className="scope-outside" />
+                <div className="scope-lens">
+                  <div className="scope-reticle">
+                    <span className="scope-line vertical" />
+                    <span className="scope-line horizontal" />
+                    <span className="scope-center-dot" />
+                    <span className="scope-hash hash-1" />
+                    <span className="scope-hash hash-2" />
+                    <span className="scope-hash hash-3" />
+                    {sniperRechamber.active
+                      ? <span className="scope-rechamber" />
+                      : null}
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : null}
-          {!isPaused ? (
-            <div className={`hit-marker ${hitMarkerVisible ? "visible" : ""} ${hitMarker.kind}`} />
-          ) : null}
+            )
+            : null}
+          {!isPaused
+            ? (
+              <div
+                className={`hit-marker ${
+                  hitMarkerVisible ? "visible" : ""
+                } ${hitMarker.kind}`}
+              />
+            )
+            : null}
 
-          {isPaused ? (
-            <div className="pause-menu panel tactical-panel" role="dialog" aria-label="Pause menu">
-              <button
-                type="button"
-                className="pause-close-btn"
-                aria-label="Close settings and resume game"
-                onClick={handleCloseMenuAndResume}
+          {isPaused
+            ? (
+              <div
+                className="pause-menu panel tactical-panel"
+                role="dialog"
+                aria-label="Pause menu"
               >
-                <span aria-hidden="true">×</span>
-              </button>
-              <div className="pause-shell">
-                <aside className="pause-sidebar" aria-label="Menu sections">
-                  <div className="pause-logo">
-                    <div className="brand-lockup large" aria-hidden="true">
-                      <span className="brand-word">PINDG</span>
+                <button
+                  type="button"
+                  className="pause-close-btn"
+                  aria-label="Close settings and resume game"
+                  onClick={handleCloseMenuAndResume}
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+                <div className="pause-shell">
+                  <aside className="pause-sidebar" aria-label="Menu sections">
+                    <div className="pause-logo">
+                      <div className="brand-lockup large" aria-hidden="true">
+                        <span className="brand-word">PINDG</span>
+                      </div>
+                      <p className="muted">
+                        Training lobby. Legacy bugs included at no extra cost.
+                      </p>
                     </div>
-                    <p className="muted">Training lobby. Legacy bugs included at no extra cost.</p>
-                  </div>
-                  <div className="pause-status-card">
-                    <div className="panel-eyebrow">Session</div>
-                    <div className="pause-status-grid">
-                      <span>Weapon</span>
-                      <strong>{weaponEquipped ? activeWeapon : "unarmed"}</strong>
-                      <span>Overlays</span>
-                      <strong>{visibleOverlayCount} active</strong>
-                      <span>Range load</span>
-                      <strong>{stressLabel}</strong>
+                    <div className="pause-status-card">
+                      <div className="panel-eyebrow">Session</div>
+                      <div className="pause-status-grid">
+                        <span>Weapon</span>
+                        <strong>
+                          {weaponEquipped ? activeWeapon : "unarmed"}
+                        </strong>
+                        <span>Overlays</span>
+                        <strong>{visibleOverlayCount} active</strong>
+                        <span>Range load</span>
+                        <strong>{stressLabel}</strong>
+                      </div>
                     </div>
-                  </div>
-                  <div className="menu-tab-list" role="tablist" aria-label="Settings categories">
-                    {MENU_TABS.map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={menuTab === tab.id}
-                        className={`menu-tab ${menuTab === tab.id ? "active" : ""}`}
-                        onClick={() => {
-                          setMenuTab(tab.id);
-                          setBindingCapture(null);
-                        }}
-                      >
-                        <span className="menu-tab-label">{tab.label}</span>
-                        <span className="menu-tab-hint">{tab.hint}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="pause-footer-note muted">
-                    Press <code>Esc</code> to pause again after resuming.
-                  </div>
-                </aside>
-
-                <section className="pause-content" role="tabpanel" aria-label={`${menuTab} settings`}>
-                  <div className="pause-content-header">
-                    <div>
-                      <div className="panel-eyebrow">Paused Menu</div>
-                      <h2>{menuTitle(menuTab)}</h2>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      onClick={() => setBindingCapture(null)}
-                      disabled={!bindingCapture}
+                    <div
+                      className="menu-tab-list"
+                      role="tablist"
+                      aria-label="Settings categories"
                     >
-                      Cancel capture
-                    </button>
-                  </div>
-
-                  {menuTab === "practice" ? (
-                    <div className="menu-sections">
-                      <MenuSection title="Range Load" blurb="Stress mode scales target-box clutter and draw-call pain.">
-                        <div className="segmented-row">
-                          {STRESS_STEPS.map((value) => (
-                            <button
-                              key={value}
-                              type="button"
-                              className={`chip-btn ${stressCount === value ? "active" : ""}`}
-                              onClick={() => setStressCount(value)}
-                            >
-                              {value === 0 ? "Off" : `${value} boxes`}
-                            </button>
-                          ))}
-                        </div>
-                        <p className="muted compact-note">
-                          Reset targets uses your bound key: <code>{formatKeyCode(settings.keybinds.reset)}</code>
-                        </p>
-                      </MenuSection>
-
-                      <MenuSection title="Combat Snapshot" blurb="Quick readout while you pretend this is a real lobby.">
-                        <div className="metric-cards">
-                          <MetricCard label="Weapon" value={weaponEquipped ? (activeWeapon === "sniper" ? "Sniper" : "Rifle") : "None"} />
-                          <MetricCard label="Movement" value={player.moving ? (player.sprinting ? "Sprint" : "Walk") : "Idle"} />
-                          <MetricCard label="Pointer" value={player.pointerLocked ? "Locked" : "Menu"} />
-                          <MetricCard label="Interact" value={player.canInteract ? "Ready" : "None"} />
-                        </div>
-                      </MenuSection>
-
-                      <MenuSection title="HUD Preset" blurb="Starting point for cleaner screen recording or debugging.">
-                        <div className="preset-grid">
-                          <button
-                            type="button"
-                            className="btn btn-wide"
-                            onClick={() =>
-                              setHudPanels({ practice: false, controls: false, settings: false, performance: true })
-                            }
-                          >
-                            Perf Only
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-wide"
-                            onClick={() =>
-                              setHudPanels({ practice: true, controls: true, settings: true, performance: true })
-                            }
-                          >
-                            Show All Panels
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-wide"
-                            onClick={() =>
-                              setHudPanels({ practice: false, controls: false, settings: false, performance: false })
-                            }
-                          >
-                            Clean Screen
-                          </button>
-                        </div>
-                      </MenuSection>
+                      {MENU_TABS.map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={menuTab === tab.id}
+                          className={`menu-tab ${
+                            menuTab === tab.id ? "active" : ""
+                          }`}
+                          onClick={() => {
+                            setMenuTab(tab.id);
+                            setBindingCapture(null);
+                          }}
+                        >
+                          <span className="menu-tab-label">{tab.label}</span>
+                          <span className="menu-tab-hint">{tab.hint}</span>
+                        </button>
+                      ))}
                     </div>
-                  ) : null}
+                    <div className="pause-footer-note muted">
+                      Press <code>Esc</code> to pause again after resuming.
+                    </div>
+                  </aside>
 
-                  {menuTab === "gameplay" ? (
-                    <div className="menu-sections">
-                      <MenuSection
-                        title="Look Sensitivity"
-                        blurb="Valorant-style decimals: lower = slower. Great for high-DPI mice."
+                  <section
+                    className="pause-content"
+                    role="tabpanel"
+                    aria-label={`${menuTab} settings`}
+                  >
+                    <div className="pause-content-header">
+                      <div>
+                        <div className="panel-eyebrow">Paused Menu</div>
+                        <h2>{menuTitle(menuTab)}</h2>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => setBindingCapture(null)}
+                        disabled={!bindingCapture}
                       >
-                        <RangeField
-                          label="Camera / Free Look"
-                          value={settings.sensitivity.look}
-                          min={0.05}
-                          max={3}
-                          step={0.01}
-                          onChange={(value) =>
-                            setSettings((prev) => ({
-                              ...prev,
-                              sensitivity: { ...prev.sensitivity, look: value },
-                            }))
-                          }
-                        />
-                        <RangeField
-                          label="Rifle ADS"
-                          value={settings.sensitivity.rifleAds}
-                          min={0.05}
-                          max={2.5}
-                          step={0.01}
-                          onChange={(value) =>
-                            setSettings((prev) => ({
-                              ...prev,
-                              sensitivity: { ...prev.sensitivity, rifleAds: value },
-                            }))
-                          }
-                        />
-                        <RangeField
-                          label="Sniper ADS"
-                          value={settings.sensitivity.sniperAds}
-                          min={0.05}
-                          max={2}
-                          step={0.01}
-                          onChange={(value) =>
-                            setSettings((prev) => ({
-                              ...prev,
-                              sensitivity: { ...prev.sensitivity, sniperAds: value },
-                            }))
-                          }
-                        />
-                        <RangeField
-                          label="Vertical Multiplier"
-                          value={settings.sensitivity.vertical}
-                          min={0.3}
-                          max={2}
-                          step={0.01}
-                          onChange={(value) =>
-                            setSettings((prev) => ({
-                              ...prev,
-                              sensitivity: { ...prev.sensitivity, vertical: value },
-                            }))
-                          }
-                        />
-                        <div className="settings-chip-wrap">
-                          <span className="pill-chip">Effective Rifle ADS: {effectiveRifleAds}</span>
-                          <span className="pill-chip">Effective Sniper ADS: {effectiveSniperAds}</span>
-                          <span className="pill-chip">Applies live while aiming</span>
-                        </div>
-                      </MenuSection>
-
-                      <MenuSection title="View Defaults" blurb="Camera behavior is still keyboard/mouse only, but now the aim feel is configurable.">
-                        <ul className="bullet-list muted">
-                          <li>Hip-fire uses Camera / Free Look sensitivity.</li>
-                          <li>Rifle ADS and Sniper ADS use separate multipliers.</li>
-                          <li>Vertical multiplier lets you match recoil control preference.</li>
-                        </ul>
-                      </MenuSection>
+                        Cancel capture
+                      </button>
                     </div>
-                  ) : null}
 
-                  {menuTab === "audio" ? (
-                    <div className="menu-sections">
-                      <MenuSection title="Volume Mixer" blurb="Separate sliders so footsteps don’t get buried under rifle spam.">
-                        <VolumeSlider
-                          label="Master"
-                          value={audioVolumes.master}
-                          onChange={(value) =>
-                            setAudioVolumes((prev) => ({
-                              ...prev,
-                              master: value,
-                            }))
-                          }
-                        />
-                        <VolumeSlider
-                          label="Gunshots"
-                          value={audioVolumes.gunshot}
-                          onChange={(value) =>
-                            setAudioVolumes((prev) => ({
-                              ...prev,
-                              gunshot: value,
-                            }))
-                          }
-                        />
-                        <VolumeSlider
-                          label="Footsteps"
-                          value={audioVolumes.footsteps}
-                          onChange={(value) =>
-                            setAudioVolumes((prev) => ({
-                              ...prev,
-                              footsteps: value,
-                            }))
-                          }
-                        />
-                        <VolumeSlider
-                          label="Hit / Kill"
-                          value={audioVolumes.hit}
-                          onChange={(value) =>
-                            setAudioVolumes((prev) => ({
-                              ...prev,
-                              hit: value,
-                            }))
-                          }
-                        />
-                      </MenuSection>
-                    </div>
-                  ) : null}
-
-                  {menuTab === "controls" ? (
-                    <div className="menu-sections">
-                      <MenuSection title="Keyboard Shortcuts" blurb="Click a row, press a key. Escape cancels capture.">
-                        <div className="keybind-grid">
-                          {BINDING_ROWS.map((row) => {
-                            const code = settings.keybinds[row.key];
-                            const duplicated = duplicateBindingCodes.has(code);
-                            return (
-                              <div
-                                key={row.key}
-                                className={`keybind-row ${bindingCapture === row.key ? "capturing" : ""} ${duplicated ? "duplicate" : ""}`}
-                              >
-                                <div>
-                                  <div className="keybind-label">{row.label}</div>
-                                  <div className="keybind-hint">{row.hint}</div>
-                                </div>
+                    {menuTab === "practice"
+                      ? (
+                        <div className="menu-sections">
+                          <MenuSection
+                            title="Range Load"
+                            blurb="Stress mode scales target-box clutter and draw-call pain."
+                          >
+                            <div className="segmented-row">
+                              {STRESS_STEPS.map((value) => (
                                 <button
+                                  key={value}
                                   type="button"
-                                  className={`keybind-btn ${bindingCapture === row.key ? "active" : ""}`}
-                                  onClick={() => setBindingCapture((prev) => (prev === row.key ? null : row.key))}
+                                  className={`chip-btn ${
+                                    stressCount === value ? "active" : ""
+                                  }`}
+                                  onClick={() => setStressCount(value)}
                                 >
-                                  {bindingCapture === row.key ? "Press key..." : formatKeyCode(code)}
+                                  {value === 0 ? "Off" : `${value} boxes`}
                                 </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="settings-chip-wrap">
-                          <span className="pill-chip">Mouse Left: Fire (fixed)</span>
-                          <span className="pill-chip">Mouse Right: ADS (fixed)</span>
-                          <span className="pill-chip">P: Perf panel toggle (global)</span>
-                        </div>
-                        {duplicateBindingCodes.size > 0 ? (
-                          <p className="warning-note">
-                            Duplicate keys are allowed, but you are volunteering for weirdness.
-                          </p>
-                        ) : null}
-                      </MenuSection>
-                    </div>
-                  ) : null}
+                              ))}
+                            </div>
+                            <p className="muted compact-note">
+                              Reset targets uses your bound key:{" "}
+                              <code>
+                                {formatKeyCode(settings.keybinds.reset)}
+                              </code>
+                            </p>
+                          </MenuSection>
 
-                  {menuTab === "graphics" ? (
-                    <div className="menu-sections">
-                      <MenuSection title="Render Quality" blurb="Enough knobs to tune performance without pretending this is a benchmark suite.">
-                        <SwitchRow
-                          label="Shadows"
-                          hint="Sun shadow maps for scene and targets"
-                          checked={settings.shadows}
-                          onChange={(checked) =>
-                            setSettings((prev) => ({
-                              ...prev,
-                              shadows: checked,
-                            }))
-                          }
-                        />
-                        <SwitchRow
-                          label="r3f-perf Overlay"
-                          hint="Developer perf overlay (separate from PINDG perf panel)"
-                          checked={settings.showR3fPerf}
-                          onChange={(checked) =>
-                            setSettings((prev) => ({
-                              ...prev,
-                              showR3fPerf: checked,
-                            }))
-                          }
-                        />
-                        <div className="field-row">
-                          <div>
-                            <div className="field-label">Pixel Ratio</div>
-                            <div className="field-hint">Render scale multiplier</div>
-                          </div>
-                          <div className="segmented-row compact">
-                            {PIXEL_RATIO_OPTIONS.map((option) => (
+                          <MenuSection
+                            title="Combat Snapshot"
+                            blurb="Quick readout while you pretend this is a real lobby."
+                          >
+                            <div className="metric-cards">
+                              <MetricCard
+                                label="Weapon"
+                                value={weaponEquipped
+                                  ? (activeWeapon === "sniper"
+                                    ? "Sniper"
+                                    : "Rifle")
+                                  : "None"}
+                              />
+                              <MetricCard
+                                label="Movement"
+                                value={player.moving
+                                  ? (player.sprinting ? "Sprint" : "Walk")
+                                  : "Idle"}
+                              />
+                              <MetricCard
+                                label="Pointer"
+                                value={player.pointerLocked ? "Locked" : "Menu"}
+                              />
+                              <MetricCard
+                                label="Interact"
+                                value={player.canInteract ? "Ready" : "None"}
+                              />
+                            </div>
+                          </MenuSection>
+
+                          <MenuSection
+                            title="HUD Preset"
+                            blurb="Starting point for cleaner screen recording or debugging."
+                          >
+                            <div className="preset-grid">
                               <button
-                                key={option}
                                 type="button"
-                                className={`chip-btn ${settings.pixelRatioScale === option ? "active" : ""}`}
+                                className="btn btn-wide"
+                                onClick={() =>
+                                  setHudPanels({
+                                    practice: false,
+                                    controls: false,
+                                    settings: false,
+                                    performance: true,
+                                  })}
+                              >
+                                Perf Only
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-wide"
+                                onClick={() =>
+                                  setHudPanels({
+                                    practice: true,
+                                    controls: true,
+                                    settings: true,
+                                    performance: true,
+                                  })}
+                              >
+                                Show All Panels
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-wide"
+                                onClick={() =>
+                                  setHudPanels({
+                                    practice: false,
+                                    controls: false,
+                                    settings: false,
+                                    performance: false,
+                                  })}
+                              >
+                                Clean Screen
+                              </button>
+                            </div>
+                          </MenuSection>
+                        </div>
+                      )
+                      : null}
+
+                    {menuTab === "gameplay"
+                      ? (
+                        <div className="menu-sections">
+                          <MenuSection
+                            title="Look Sensitivity"
+                            blurb="Valorant-style decimals: lower = slower. Great for high-DPI mice."
+                          >
+                            <RangeField
+                              label="Camera / Free Look"
+                              value={settings.sensitivity.look}
+                              min={0.05}
+                              max={3}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  sensitivity: {
+                                    ...prev.sensitivity,
+                                    look: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle ADS"
+                              value={settings.sensitivity.rifleAds}
+                              min={0.05}
+                              max={2.5}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  sensitivity: {
+                                    ...prev.sensitivity,
+                                    rifleAds: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Sniper ADS"
+                              value={settings.sensitivity.sniperAds}
+                              min={0.05}
+                              max={2}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  sensitivity: {
+                                    ...prev.sensitivity,
+                                    sniperAds: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Vertical Multiplier"
+                              value={settings.sensitivity.vertical}
+                              min={0.3}
+                              max={2}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  sensitivity: {
+                                    ...prev.sensitivity,
+                                    vertical: value,
+                                  },
+                                }))}
+                            />
+                            <div className="settings-chip-wrap">
+                              <span className="pill-chip">
+                                Effective Rifle ADS: {effectiveRifleAds}
+                              </span>
+                              <span className="pill-chip">
+                                Effective Sniper ADS: {effectiveSniperAds}
+                              </span>
+                              <span className="pill-chip">
+                                Applies live while aiming
+                              </span>
+                            </div>
+                          </MenuSection>
+
+                          <MenuSection
+                            title="Field of View"
+                            blurb="PUBG-style FOV: wider = more peripheral vision but smaller targets. Applies to both FPP and TPP."
+                          >
+                            <RangeField
+                              label="Base FOV"
+                              value={settings.fov}
+                              min={40}
+                              max={120}
+                              step={1}
+                              suffix="°"
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  fov: value,
+                                }))}
+                            />
+                            <div className="settings-chip-wrap">
+                              <span className="pill-chip">
+                                Low (40-55): Zoomed, sniper-friendly
+                              </span>
+                              <span className="pill-chip">
+                                Normal (60-75): Balanced
+                              </span>
+                              <span className="pill-chip">
+                                Wide (80-120): Max awareness
+                              </span>
+                            </div>
+                          </MenuSection>
+
+                          <MenuSection
+                            title="Weapon Alignment (Debug)"
+                            blurb="Tweak weapon position and rotation on the hand bone. Values are saved. Hit Reset to start over."
+                          >
+                            <RangeField
+                              label="Offset X (left/right)"
+                              value={settings.weaponAlignment.posX}
+                              min={-0.5}
+                              max={0.5}
+                              step={0.005}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponAlignment: {
+                                    ...prev.weaponAlignment,
+                                    posX: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Offset Y (up/down)"
+                              value={settings.weaponAlignment.posY}
+                              min={-0.5}
+                              max={0.5}
+                              step={0.005}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponAlignment: {
+                                    ...prev.weaponAlignment,
+                                    posY: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Offset Z (forward/back)"
+                              value={settings.weaponAlignment.posZ}
+                              min={-0.5}
+                              max={0.5}
+                              step={0.005}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponAlignment: {
+                                    ...prev.weaponAlignment,
+                                    posZ: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rotation X (pitch)"
+                              value={settings.weaponAlignment.rotX}
+                              min={-3.14}
+                              max={3.14}
+                              step={0.01}
+                              suffix=" rad"
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponAlignment: {
+                                    ...prev.weaponAlignment,
+                                    rotX: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rotation Y (yaw)"
+                              value={settings.weaponAlignment.rotY}
+                              min={-3.14}
+                              max={3.14}
+                              step={0.01}
+                              suffix=" rad"
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponAlignment: {
+                                    ...prev.weaponAlignment,
+                                    rotY: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rotation Z (roll)"
+                              value={settings.weaponAlignment.rotZ}
+                              min={-3.14}
+                              max={3.14}
+                              step={0.01}
+                              suffix=" rad"
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponAlignment: {
+                                    ...prev.weaponAlignment,
+                                    rotZ: value,
+                                  },
+                                }))}
+                            />
+                            <div className="settings-chip-wrap">
+                              <button
+                                type="button"
+                                className="btn"
                                 onClick={() =>
                                   setSettings((prev) => ({
                                     ...prev,
-                                    pixelRatioScale: option,
-                                  }))
-                                }
+                                    weaponAlignment: {
+                                      ...DEFAULT_WEAPON_ALIGNMENT,
+                                    },
+                                  }))}
                               >
-                                {option.toFixed(2)}x
+                                Reset Alignment
                               </button>
-                            ))}
-                          </div>
+                            </div>
+                          </MenuSection>
                         </div>
-                      </MenuSection>
-                    </div>
-                  ) : null}
+                      )
+                      : null}
 
-                  {menuTab === "hud" ? (
-                    <div className="menu-sections">
-                      <MenuSection title="Overlay Panels" blurb="Toggle the old debug panels individually. Default preset is perf-only.">
-                        {OVERLAY_ROWS.map((row) => (
-                          <SwitchRow
-                            key={row.key}
-                            label={row.label}
-                            hint={row.hint}
-                            checked={hudPanels[row.key]}
-                            onChange={(checked) =>
-                              setHudPanels((prev) => ({
-                                ...prev,
-                                [row.key]: checked,
-                              }))
-                            }
-                          />
-                        ))}
-                        <p className="muted compact-note">
-                          Crosshair and hit markers stay visible during gameplay. This tab only controls the corner panels.
-                        </p>
-                      </MenuSection>
-                    </div>
-                  ) : null}
-                </section>
+                    {menuTab === "audio"
+                      ? (
+                        <div className="menu-sections">
+                          <MenuSection
+                            title="Volume Mixer"
+                            blurb="Separate sliders so footsteps don’t get buried under rifle spam."
+                          >
+                            <VolumeSlider
+                              label="Master"
+                              value={audioVolumes.master}
+                              onChange={(value) =>
+                                setAudioVolumes((prev) => ({
+                                  ...prev,
+                                  master: value,
+                                }))}
+                            />
+                            <VolumeSlider
+                              label="Gunshots"
+                              value={audioVolumes.gunshot}
+                              onChange={(value) =>
+                                setAudioVolumes((prev) => ({
+                                  ...prev,
+                                  gunshot: value,
+                                }))}
+                            />
+                            <VolumeSlider
+                              label="Footsteps"
+                              value={audioVolumes.footsteps}
+                              onChange={(value) =>
+                                setAudioVolumes((prev) => ({
+                                  ...prev,
+                                  footsteps: value,
+                                }))}
+                            />
+                            <VolumeSlider
+                              label="Hit / Kill"
+                              value={audioVolumes.hit}
+                              onChange={(value) =>
+                                setAudioVolumes((prev) => ({
+                                  ...prev,
+                                  hit: value,
+                                }))}
+                            />
+                          </MenuSection>
+                        </div>
+                      )
+                      : null}
+
+                    {menuTab === "controls"
+                      ? (
+                        <div className="menu-sections">
+                          <MenuSection
+                            title="Keyboard Shortcuts"
+                            blurb="Click a row, press a key. Escape cancels capture."
+                          >
+                            <div className="keybind-grid">
+                              {BINDING_ROWS.map((row) => {
+                                const code = settings.keybinds[row.key];
+                                const duplicated = duplicateBindingCodes.has(
+                                  code,
+                                );
+                                return (
+                                  <div
+                                    key={row.key}
+                                    className={`keybind-row ${
+                                      bindingCapture === row.key
+                                        ? "capturing"
+                                        : ""
+                                    } ${duplicated ? "duplicate" : ""}`}
+                                  >
+                                    <div>
+                                      <div className="keybind-label">
+                                        {row.label}
+                                      </div>
+                                      <div className="keybind-hint">
+                                        {row.hint}
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className={`keybind-btn ${
+                                        bindingCapture === row.key
+                                          ? "active"
+                                          : ""
+                                      }`}
+                                      onClick={() =>
+                                        setBindingCapture((
+                                          prev,
+                                        ) => (prev === row.key
+                                          ? null
+                                          : row.key)
+                                        )}
+                                    >
+                                      {bindingCapture === row.key
+                                        ? "Press key..."
+                                        : formatKeyCode(code)}
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div className="settings-chip-wrap">
+                              <span className="pill-chip">
+                                Mouse Left: Fire (fixed)
+                              </span>
+                              <span className="pill-chip">
+                                Mouse Right: ADS (fixed)
+                              </span>
+                              <span className="pill-chip">
+                                P: Perf panel toggle (global)
+                              </span>
+                            </div>
+                            {duplicateBindingCodes.size > 0
+                              ? (
+                                <p className="warning-note">
+                                  Duplicate keys are allowed, but you are
+                                  volunteering for weirdness.
+                                </p>
+                              )
+                              : null}
+                          </MenuSection>
+                        </div>
+                      )
+                      : null}
+
+                    {menuTab === "graphics"
+                      ? (
+                        <div className="menu-sections">
+                          <MenuSection
+                            title="Render Quality"
+                            blurb="Enough knobs to tune performance without pretending this is a benchmark suite."
+                          >
+                            <SwitchRow
+                              label="Shadows"
+                              hint="Sun shadow maps for scene and targets"
+                              checked={settings.shadows}
+                              onChange={(checked) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  shadows: checked,
+                                }))}
+                            />
+                            <SwitchRow
+                              label="r3f-perf Overlay"
+                              hint="Developer perf overlay (separate from PINDG perf panel)"
+                              checked={settings.showR3fPerf}
+                              onChange={(checked) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  showR3fPerf: checked,
+                                }))}
+                            />
+                            <div className="field-row">
+                              <div>
+                                <div className="field-label">Pixel Ratio</div>
+                                <div className="field-hint">
+                                  Render scale multiplier
+                                </div>
+                              </div>
+                              <div className="segmented-row compact">
+                                {PIXEL_RATIO_OPTIONS.map((option) => (
+                                  <button
+                                    key={option}
+                                    type="button"
+                                    className={`chip-btn ${
+                                      settings.pixelRatioScale === option
+                                        ? "active"
+                                        : ""
+                                    }`}
+                                    onClick={() =>
+                                      setSettings((prev) => ({
+                                        ...prev,
+                                        pixelRatioScale: option,
+                                      }))}
+                                  >
+                                    {option.toFixed(2)}x
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </MenuSection>
+                        </div>
+                      )
+                      : null}
+
+                    {menuTab === "hud"
+                      ? (
+                        <div className="menu-sections">
+                          <MenuSection
+                            title="Overlay Panels"
+                            blurb="Toggle the old debug panels individually. Default preset is perf-only."
+                          >
+                            {OVERLAY_ROWS.map((row) => (
+                              <SwitchRow
+                                key={row.key}
+                                label={row.label}
+                                hint={row.hint}
+                                checked={hudPanels[row.key]}
+                                onChange={(checked) =>
+                                  setHudPanels((prev) => ({
+                                    ...prev,
+                                    [row.key]: checked,
+                                  }))}
+                              />
+                            ))}
+                            <p className="muted compact-note">
+                              Crosshair and hit markers stay visible during
+                              gameplay. This tab only controls the corner
+                              panels.
+                            </p>
+                          </MenuSection>
+                        </div>
+                      )
+                      : null}
+                  </section>
+                </div>
               </div>
-            </div>
-          ) : null}
+            )
+            : null}
         </div>
 
-        {hudPanels.controls ? (
-          <div className="corner-bottom-left panel tactical-panel compact-panel">
-            <div className="panel-eyebrow">Controls</div>
-            <h2>Quick Reference</h2>
-            <ul className="control-list">
-              {controlsPreview.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+        {hudPanels.controls
+          ? (
+            <div className="corner-bottom-left panel tactical-panel compact-panel">
+              <div className="panel-eyebrow">Controls</div>
+              <h2>Quick Reference</h2>
+              <ul className="control-list">
+                {controlsPreview.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            </div>
+          )
+          : null}
 
-        {hudPanels.settings ? (
-          <div className="corner-bottom-right panel tactical-panel compact-panel">
-            <div className="panel-eyebrow">Settings Snapshot</div>
-            <h2>Tactical Console</h2>
-            <div className="quick-settings-stack">
-              <SwitchRow
-                label="Shadows"
-                hint="World shadows"
-                checked={settings.shadows}
-                onChange={(checked) =>
-                  setSettings((prev) => ({
-                    ...prev,
-                    shadows: checked,
-                  }))
-                }
-              />
-              <SwitchRow
-                label="Perf Panel"
-                hint="Top-right perf HUD"
-                checked={hudPanels.performance}
-                onChange={(checked) =>
-                  setHudPanels((prev) => ({
-                    ...prev,
-                    performance: checked,
-                  }))
-                }
-              />
-              <div className="field-row">
-                <div>
-                  <div className="field-label">Pixel Ratio</div>
-                  <div className="field-hint">Render scale</div>
+        {hudPanels.settings
+          ? (
+            <div className="corner-bottom-right panel tactical-panel compact-panel">
+              <div className="panel-eyebrow">Settings Snapshot</div>
+              <h2>Tactical Console</h2>
+              <div className="quick-settings-stack">
+                <SwitchRow
+                  label="Shadows"
+                  hint="World shadows"
+                  checked={settings.shadows}
+                  onChange={(checked) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      shadows: checked,
+                    }))}
+                />
+                <SwitchRow
+                  label="Perf Panel"
+                  hint="Top-right perf HUD"
+                  checked={hudPanels.performance}
+                  onChange={(checked) =>
+                    setHudPanels((prev) => ({
+                      ...prev,
+                      performance: checked,
+                    }))}
+                />
+                <div className="field-row">
+                  <div>
+                    <div className="field-label">Pixel Ratio</div>
+                    <div className="field-hint">Render scale</div>
+                  </div>
+                  <div className="segmented-row compact">
+                    {PIXEL_RATIO_OPTIONS.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        className={`chip-btn ${
+                          settings.pixelRatioScale === option ? "active" : ""
+                        }`}
+                        onClick={() =>
+                          setSettings((prev) => ({
+                            ...prev,
+                            pixelRatioScale: option,
+                          }))}
+                      >
+                        {option.toFixed(2)}x
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="segmented-row compact">
-                  {PIXEL_RATIO_OPTIONS.map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      className={`chip-btn ${settings.pixelRatioScale === option ? "active" : ""}`}
-                      onClick={() =>
-                        setSettings((prev) => ({
-                          ...prev,
-                          pixelRatioScale: option,
-                        }))
-                      }
-                    >
-                      {option.toFixed(2)}x
-                    </button>
-                  ))}
+                <div className="field-row">
+                  <div>
+                    <div className="field-label">Stress Mode</div>
+                    <div className="field-hint">Range clutter</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      setStressCount((prev) => {
+                        const currentIndex = STRESS_STEPS.indexOf(prev);
+                        const nextIndex = (currentIndex + 1) %
+                          STRESS_STEPS.length;
+                        return STRESS_STEPS[nextIndex];
+                      });
+                    }}
+                  >
+                    {stressLabel}
+                  </button>
                 </div>
-              </div>
-              <div className="field-row">
-                <div>
-                  <div className="field-label">Stress Mode</div>
-                  <div className="field-hint">Range clutter</div>
-                </div>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
-                    setStressCount((prev) => {
-                      const currentIndex = STRESS_STEPS.indexOf(prev);
-                      const nextIndex = (currentIndex + 1) % STRESS_STEPS.length;
-                      return STRESS_STEPS[nextIndex];
-                    });
-                  }}
-                >
-                  {stressLabel}
-                </button>
               </div>
             </div>
-          </div>
-        ) : null}
+          )
+          : null}
       </div>
     </div>
   );
@@ -1019,7 +1510,9 @@ type RangeFieldProps = {
   onChange: (value: number) => void;
 };
 
-function RangeField({ label, value, min, max, step, suffix, onChange }: RangeFieldProps) {
+function RangeField(
+  { label, value, min, max, step, suffix, onChange }: RangeFieldProps,
+) {
   const decimals = step < 1 ? Math.max(0, Math.ceil(-Math.log10(step))) : 0;
   const display = decimals > 0 ? value.toFixed(decimals) : String(value);
 
