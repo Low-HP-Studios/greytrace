@@ -2,7 +2,7 @@
 
 ## Current Focus
 
-Stabilize TPS feel, camera, and Tauri compatibility for the practice prototype.
+Stabilize TPS feel, camera, and Electron desktop experience for the practice prototype.
 
 ## Completed
 
@@ -14,7 +14,7 @@ Stabilize TPS feel, camera, and Tauri compatibility for the practice prototype.
 - Movement direction bug fix (sine/cosine correction)
 - Audio synth fallback gain fix (gunshot sound was silent)
 - HUD visibility toggle from pause menu
-- Tauri pointer lock fallback (manual capture mode for WKWebView)
+- Migrated from Tauri to Electron (uncapped FPS, reliable pointer lock, GPU flags)
 - Bullet trace direction fix (tracers go toward crosshair, not backward)
 
 ## Near-Term
@@ -23,7 +23,6 @@ Stabilize TPS feel, camera, and Tauri compatibility for the practice prototype.
 - Add score tracking + target timer drill mode
 - Moving targets / varied HP targets
 - Add proper web fullscreen button (user-gesture compliant)
-- Improve Tauri cursor handling (investigate native cursor grab API)
 
 ## Mid-Term
 

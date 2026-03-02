@@ -121,6 +121,9 @@ type WorldRaycastHit = {
 };
 
 const STATIC_COLLIDERS: CollisionRect[] = [];
+const CANVAS_CAMERA = { fov: 65, near: 0.1, far: 650, position: [0, 3.5, 12] as [number, number, number] };
+const CANVAS_GL = { antialias: true, powerPreference: "high-performance" as const };
+const UNBOUNDED_FRAME_CAP = 0;
 
 export function Scene({
   settings,
@@ -136,6 +139,8 @@ export function Scene({
   onAimingStateChange,
 }: SceneProps) {
   const [targets, setTargets] = useState<TargetState[]>(() => createDefaultTargets());
+  const sceneTargetsRef = useRef(targets);
+  sceneTargetsRef.current = targets;
   const resetTimeoutsRef = useRef<Map<string, number>>(new Map());
 
   const dpr = useMemo(() => {
@@ -143,6 +148,7 @@ export function Scene({
       typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
     return Math.min(2, Math.max(0.5, devicePixelRatio * settings.pixelRatioScale));
   }, [settings.pixelRatioScale]);
+  const frameLoopMode = settings.frameRateCap > UNBOUNDED_FRAME_CAP ? "demand" : "always";
 
   const handleTargetHit = useCallback((targetId: string, damage: number, nowMs: number) => {
     startTransition(() => {
@@ -150,38 +156,34 @@ export function Scene({
         previousTargets.map((target) => {
           if (target.id !== targetId) return target;
           const newHp = Math.max(0, target.hp - damage);
-          const destroyed = newHp <= 0;
           return {
             ...target,
             hp: newHp,
-            disabled: destroyed,
+            disabled: newHp <= 0,
             hitUntil: nowMs + TARGET_FLASH_MS,
           };
         }),
       );
     });
 
-    setTargets((prev) => {
-      const target = prev.find((t) => t.id === targetId);
-      if (target && target.hp - damage <= 0) {
-        const existing = resetTimeoutsRef.current.get(targetId);
-        if (existing !== undefined) {
-          window.clearTimeout(existing);
-        }
-        const timeoutId = window.setTimeout(() => {
-          resetTimeoutsRef.current.delete(targetId);
-          startTransition(() => {
-            setTargets((previousTargets) =>
-              previousTargets.map((t) =>
-                t.id === targetId ? { ...t, disabled: false, hp: t.maxHp } : t,
-              ),
-            );
-          });
-        }, RESPAWN_DELAY_MS);
-        resetTimeoutsRef.current.set(targetId, timeoutId);
+    const currentTarget = sceneTargetsRef.current.find((t: TargetState) => t.id === targetId);
+    if (currentTarget && currentTarget.hp - damage <= 0) {
+      const existing = resetTimeoutsRef.current.get(targetId);
+      if (existing !== undefined) {
+        window.clearTimeout(existing);
       }
-      return prev;
-    });
+      const timeoutId = window.setTimeout(() => {
+        resetTimeoutsRef.current.delete(targetId);
+        startTransition(() => {
+          setTargets((previousTargets) =>
+            previousTargets.map((t) =>
+              t.id === targetId ? { ...t, disabled: false, hp: t.maxHp } : t,
+            ),
+          );
+        });
+      }, RESPAWN_DELAY_MS);
+      resetTimeoutsRef.current.set(targetId, timeoutId);
+    }
   }, []);
 
   const handleResetTargets = useCallback(() => {
@@ -209,9 +211,11 @@ export function Scene({
       className="game-canvas"
       shadows={settings.shadows ? "percentage" : false}
       dpr={dpr}
-      camera={{ fov: 65, near: 0.1, far: 650, position: [0, 3.5, 12] }}
-      gl={{ antialias: true, powerPreference: "high-performance" }}
+      camera={CANVAS_CAMERA}
+      gl={CANVAS_GL}
+      frameloop={frameLoopMode}
     >
+      <FramePacer frameRateCap={settings.frameRateCap} />
       <color attach="background" args={["#86c8ff"]} />
       <fog attach="fog" args={["#f2c39b", 110, 620]} />
       <hemisphereLight args={["#a7d6ff", "#c49c6d", 0.95]} />
@@ -256,6 +260,37 @@ export function Scene({
       {settings.showR3fPerf ? <Perf position="top-left" minimal /> : null}
     </Canvas>
   );
+}
+
+function FramePacer({ frameRateCap }: { frameRateCap: number }) {
+  const invalidate = useThree((state) => state.invalidate);
+
+  useEffect(() => {
+    invalidate();
+    if (frameRateCap <= UNBOUNDED_FRAME_CAP) {
+      return;
+    }
+
+    const frameIntervalMs = 1000 / frameRateCap;
+    let animationFrameId = 0;
+    let lastTick = performance.now();
+
+    const tick = (nowMs: number) => {
+      const elapsedMs = nowMs - lastTick;
+      if (elapsedMs >= frameIntervalMs) {
+        lastTick = nowMs - (elapsedMs % frameIntervalMs);
+        invalidate();
+      }
+      animationFrameId = window.requestAnimationFrame(tick);
+    };
+
+    animationFrameId = window.requestAnimationFrame(tick);
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [frameRateCap, invalidate]);
+
+  return null;
 }
 
 const CHARACTER_MODEL_URL = "/assets/models/character/Trooper/tactical guy.fbx";
@@ -471,7 +506,11 @@ function useCharacterModel(): CharacterModelResult {
 
     return () => {
       disposed = true;
-      mixerRef.current?.stopAllAction();
+      if (mixerRef.current) {
+        mixerRef.current.stopAllAction();
+        mixerRef.current.uncacheRoot(mixerRef.current.getRoot());
+        mixerRef.current = null;
+      }
     };
   }, []);
 
@@ -849,6 +888,8 @@ function GameplayRuntime({
   const tempBloodSpreadOffsetRef = useRef(new THREE.Vector3());
   const tempBloodRollQuaternionRef = useRef(new THREE.Quaternion());
   const raycasterRef = useRef(new THREE.Raycaster());
+  const bulletHittableMeshesRef = useRef<THREE.Object3D[]>([]);
+  const bulletHittableMeshesDirtyRef = useRef(true);
   const impactIdRef = useRef(0);
   const bloodSplatIdRef = useRef(0);
   const lastImpactCleanupAtRef = useRef(0);
@@ -858,6 +899,8 @@ function GameplayRuntime({
   const characterHeadBoneRef = useRef<THREE.Bone | null>(null);
   const tempCharacterWeaponAnchorWorldRef = useRef(new THREE.Vector3());
   const tempBoneWorldQuatRef = useRef(new THREE.Quaternion());
+  const characterWeaponAnchorRef = useRef<{ position: THREE.Vector3; quaternion: THREE.Quaternion } | null>(null);
+  const audioUpdateOptionsRef = useRef({ stepIntervalSeconds: 0, filePlaybackRate: 1 });
 
   useEffect(() => {
     targetsRef.current = targets;
@@ -1043,67 +1086,78 @@ function GameplayRuntime({
     });
   }, []);
 
+  const handleAction = useCallback((action: string) => {
+    const weapon = weaponRef.current;
+    if (action === "equipRifle") {
+      audioRef.current.cancelSniperShelling();
+      weapon.switchWeapon("rifle", performance.now());
+      return;
+    }
+    if (action === "equipSniper") {
+      audioRef.current.cancelSniperShelling();
+      weapon.switchWeapon("sniper", performance.now());
+      return;
+    }
+    if (action === "reset") {
+      resetTargetsCallbackRef.current();
+      return;
+    }
+
+    const playerPosition = controllerRef.current?.getPosition();
+    if (!playerPosition) {
+      return;
+    }
+
+    if (action === "pickup") {
+      if (weapon.tryPickup(playerPosition)) {
+        weaponEquippedCallbackRef.current(true);
+      }
+      return;
+    }
+
+    if (action === "drop") {
+      camera.getWorldDirection(tempLookDirRef.current);
+      if (weapon.drop(playerPosition, tempLookDirRef.current)) {
+        weaponEquippedCallbackRef.current(false);
+      }
+      return;
+    }
+  }, [camera]);
+
+  const handlePlayerSnapshot = useCallback((snapshot: PlayerSnapshot) => {
+    const playerPosition = controllerRef.current?.getPosition();
+    const canInteract = playerPosition
+      ? weaponRef.current.canPickup(playerPosition)
+      : false;
+    playerSnapshotCallbackRef.current({
+      ...snapshot,
+      canInteract,
+    });
+  }, []);
+
+  const handleTriggerChange = useCallback((firing: boolean) => {
+    weaponRef.current.setTriggerHeld(firing);
+  }, []);
+
+  const handleUserGesture = useCallback(() => {
+    audioRef.current.ensureStarted();
+  }, []);
+
+  const handleGetActiveWeapon = useCallback(() => {
+    return weaponRef.current.getActiveWeapon();
+  }, []);
+
   const controller = usePlayerController({
     collisionRects,
     worldBounds,
     sensitivity,
     keybinds,
     fov,
-    onAction: (action) => {
-      const weapon = weaponRef.current;
-      if (action === "equipRifle") {
-        audioRef.current.cancelSniperShelling();
-        weapon.switchWeapon("rifle", performance.now());
-        return;
-      }
-      if (action === "equipSniper") {
-        audioRef.current.cancelSniperShelling();
-        weapon.switchWeapon("sniper", performance.now());
-        return;
-      }
-      if (action === "reset") {
-        resetTargetsCallbackRef.current();
-        return;
-      }
-
-      const playerPosition = controllerRef.current?.getPosition();
-      if (!playerPosition) {
-        return;
-      }
-
-      if (action === "pickup") {
-        if (weapon.tryPickup(playerPosition)) {
-          weaponEquippedCallbackRef.current(true);
-        }
-        return;
-      }
-
-      if (action === "drop") {
-        camera.getWorldDirection(tempLookDirRef.current);
-        if (weapon.drop(playerPosition, tempLookDirRef.current)) {
-          weaponEquippedCallbackRef.current(false);
-        }
-        return;
-      }
-
-    },
-    onPlayerSnapshot: (snapshot) => {
-      const playerPosition = controllerRef.current?.getPosition();
-      const canInteract = playerPosition
-        ? weaponRef.current.canPickup(playerPosition)
-        : false;
-      playerSnapshotCallbackRef.current({
-        ...snapshot,
-        canInteract,
-      });
-    },
-    onTriggerChange: (firing) => {
-      weaponRef.current.setTriggerHeld(firing);
-    },
-    onUserGesture: () => {
-      audioRef.current.ensureStarted();
-    },
-    getActiveWeapon: () => weaponRef.current.getActiveWeapon(),
+    onAction: handleAction,
+    onPlayerSnapshot: handlePlayerSnapshot,
+    onTriggerChange: handleTriggerChange,
+    onUserGesture: handleUserGesture,
+    getActiveWeapon: handleGetActiveWeapon,
   });
 
   controllerRef.current = controller;
@@ -1175,10 +1229,10 @@ function GameplayRuntime({
     }
 
     setCharacterAnim(nextAnimState);
-    audio.update(nowMs / 1000, movementActive, nextAnimState === "sprint", {
-      stepIntervalSeconds: resolveFootstepIntervalSeconds(nextAnimState),
-      filePlaybackRate: resolveFootstepPlaybackRate(nextAnimState),
-    });
+    const audioOpts = audioUpdateOptionsRef.current;
+    audioOpts.stepIntervalSeconds = resolveFootstepIntervalSeconds(nextAnimState);
+    audioOpts.filePlaybackRate = resolveFootstepPlaybackRate(nextAnimState);
+    audio.update(nowMs / 1000, movementActive, nextAnimState === "sprint", audioOpts);
 
     const firstPerson = controller.isFirstPerson();
     const adsActive = controller.isADS();
@@ -1216,16 +1270,21 @@ function GameplayRuntime({
     }
 
     const switchState = weapon.getSwitchState(nowMs);
-    const characterWeaponAnchor = (() => {
-      const handBone = characterWeaponAttachBoneRef.current;
-      if (!handBone) return null;
+    const handBone = characterWeaponAttachBoneRef.current;
+    let characterWeaponAnchor = characterWeaponAnchorRef.current;
+    if (handBone) {
       handBone.getWorldPosition(tempCharacterWeaponAnchorWorldRef.current);
       handBone.getWorldQuaternion(tempBoneWorldQuatRef.current);
-      return {
-        position: tempCharacterWeaponAnchorWorldRef.current,
-        quaternion: tempBoneWorldQuatRef.current,
-      };
-    })();
+      if (!characterWeaponAnchor) {
+        characterWeaponAnchor = {
+          position: tempCharacterWeaponAnchorWorldRef.current,
+          quaternion: tempBoneWorldQuatRef.current,
+        };
+        characterWeaponAnchorRef.current = characterWeaponAnchor;
+      }
+    } else {
+      characterWeaponAnchor = null;
+    }
     updateCharacterWeaponMesh(
       characterWeaponRef.current,
       characterRifleModelRef.current,
@@ -1241,6 +1300,16 @@ function GameplayRuntime({
     );
 
     const shots = weapon.update(clampedDelta, nowMs, camera);
+    if (shots.length > 0 && bulletHittableMeshesDirtyRef.current) {
+      const meshes: THREE.Object3D[] = [];
+      scene.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh && child.userData?.bulletHittable === true) {
+          meshes.push(child);
+        }
+      });
+      bulletHittableMeshesRef.current = meshes;
+      bulletHittableMeshesDirtyRef.current = false;
+    }
     for (const shot of shots) {
       audio.playGunshot(shot.weaponType);
       // Keep hit-registration debugging deterministic for now (no recoil kick applied to camera).
@@ -1250,7 +1319,7 @@ function GameplayRuntime({
 
       const cameraTargetHit = raycastTargets(shot.origin, shot.direction, targetsRef.current);
       const cameraWorldHit = raycastBulletWorld(
-        scene,
+        bulletHittableMeshesRef.current,
         shot.origin,
         shot.direction,
         raycasterRef.current,
@@ -1305,7 +1374,7 @@ function GameplayRuntime({
       const maxFireDistance = fireDistance + BULLET_HIT_EPSILON;
       const targetHit = raycastTargets(tracerOrigin, fireDirection, targetsRef.current, maxFireDistance);
       const worldHit = raycastBulletWorld(
-        scene,
+        bulletHittableMeshesRef.current,
         tracerOrigin,
         fireDirection,
         raycasterRef.current,
@@ -1875,15 +1944,19 @@ function CoverBlock({ position, size, shadows, color }: CoverBlockProps) {
 }
 void CoverBlock;
 
+const BUILDING_FLOOR_MATERIAL = new THREE.MeshStandardMaterial({ color: "#a6a295", roughness: 0.98, metalness: 0 });
+const BUILDING_WALL_MATERIAL = new THREE.MeshStandardMaterial({ color: "#ddd0b7", roughness: 0.82, metalness: 0.03 });
+const BUILDING_ROOF_MATERIAL = new THREE.MeshStandardMaterial({ color: "#af8868", roughness: 0.86, metalness: 0.04 });
+const BUILDING_DOOR_MATERIAL = new THREE.MeshStandardMaterial({ color: "#8a7a66", roughness: 0.7, metalness: 0.12, transparent: true, opacity: 0.45 });
+
 function BuildingShell({ shadows }: { shadows: boolean }) {
   const leftSouthWidth = (BUILDING_WIDTH - DOOR_GAP_WIDTH) / 2;
   const rightSouthWidth = leftSouthWidth;
 
   return (
     <group position={[BUILDING_CENTER.x, 0, BUILDING_CENTER.z]}>
-      <mesh position={[0, 0.01, 0]} receiveShadow={shadows} userData={{ bulletHittable: true }}>
+      <mesh position={[0, 0.01, 0]} receiveShadow={shadows} userData={{ bulletHittable: true }} material={BUILDING_FLOOR_MATERIAL}>
         <boxGeometry args={[BUILDING_WIDTH, 0.02, BUILDING_DEPTH]} />
-        <meshStandardMaterial color="#a6a295" roughness={0.98} metalness={0} />
       </mesh>
 
       <mesh
@@ -1891,27 +1964,27 @@ function BuildingShell({ shadows }: { shadows: boolean }) {
         castShadow={shadows}
         receiveShadow={shadows}
         userData={{ bulletHittable: true }}
+        material={BUILDING_WALL_MATERIAL}
       >
         <boxGeometry args={[WALL_THICKNESS, BUILDING_HEIGHT, BUILDING_DEPTH]} />
-        <meshStandardMaterial color="#ddd0b7" roughness={0.82} metalness={0.03} />
       </mesh>
       <mesh
         position={[BUILDING_WIDTH / 2 - WALL_THICKNESS / 2, BUILDING_HEIGHT / 2, 0]}
         castShadow={shadows}
         receiveShadow={shadows}
         userData={{ bulletHittable: true }}
+        material={BUILDING_WALL_MATERIAL}
       >
         <boxGeometry args={[WALL_THICKNESS, BUILDING_HEIGHT, BUILDING_DEPTH]} />
-        <meshStandardMaterial color="#ddd0b7" roughness={0.82} metalness={0.03} />
       </mesh>
       <mesh
         position={[0, BUILDING_HEIGHT / 2, -BUILDING_DEPTH / 2 + WALL_THICKNESS / 2]}
         castShadow={shadows}
         receiveShadow={shadows}
         userData={{ bulletHittable: true }}
+        material={BUILDING_WALL_MATERIAL}
       >
         <boxGeometry args={[BUILDING_WIDTH, BUILDING_HEIGHT, WALL_THICKNESS]} />
-        <meshStandardMaterial color="#ddd0b7" roughness={0.82} metalness={0.03} />
       </mesh>
       <mesh
         position={[
@@ -1922,9 +1995,9 @@ function BuildingShell({ shadows }: { shadows: boolean }) {
         castShadow={shadows}
         receiveShadow={shadows}
         userData={{ bulletHittable: true }}
+        material={BUILDING_WALL_MATERIAL}
       >
         <boxGeometry args={[leftSouthWidth, BUILDING_HEIGHT, WALL_THICKNESS]} />
-        <meshStandardMaterial color="#ddd0b7" roughness={0.82} metalness={0.03} />
       </mesh>
       <mesh
         position={[
@@ -1935,9 +2008,9 @@ function BuildingShell({ shadows }: { shadows: boolean }) {
         castShadow={shadows}
         receiveShadow={shadows}
         userData={{ bulletHittable: true }}
+        material={BUILDING_WALL_MATERIAL}
       >
         <boxGeometry args={[rightSouthWidth, BUILDING_HEIGHT, WALL_THICKNESS]} />
-        <meshStandardMaterial color="#ddd0b7" roughness={0.82} metalness={0.03} />
       </mesh>
 
       <mesh
@@ -1945,9 +2018,9 @@ function BuildingShell({ shadows }: { shadows: boolean }) {
         castShadow={shadows}
         receiveShadow={shadows}
         userData={{ bulletHittable: true }}
+        material={BUILDING_ROOF_MATERIAL}
       >
         <boxGeometry args={[BUILDING_WIDTH + 0.5, 0.2, BUILDING_DEPTH + 0.5]} />
-        <meshStandardMaterial color="#af8868" roughness={0.86} metalness={0.04} />
       </mesh>
 
       <mesh
@@ -1955,15 +2028,9 @@ function BuildingShell({ shadows }: { shadows: boolean }) {
         castShadow={shadows}
         receiveShadow={shadows}
         userData={{ bulletHittable: true }}
+        material={BUILDING_DOOR_MATERIAL}
       >
         <boxGeometry args={[DOOR_GAP_WIDTH - 0.15, DOOR_HEIGHT, 0.05]} />
-        <meshStandardMaterial
-          color="#8a7a66"
-          roughness={0.7}
-          metalness={0.12}
-          transparent
-          opacity={0.45}
-        />
       </mesh>
     </group>
   );
@@ -1976,53 +2043,114 @@ function StressBoxes({ count, shadows }: { count: StressModeCount; shadows: bool
   return null;
 }
 
+const _bloodGeometry = new THREE.CircleGeometry(1, 10);
+const _bloodMaterial = new THREE.MeshBasicMaterial({
+  color: "#7c0c0c",
+  transparent: true,
+  opacity: 1,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+});
+
+const _bulletGeometry = new THREE.CircleGeometry(BULLET_IMPACT_MARK_RADIUS, 10);
+const _bulletMaterial = new THREE.MeshBasicMaterial({
+  color: "#1f1f1f",
+  transparent: true,
+  opacity: 0.82,
+  depthWrite: false,
+});
+
+const _instanceMatrix = new THREE.Matrix4();
+const _instancePosition = new THREE.Vector3();
+const _instanceQuaternion = new THREE.Quaternion();
+const _instanceScale = new THREE.Vector3();
+
 function BloodImpactMarks({ impacts }: { impacts: BloodSplatMark[] }) {
-  if (impacts.length === 0) {
-    return null;
-  }
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const opacitiesRef = useRef<Float32Array>(new Float32Array(MAX_BLOOD_SPLAT_MARKS));
+
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+
+    for (let i = 0; i < impacts.length; i++) {
+      const impact = impacts[i];
+      _instancePosition.set(impact.position[0], impact.position[1], impact.position[2]);
+      _instanceQuaternion.set(impact.quaternion[0], impact.quaternion[1], impact.quaternion[2], impact.quaternion[3]);
+      _instanceScale.setScalar(impact.radius);
+      _instanceMatrix.compose(_instancePosition, _instanceQuaternion, _instanceScale);
+      mesh.setMatrixAt(i, _instanceMatrix);
+      opacitiesRef.current[i] = impact.opacity;
+    }
+
+    mesh.count = impacts.length;
+    mesh.instanceMatrix.needsUpdate = true;
+
+    const geo = mesh.geometry;
+    const attr = geo.getAttribute("instanceOpacity");
+    if (attr) {
+      (attr.array as Float32Array).set(opacitiesRef.current.subarray(0, impacts.length));
+      attr.needsUpdate = true;
+    }
+  }, [impacts]);
+
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    const geo = mesh.geometry;
+    if (!geo.getAttribute("instanceOpacity")) {
+      geo.setAttribute(
+        "instanceOpacity",
+        new THREE.InstancedBufferAttribute(new Float32Array(MAX_BLOOD_SPLAT_MARKS), 1),
+      );
+    }
+    mesh.material = _bloodMaterial.clone();
+    (mesh.material as THREE.MeshBasicMaterial).onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace("void main() {", "attribute float instanceOpacity;\nvarying float vInstanceOpacity;\nvoid main() {\nvInstanceOpacity = instanceOpacity;");
+      shader.fragmentShader = shader.fragmentShader
+        .replace("void main() {", "varying float vInstanceOpacity;\nvoid main() {")
+        .replace("#include <output_fragment>", "#include <output_fragment>\ngl_FragColor.a *= vInstanceOpacity;");
+    };
+  }, []);
 
   return (
-    <group>
-      {impacts.map((impact) => (
-        <mesh
-          key={impact.id}
-          position={impact.position}
-          quaternion={impact.quaternion}
-          renderOrder={4}
-        >
-          <circleGeometry args={[impact.radius, 10]} />
-          <meshBasicMaterial
-            color="#7c0c0c"
-            transparent
-            opacity={impact.opacity}
-            depthWrite={false}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-      ))}
-    </group>
+    <instancedMesh
+      ref={meshRef}
+      args={[_bloodGeometry, undefined, MAX_BLOOD_SPLAT_MARKS]}
+      frustumCulled={false}
+      renderOrder={4}
+    />
   );
 }
 
 function BulletImpactMarks({ impacts }: { impacts: BulletImpactMark[] }) {
-  if (impacts.length === 0) {
-    return null;
-  }
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+
+    for (let i = 0; i < impacts.length; i++) {
+      const impact = impacts[i];
+      _instancePosition.set(impact.position[0], impact.position[1], impact.position[2]);
+      _instanceQuaternion.set(impact.quaternion[0], impact.quaternion[1], impact.quaternion[2], impact.quaternion[3]);
+      _instanceScale.set(1, 1, 1);
+      _instanceMatrix.compose(_instancePosition, _instanceQuaternion, _instanceScale);
+      mesh.setMatrixAt(i, _instanceMatrix);
+    }
+
+    mesh.count = impacts.length;
+    mesh.instanceMatrix.needsUpdate = true;
+  }, [impacts]);
 
   return (
-    <group>
-      {impacts.map((impact) => (
-        <mesh
-          key={impact.id}
-          position={impact.position}
-          quaternion={impact.quaternion}
-          renderOrder={3}
-        >
-          <circleGeometry args={[BULLET_IMPACT_MARK_RADIUS, 10]} />
-          <meshBasicMaterial color="#1f1f1f" transparent opacity={0.82} depthWrite={false} />
-        </mesh>
-      ))}
-    </group>
+    <instancedMesh
+      ref={meshRef}
+      args={[_bulletGeometry, _bulletMaterial, MAX_BULLET_IMPACT_MARKS]}
+      frustumCulled={false}
+      renderOrder={3}
+    />
   );
 }
 
@@ -2224,7 +2352,7 @@ function updateTracerMesh(
 }
 
 function raycastBulletWorld(
-  scene: THREE.Scene,
+  hittables: THREE.Object3D[],
   origin: THREE.Vector3,
   direction: THREE.Vector3,
   raycaster: THREE.Raycaster,
@@ -2232,30 +2360,21 @@ function raycastBulletWorld(
   tempNormalMatrix: THREE.Matrix3,
   maxDistance = Number.POSITIVE_INFINITY,
 ): WorldRaycastHit | null {
-  if (maxDistance <= 0) {
+  if (maxDistance <= 0 || hittables.length === 0) {
     return null;
   }
 
   raycaster.near = 0;
   raycaster.far = maxDistance;
   raycaster.set(origin, direction);
-  const intersections = raycaster.intersectObjects(scene.children, true);
+  const intersections = raycaster.intersectObjects(hittables, false);
 
   for (const intersection of intersections) {
-    const object = intersection.object;
-    if (!(object instanceof THREE.Mesh)) {
-      continue;
-    }
-    if (object.userData?.bulletHittable !== true) {
-      continue;
-    }
-    if (intersection.distance <= 0) {
-      continue;
-    }
-    if (intersection.distance > maxDistance) {
+    if (intersection.distance <= 0 || intersection.distance > maxDistance) {
       continue;
     }
 
+    const object = intersection.object;
     if (intersection.face) {
       tempNormal.copy(intersection.face.normal);
       tempNormalMatrix.getNormalMatrix(object.matrixWorld);
@@ -2265,8 +2384,8 @@ function raycastBulletWorld(
     }
 
     return {
-      point: intersection.point.clone(),
-      normal: tempNormal.clone(),
+      point: intersection.point,
+      normal: tempNormal,
       distance: intersection.distance,
     };
   }

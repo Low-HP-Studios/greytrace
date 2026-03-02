@@ -24,8 +24,8 @@
 5. Increase stress mode to `50`, `100`, `200`
 6. Move, sprint, jump, fire continuously to test combined load
 7. Repeat in both:
-   - web (`pnpm dev`)
-   - tauri (`pnpm tauri dev`)
+   - web (`pnpm dev:web`)
+   - electron (`pnpm dev`)
 
 ## Performance Log Template
 
@@ -33,7 +33,7 @@ Use this format for notes:
 
 ```md
 ## YYYY-MM-DD - Machine / OS
-- Build: web|tauri
+- Build: web|electron
 - Resolution / fullscreen:
 - Shadows: on|off
 - Pixel ratio:
