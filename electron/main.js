@@ -7,8 +7,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
 const distPath = path.join(__dirname, '..', 'dist');
 
-// app.commandLine.appendSwitch('disable-frame-rate-limit');
-app.commandLine.appendSwitch('disable-gpu-vsync');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
@@ -56,7 +54,7 @@ function createWindow() {
     width: 1600,
     height: 900,
     fullscreen: true,
-    title: 'Practice TPS Prototype',
+    title: 'Zero Hour',
     autoHideMenuBar: true,
     icon: isDev
       ? path.join(__dirname, '..', 'build', 'icon.png')

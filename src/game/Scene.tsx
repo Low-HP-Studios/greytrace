@@ -123,7 +123,6 @@ type WorldRaycastHit = {
 const STATIC_COLLIDERS: CollisionRect[] = [];
 const CANVAS_CAMERA = { fov: 65, near: 0.1, far: 650, position: [0, 3.5, 12] as [number, number, number] };
 const CANVAS_GL = { antialias: true, powerPreference: "high-performance" as const };
-const UNBOUNDED_FRAME_CAP = 0;
 
 export function Scene({
   settings,
@@ -148,7 +147,6 @@ export function Scene({
       typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
     return Math.min(2, Math.max(0.5, devicePixelRatio * settings.pixelRatioScale));
   }, [settings.pixelRatioScale]);
-  const frameLoopMode = settings.frameRateCap > UNBOUNDED_FRAME_CAP ? "demand" : "always";
 
   const handleTargetHit = useCallback((targetId: string, damage: number, nowMs: number) => {
     startTransition(() => {
@@ -213,9 +211,7 @@ export function Scene({
       dpr={dpr}
       camera={CANVAS_CAMERA}
       gl={CANVAS_GL}
-      frameloop={frameLoopMode}
     >
-      <FramePacer frameRateCap={settings.frameRateCap} />
       <color attach="background" args={["#86c8ff"]} />
       <fog attach="fog" args={["#f2c39b", 110, 620]} />
       <hemisphereLight args={["#a7d6ff", "#c49c6d", 0.95]} />
@@ -260,37 +256,6 @@ export function Scene({
       {settings.showR3fPerf ? <Perf position="top-left" minimal /> : null}
     </Canvas>
   );
-}
-
-function FramePacer({ frameRateCap }: { frameRateCap: number }) {
-  const invalidate = useThree((state) => state.invalidate);
-
-  useEffect(() => {
-    invalidate();
-    if (frameRateCap <= UNBOUNDED_FRAME_CAP) {
-      return;
-    }
-
-    const frameIntervalMs = 1000 / frameRateCap;
-    let animationFrameId = 0;
-    let lastTick = performance.now();
-
-    const tick = (nowMs: number) => {
-      const elapsedMs = nowMs - lastTick;
-      if (elapsedMs >= frameIntervalMs) {
-        lastTick = nowMs - (elapsedMs % frameIntervalMs);
-        invalidate();
-      }
-      animationFrameId = window.requestAnimationFrame(tick);
-    };
-
-    animationFrameId = window.requestAnimationFrame(tick);
-    return () => {
-      window.cancelAnimationFrame(animationFrameId);
-    };
-  }, [frameRateCap, invalidate]);
-
-  return null;
 }
 
 const CHARACTER_MODEL_URL = "/assets/models/character/Trooper/tactical guy.fbx";

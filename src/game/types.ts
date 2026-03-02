@@ -1,5 +1,4 @@
-export type PixelRatioScale = 0.75 | 1 | 1.25;
-export type FrameRateCap = 0 | 60 | 90 | 120 | 144 | 165 | 240 | 300;
+export type PixelRatioScale = 0.5 | 0.75 | 1;
 export type StressModeCount = 0 | 50 | 100 | 200;
 
 export type AimSensitivitySettings = {
@@ -85,7 +84,6 @@ export const DEFAULT_WEAPON_ALIGNMENT: WeaponAlignmentOffset = {
 export type GameSettings = {
   shadows: boolean;
   pixelRatioScale: PixelRatioScale;
-  frameRateCap: FrameRateCap;
   showR3fPerf: boolean;
   sensitivity: AimSensitivitySettings;
   keybinds: ControlBindings;

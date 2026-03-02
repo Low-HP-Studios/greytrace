@@ -19,7 +19,6 @@ import {
   DEFAULT_PERF_METRICS,
   DEFAULT_PLAYER_SNAPSHOT,
   DEFAULT_WEAPON_ALIGNMENT,
-  type FrameRateCap,
   type GameSettings,
   type HudOverlayToggles,
   type PerfMetrics,
@@ -29,8 +28,11 @@ import {
 } from "./types";
 
 const STRESS_STEPS: StressModeCount[] = [0, 50, 100, 200];
-const PIXEL_RATIO_OPTIONS: PixelRatioScale[] = [0.75, 1, 1.25];
-const FRAME_RATE_CAP_OPTIONS: FrameRateCap[] = [120, 144, 165, 240, 300, 0];
+const PIXEL_RATIO_OPTIONS: Array<{ value: PixelRatioScale; label: string }> = [
+  { value: 0.5, label: "Low" },
+  { value: 0.75, label: "Normal" },
+  { value: 1, label: "High" },
+];
 
 type PauseMenuTab =
   | "practice"
@@ -100,12 +102,11 @@ const OVERLAY_ROWS: Array<
   },
 ];
 
-const SETTINGS_STORAGE_KEY = "pindg.settings.v1";
+const SETTINGS_STORAGE_KEY = "zerohour.settings.v1";
 
 const DEFAULT_GAME_SETTINGS: GameSettings = {
-  shadows: true,
-  pixelRatioScale: 1,
-  frameRateCap: 240,
+  shadows: false,
+  pixelRatioScale: 0.75,
   showR3fPerf: false,
   sensitivity: { ...DEFAULT_AIM_SENSITIVITY_SETTINGS },
   keybinds: { ...DEFAULT_CONTROL_BINDINGS },
@@ -169,17 +170,11 @@ function readPixelRatioScale(
   value: unknown,
   fallback: PixelRatioScale,
 ): PixelRatioScale {
-  return PIXEL_RATIO_OPTIONS.includes(value as PixelRatioScale)
+  if (value === 1.25) {
+    return 1;
+  }
+  return PIXEL_RATIO_OPTIONS.some((option) => option.value === value)
     ? (value as PixelRatioScale)
-    : fallback;
-}
-
-function readFrameRateCap(
-  value: unknown,
-  fallback: FrameRateCap,
-): FrameRateCap {
-  return FRAME_RATE_CAP_OPTIONS.includes(value as FrameRateCap)
-    ? (value as FrameRateCap)
     : fallback;
 }
 
@@ -215,10 +210,6 @@ function parsePersistedSettings(value: unknown): PersistedSettings {
       pixelRatioScale: readPixelRatioScale(
         settings.pixelRatioScale,
         defaults.settings.pixelRatioScale,
-      ),
-      frameRateCap: readFrameRateCap(
-        settings.frameRateCap,
-        defaults.settings.frameRateCap,
       ),
       showR3fPerf: readBoolean(
         settings.showR3fPerf,
@@ -619,10 +610,10 @@ export function GameRoot() {
         {hudPanels.practice
           ? (
             <div className="corner-top-left panel tactical-panel practice-panel">
-              <div className="panel-eyebrow">PINDG / Practice Range</div>
+              <div className="panel-eyebrow">Zero Hour / Practice Range</div>
               <div className="panel-title-row">
-                <div className="brand-lockup" aria-label="PINDG logo">
-                  <span className="brand-word">PINDG</span>
+                <div className="brand-lockup" aria-label="Zero Hour logo">
+                  <span className="brand-word">Zero Hour</span>
                 </div>
                 <div className="status-pill">
                   <span
@@ -763,7 +754,7 @@ export function GameRoot() {
                   <aside className="pause-sidebar" aria-label="Menu sections">
                     <div className="pause-logo">
                       <div className="brand-lockup large" aria-hidden="true">
-                        <span className="brand-word">PINDG</span>
+                        <span className="brand-word">Zero Hour</span>
                       </div>
                       <p className="muted">
                         Training lobby. Legacy bugs included at no extra cost.
@@ -1311,7 +1302,7 @@ export function GameRoot() {
                             />
                             <SwitchRow
                               label="r3f-perf Overlay"
-                              hint="Developer perf overlay (separate from PINDG perf panel)"
+                              hint="Developer perf overlay (separate from Zero Hour perf panel)"
                               checked={settings.showR3fPerf}
                               onChange={(checked) =>
                                 setSettings((prev) => ({
@@ -1319,34 +1310,6 @@ export function GameRoot() {
                                   showR3fPerf: checked,
                                 }))}
                             />
-                            <div className="field-row">
-                              <div>
-                                <div className="field-label">Frame Rate Cap</div>
-                                <div className="field-hint">
-                                  Limit render/update loop for stable input pacing
-                                </div>
-                              </div>
-                              <div className="segmented-row compact">
-                                {FRAME_RATE_CAP_OPTIONS.map((option) => (
-                                  <button
-                                    key={option}
-                                    type="button"
-                                    className={`chip-btn ${
-                                      settings.frameRateCap === option
-                                        ? "active"
-                                        : ""
-                                    }`}
-                                    onClick={() =>
-                                      setSettings((prev) => ({
-                                        ...prev,
-                                        frameRateCap: option,
-                                      }))}
-                                  >
-                                    {option === 0 ? "Uncapped" : `${option} Hz`}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
                             <div className="field-row">
                               <div>
                                 <div className="field-label">Pixel Ratio</div>
@@ -1357,20 +1320,20 @@ export function GameRoot() {
                               <div className="segmented-row compact">
                                 {PIXEL_RATIO_OPTIONS.map((option) => (
                                   <button
-                                    key={option}
+                                    key={option.value}
                                     type="button"
                                     className={`chip-btn ${
-                                      settings.pixelRatioScale === option
+                                      settings.pixelRatioScale === option.value
                                         ? "active"
                                         : ""
                                     }`}
                                     onClick={() =>
                                       setSettings((prev) => ({
                                         ...prev,
-                                        pixelRatioScale: option,
+                                        pixelRatioScale: option.value,
                                       }))}
                                   >
-                                    {option.toFixed(2)}x
+                                    {option.label}
                                   </button>
                                 ))}
                               </div>
@@ -1462,18 +1425,18 @@ export function GameRoot() {
                   <div className="segmented-row compact">
                     {PIXEL_RATIO_OPTIONS.map((option) => (
                       <button
-                        key={option}
+                        key={option.value}
                         type="button"
                         className={`chip-btn ${
-                          settings.pixelRatioScale === option ? "active" : ""
+                          settings.pixelRatioScale === option.value ? "active" : ""
                         }`}
                         onClick={() =>
                           setSettings((prev) => ({
                             ...prev,
-                            pixelRatioScale: option,
+                            pixelRatioScale: option.value,
                           }))}
                       >
-                        {option.toFixed(2)}x
+                        {option.label}
                       </button>
                     ))}
                   </div>

@@ -1,5 +1,5 @@
 {
-  "name": "fps-shooter",
+  "name": "zero-hour",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -43,8 +43,8 @@
     "wait-on": "^9.0.4"
   },
   "build": {
-    "appId": "com.ayushrameja.fps-shooter",
-    "productName": "Practice TPS Prototype",
+    "appId": "com.ayushrameja.zerohour",
+    "productName": "Zero Hour",
     "directories": {
       "output": "release"
     },

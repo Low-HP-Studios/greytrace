@@ -1,4 +1,4 @@
-# Practice-Only 3D FPS Prototype (React + Three.js + Electron)
+# Zero Hour (React + Three.js + Electron)
 
 Minimal first-person prototype focused on movement feel and performance testing.
 This is **not** a full game. No backend, no progression, no networking.
