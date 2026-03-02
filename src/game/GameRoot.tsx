@@ -1,8 +1,10 @@
 import {
   type CSSProperties,
+  memo,
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { type AudioVolumeSettings, DEFAULT_AUDIO_VOLUMES } from "./Audio";
@@ -17,6 +19,7 @@ import {
   DEFAULT_PERF_METRICS,
   DEFAULT_PLAYER_SNAPSHOT,
   DEFAULT_WEAPON_ALIGNMENT,
+  type FrameRateCap,
   type GameSettings,
   type HudOverlayToggles,
   type PerfMetrics,
@@ -27,6 +30,7 @@ import {
 
 const STRESS_STEPS: StressModeCount[] = [0, 50, 100, 200];
 const PIXEL_RATIO_OPTIONS: PixelRatioScale[] = [0.75, 1, 1.25];
+const FRAME_RATE_CAP_OPTIONS: FrameRateCap[] = [120, 144, 165, 240, 300, 0];
 
 type PauseMenuTab =
   | "practice"
@@ -101,6 +105,7 @@ const SETTINGS_STORAGE_KEY = "pindg.settings.v1";
 const DEFAULT_GAME_SETTINGS: GameSettings = {
   shadows: true,
   pixelRatioScale: 1,
+  frameRateCap: 240,
   showR3fPerf: false,
   sensitivity: { ...DEFAULT_AIM_SENSITIVITY_SETTINGS },
   keybinds: { ...DEFAULT_CONTROL_BINDINGS },
@@ -169,6 +174,15 @@ function readPixelRatioScale(
     : fallback;
 }
 
+function readFrameRateCap(
+  value: unknown,
+  fallback: FrameRateCap,
+): FrameRateCap {
+  return FRAME_RATE_CAP_OPTIONS.includes(value as FrameRateCap)
+    ? (value as FrameRateCap)
+    : fallback;
+}
+
 function readStressModeCount(
   value: unknown,
   fallback: StressModeCount,
@@ -201,6 +215,10 @@ function parsePersistedSettings(value: unknown): PersistedSettings {
       pixelRatioScale: readPixelRatioScale(
         settings.pixelRatioScale,
         defaults.settings.pixelRatioScale,
+      ),
+      frameRateCap: readFrameRateCap(
+        settings.frameRateCap,
+        defaults.settings.frameRateCap,
       ),
       showR3fPerf: readBoolean(
         settings.showR3fPerf,
@@ -397,7 +415,26 @@ export function GameRoot() {
   const [perfMetrics, setPerfMetrics] = useState<PerfMetrics>(
     DEFAULT_PERF_METRICS,
   );
-  const [player, setPlayer] = useState<PlayerSnapshot>(DEFAULT_PLAYER_SNAPSHOT);
+  const [player, setPlayerRaw] = useState<PlayerSnapshot>(DEFAULT_PLAYER_SNAPSHOT);
+  const playerRef = useRef(player);
+  const setPlayer = useCallback((snapshot: PlayerSnapshot) => {
+    const prev = playerRef.current;
+    if (
+      prev.x === snapshot.x &&
+      prev.y === snapshot.y &&
+      prev.z === snapshot.z &&
+      prev.speed === snapshot.speed &&
+      prev.grounded === snapshot.grounded &&
+      prev.moving === snapshot.moving &&
+      prev.sprinting === snapshot.sprinting &&
+      prev.pointerLocked === snapshot.pointerLocked &&
+      prev.canInteract === snapshot.canInteract
+    ) {
+      return;
+    }
+    playerRef.current = snapshot;
+    setPlayerRaw(snapshot);
+  }, []);
   const [weaponEquipped, setWeaponEquipped] = useState(true);
   const [activeWeapon, setActiveWeapon] = useState<WeaponKind>("rifle");
   const [sniperRechamber, setSniperRechamber] = useState<SniperRechamberState>({
@@ -434,6 +471,13 @@ export function GameRoot() {
       }
     }
     setResumePointerLockRequestId((previous) => previous + 1);
+  }, []);
+
+  const handleHitMarker = useCallback((kind: HitMarkerKind) => {
+    setHitMarker({
+      kind,
+      until: performance.now() + (kind === "kill" ? 170 : kind === "head" ? 120 : 90),
+    });
   }, []);
 
   useEffect(() => {
@@ -564,12 +608,7 @@ export function GameRoot() {
         resumePointerLockRequestId={resumePointerLockRequestId}
         onPerfMetrics={setPerfMetrics}
         onPlayerSnapshot={setPlayer}
-        onHitMarker={(kind) =>
-          setHitMarker({
-            kind,
-            until: performance.now() +
-              (kind === "kill" ? 170 : kind === "head" ? 120 : 90),
-          })}
+        onHitMarker={handleHitMarker}
         onWeaponEquippedChange={setWeaponEquipped}
         onActiveWeaponChange={setActiveWeapon}
         onSniperRechamberChange={setSniperRechamber}
@@ -1282,6 +1321,34 @@ export function GameRoot() {
                             />
                             <div className="field-row">
                               <div>
+                                <div className="field-label">Frame Rate Cap</div>
+                                <div className="field-hint">
+                                  Limit render/update loop for stable input pacing
+                                </div>
+                              </div>
+                              <div className="segmented-row compact">
+                                {FRAME_RATE_CAP_OPTIONS.map((option) => (
+                                  <button
+                                    key={option}
+                                    type="button"
+                                    className={`chip-btn ${
+                                      settings.frameRateCap === option
+                                        ? "active"
+                                        : ""
+                                    }`}
+                                    onClick={() =>
+                                      setSettings((prev) => ({
+                                        ...prev,
+                                        frameRateCap: option,
+                                      }))}
+                                  >
+                                    {option === 0 ? "Uncapped" : `${option} Hz`}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="field-row">
+                              <div>
                                 <div className="field-label">Pixel Ratio</div>
                                 <div className="field-hint">
                                   Render scale multiplier
@@ -1446,7 +1513,7 @@ type MenuSectionProps = {
   children: React.ReactNode;
 };
 
-function MenuSection({ title, blurb, children }: MenuSectionProps) {
+const MenuSection = memo(function MenuSection({ title, blurb, children }: MenuSectionProps) {
   return (
     <section className="menu-section">
       <header className="menu-section-header">
@@ -1456,21 +1523,21 @@ function MenuSection({ title, blurb, children }: MenuSectionProps) {
       <div className="menu-section-body">{children}</div>
     </section>
   );
-}
+});
 
 type MetricCardProps = {
   label: string;
   value: string;
 };
 
-function MetricCard({ label, value }: MetricCardProps) {
+const MetricCard = memo(function MetricCard({ label, value }: MetricCardProps) {
   return (
     <div className="metric-card">
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
   );
-}
+});
 
 type SwitchRowProps = {
   label: string;
@@ -1479,7 +1546,7 @@ type SwitchRowProps = {
   onChange: (checked: boolean) => void;
 };
 
-function SwitchRow({ label, hint, checked, onChange }: SwitchRowProps) {
+const SwitchRow = memo(function SwitchRow({ label, hint, checked, onChange }: SwitchRowProps) {
   return (
     <label className="switch-row">
       <span>
@@ -1498,7 +1565,7 @@ function SwitchRow({ label, hint, checked, onChange }: SwitchRowProps) {
       </span>
     </label>
   );
-}
+});
 
 type RangeFieldProps = {
   label: string;
@@ -1510,7 +1577,7 @@ type RangeFieldProps = {
   onChange: (value: number) => void;
 };
 
-function RangeField(
+const RangeField = memo(function RangeField(
   { label, value, min, max, step, suffix, onChange }: RangeFieldProps,
 ) {
   const decimals = step < 1 ? Math.max(0, Math.ceil(-Math.log10(step))) : 0;
@@ -1535,7 +1602,7 @@ function RangeField(
       />
     </div>
   );
-}
+});
 
 type VolumeSliderProps = {
   label: string;
@@ -1543,7 +1610,7 @@ type VolumeSliderProps = {
   onChange: (value: number) => void;
 };
 
-function VolumeSlider({ label, value, onChange }: VolumeSliderProps) {
+const VolumeSlider = memo(function VolumeSlider({ label, value, onChange }: VolumeSliderProps) {
   return (
     <div className="range-field volume-field">
       <div className="range-label-row">
@@ -1560,7 +1627,7 @@ function VolumeSlider({ label, value, onChange }: VolumeSliderProps) {
       />
     </div>
   );
-}
+});
 
 function menuTitle(tab: PauseMenuTab) {
   switch (tab) {

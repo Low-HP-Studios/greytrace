@@ -45,11 +45,11 @@ Allow prototype to function without bundled audio files.
 
 ---
 
-## 2026-02-26 - Desktop app starts fullscreen by default (Tauri)
+## 2026-02-26 - Desktop app starts fullscreen by default
 
 ### Decision
 
-Launch Tauri window in fullscreen for better prototype feel.
+Launch desktop window in fullscreen for better prototype feel.
 
 ### Why
 
@@ -121,31 +121,22 @@ Replace single gravity constant with three-phase gravity: lighter rise, floaty p
 
 ---
 
-## 2026-02-26 - Tauri WKWebView pointer lock fallback
+## 2026-03-02 - Migrated from Tauri to Electron
 
 ### Decision
 
-Bypass the Pointer Lock API entirely in Tauri and use a manual capture mode.
+Replace Tauri v2 desktop wrapper with Electron for full Chromium control.
 
 ### Why
 
-- WKWebView on macOS rejects `requestPointerLock()` with `WrongDocumentError` even when `document.hasFocus()` is `true`
-- Multiple approaches tried: setTimeout delay, focus event retry, synchronous focus -- all fail
-- This is a WKWebView/Tauri limitation, not a fixable JS timing issue
-
-### How it works
-
-- Detect Tauri via `__TAURI_INTERNALS__` global
-- When `requestPointerLock()` fails in Tauri, activate fallback: set locked state manually
-- CSS `cursor: none` hides cursor (already done by `.playing` class)
-- `mousemove` events provide `movementX/movementY` without pointer lock
-- Escape key exits fallback mode (pause)
-- Browser environments still use real Pointer Lock API
+- Tauri's WKWebView had broken pointer lock (`WrongDocumentError`), FPS locked at 60 (vsync), and no GPU flag control
+- These are fundamental webview limitations, not fixable in JS
+- Electron bundles full Chromium, giving us `--disable-frame-rate-limit`, `--disable-gpu-vsync`, reliable `requestPointerLock()`, and full shortcut control
 
 ### Trade-off
 
-- Cursor can hit screen edges during fast mouse movement in Tauri
-- Acceptable in fullscreen mode where the window spans the entire screen
+- Larger bundle size (~150MB vs ~10MB for Tauri)
+- Acceptable for a game where performance matters more than download size
 
 ---
 

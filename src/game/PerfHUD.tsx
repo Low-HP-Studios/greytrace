@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { PerfMetrics } from "./types";
 
 type PerfHUDProps = {
@@ -5,7 +6,7 @@ type PerfHUDProps = {
   visible: boolean;
 };
 
-export function PerfHUD({ metrics, visible }: PerfHUDProps) {
+export const PerfHUD = memo(function PerfHUD({ metrics, visible }: PerfHUDProps) {
   if (!visible) {
     return null;
   }
@@ -32,4 +33,4 @@ export function PerfHUD({ metrics, visible }: PerfHUDProps) {
       </p>
     </div>
   );
-}
+});

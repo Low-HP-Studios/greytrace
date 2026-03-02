@@ -11,7 +11,7 @@ Originally started as an FPS prototype, converted to TPS for visible character f
 
 - UI shell: React 19 + TypeScript
 - Rendering: Three.js via `@react-three/fiber` v9
-- Desktop wrapper: Tauri v2
+- Desktop wrapper: Electron (bundled Chromium)
 - Build/dev: Vite + pnpm
 - Audio: WebAudio (buffer loading + synth fallbacks)
 
@@ -33,7 +33,7 @@ Originally started as an FPS prototype, converted to TPS for visible character f
   - Mouse look, WASD/sprint/jump, lightweight collision resolution
   - Over-the-shoulder TPS camera (PUBG-style shoulder offset)
   - ADS zoom on right-click (shorter arm, tighter shoulder offset)
-  - Pointer lock with Tauri WKWebView fallback capture mode
+  - Pointer lock via standard Chromium API
   - Asymmetric gravity (Valorant-style jump physics)
 - `src/game/Weapon.ts`
   - Rifle state, pickup/drop, auto fire cadence, recoil pattern, muzzle/tracer timing

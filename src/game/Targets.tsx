@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -60,6 +60,12 @@ export function resetTargets(targets: TargetState[]): TargetState[] {
 }
 
 export { DAMAGE_PER_SHOT, RESPAWN_DELAY_MS };
+
+const _tempSpherePoint = new THREE.Vector3();
+const _tempSphereNormal = new THREE.Vector3();
+const _tempAabbNearNormal = new THREE.Vector3();
+const _tempAabbFarNormal = new THREE.Vector3();
+const _tempAabbPoint = new THREE.Vector3();
 
 export function raycastTargets(
   origin: THREE.Vector3,
@@ -133,14 +139,14 @@ function raycastSpherePart(
     return null;
   }
 
-  const point = new THREE.Vector3(
+  const point = _tempSpherePoint.set(
     origin.x + direction.x * distance,
     origin.y + direction.y * distance,
     origin.z + direction.z * distance,
   );
-  const normal = new THREE.Vector3(point.x - cx, point.y - cy, point.z - cz).normalize();
+  const normal = _tempSphereNormal.set(point.x - cx, point.y - cy, point.z - cz).normalize();
 
-  return { id, zone, point, normal, distance };
+  return { id, zone, point: point.clone(), normal: normal.clone(), distance };
 }
 
 function raycastAabbPart(
@@ -157,8 +163,8 @@ function raycastAabbPart(
 ): TargetRaycastHit | null {
   let tMin = -Infinity;
   let tMax = Infinity;
-  const nearNormal = new THREE.Vector3();
-  const farNormal = new THREE.Vector3();
+  _tempAabbNearNormal.set(0, 0, 0);
+  _tempAabbFarNormal.set(0, 0, 0);
 
   const hitAxis = (
     originCoord: number,
@@ -184,11 +190,11 @@ function raycastAabbPart(
 
     if (t1 > tMin) {
       tMin = t1;
-      nearNormal.set(n1[0], n1[1], n1[2]);
+      _tempAabbNearNormal.set(n1[0], n1[1], n1[2]);
     }
     if (t2 < tMax) {
       tMax = t2;
-      farNormal.set(n2[0], n2[1], n2[2]);
+      _tempAabbFarNormal.set(n2[0], n2[1], n2[2]);
     }
 
     return tMin <= tMax;
@@ -207,14 +213,14 @@ function raycastAabbPart(
     return null;
   }
 
-  const point = new THREE.Vector3(
+  const point = _tempAabbPoint.set(
     origin.x + direction.x * distance,
     origin.y + direction.y * distance,
     origin.z + direction.z * distance,
   );
-  const normal = (tMin > 0 ? nearNormal : farNormal).clone();
+  const normal = tMin > 0 ? _tempAabbNearNormal : _tempAabbFarNormal;
 
-  return { id, zone, point, normal, distance };
+  return { id, zone, point: point.clone(), normal: normal.clone(), distance };
 }
 
 function normalizeBoneName(name: string): string {
@@ -348,7 +354,7 @@ function useTargetCharacterAsset(): TargetCharacterAsset {
   return asset;
 }
 
-function HPBar({ hp, maxHp }: { hp: number; maxHp: number }) {
+const HPBar = memo(function HPBar({ hp, maxHp }: { hp: number; maxHp: number }) {
   const camera = useThree((state) => state.camera);
   const groupRef = useRef<THREE.Group>(null);
 
@@ -382,9 +388,9 @@ function HPBar({ hp, maxHp }: { hp: number; maxHp: number }) {
       ) : null}
     </group>
   );
-}
+});
 
-function TargetDummy({
+const TargetDummy = memo(function TargetDummy({
   target,
   shadows,
   characterAsset,
@@ -462,7 +468,7 @@ function TargetDummy({
       <HPBar hp={target.hp} maxHp={target.maxHp} />
     </group>
   );
-}
+});
 
 export function Targets({ targets, shadows }: TargetsProps) {
   const characterAsset = useTargetCharacterAsset();

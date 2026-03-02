@@ -1,4 +1,4 @@
-# Practice-Only 3D FPS Prototype (React + Three.js + Tauri)
+# Practice-Only 3D FPS Prototype (React + Three.js + Electron)
 
 Minimal first-person prototype focused on movement feel and performance testing.
 This is **not** a full game. No backend, no progression, no networking.
@@ -6,7 +6,7 @@ This is **not** a full game. No backend, no progression, no networking.
 Stack:
 - React 19 + TypeScript + Vite
 - Three.js via `@react-three/fiber` (v9)
-- Tauri v2 (desktop packaging)
+- Electron (desktop packaging, bundled Chromium for uncapped FPS + reliable pointer lock)
 - `pnpm` for JS package management
 
 ## What is implemented
@@ -31,16 +31,6 @@ Stack:
 ### All platforms
 - Node.js 20+
 - `pnpm` 10+
-- Rust toolchain (stable)
-  - install via [rustup](https://rustup.rs/)
-
-### Tauri (desktop) system requirements
-Follow the official Tauri v2 prerequisites for your OS:
-- macOS: Xcode Command Line Tools
-- Windows: Microsoft C++ Build Tools + WebView2
-- Linux: WebKitGTK and related GTK dev packages (varies by distro)
-
-Reference: [Tauri Prerequisites](https://tauri.app/start/prerequisites/)
 
 ## Setup
 
@@ -48,26 +38,32 @@ Reference: [Tauri Prerequisites](https://tauri.app/start/prerequisites/)
 pnpm install
 ```
 
-## Run (Web)
+## Run (Electron Desktop)
 
 ```bash
 pnpm dev
 ```
 
-Open the Vite URL shown in the terminal (default is `http://localhost:1420/` in the Tauri template).
+This starts Vite and launches the Electron desktop app.
 
-## Run (Tauri Desktop)
+## Run (Web Only)
 
 ```bash
-pnpm tauri dev
+pnpm dev:web
 ```
 
-This starts Vite and launches the desktop app shell.
+Open `http://localhost:1420/` in your browser.
 
 ## Build (Web)
 
 ```bash
 pnpm build
+```
+
+## Build (Electron Desktop)
+
+```bash
+pnpm build:electron
 ```
 
 ## Controls

@@ -24,7 +24,7 @@ Small notes now beat a beautiful postmortem later.
 - `SYSTEMS.md` - gameplay systems breakdown (player, weapon, targets, audio, UI)
 - `PERFORMANCE.md` - perf profiling/checklist/stress test notes
 - `ASSETS.md` - asset locations, import pipeline, attribution workflow
-- `DECISIONS.md` - design/technical decisions and why (FPS→TPS, camera, jump, Tauri fallback, HP targets)
+- `DECISIONS.md` - design/technical decisions and why (FPS→TPS, camera, jump, Electron migration, HP targets)
 - `ROADMAP.md` - completed work, next steps, backlog
 
 ## Doc Conventions

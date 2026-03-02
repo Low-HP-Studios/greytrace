@@ -12,7 +12,7 @@
 - ADS zoom (right-click hold, smooth interpolation)
 - Action keys (`F` pickup, `G` drop, `R` reset targets)
 - Trigger state for firing (left-click)
-- Pointer lock management with Tauri fallback
+- Pointer lock management (standard Chromium API)
 
 ### Inputs
 
@@ -38,7 +38,7 @@
 
 - Flat-ground jump only
 - No crouch, no slope handling, no step-up logic
-- Tauri fallback mode: cursor can hit screen edges (acceptable in fullscreen)
+- Electron pointer lock works natively via Chromium (no fallback needed)
 
 ## Character Model
 
@@ -161,7 +161,7 @@
 - 4 corner panels: info (top-left), perf HUD (top-right), controls (bottom-left), settings (bottom-right)
 - Center: crosshair + hit marker (playing), pause info (paused)
 - Toggleable HUD visibility from pause menu
-- Pause menu is pointer-events transparent (clicks pass through to canvas for Tauri compatibility)
+- Pause menu is pointer-events transparent (clicks pass through to canvas)
 
 ### Controls displayed
 

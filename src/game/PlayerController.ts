@@ -124,6 +124,11 @@ export function usePlayerController({
   const tempFirstPersonCameraPosRef = useRef(new THREE.Vector3());
   const tempThirdPersonCameraPosRef = useRef(new THREE.Vector3());
   const snapshotAccumulatorRef = useRef(0);
+  const snapshotObjectRef = useRef<PlayerSnapshot>({
+    x: 0, y: 0, z: 0, speed: 0,
+    sprinting: false, moving: false, grounded: true,
+    pointerLocked: false, canInteract: false,
+  });
   const actionCallbackRef = useRef(onAction);
   const triggerCallbackRef = useRef(onTriggerChange);
   const snapshotCallbackRef = useRef(onPlayerSnapshot);
@@ -165,60 +170,16 @@ export function usePlayerController({
     fovRef.current = fov;
   }, [fov]);
 
-  const fallbackActiveRef = useRef(false);
-
   useEffect(() => {
     const element = gl.domElement;
-    const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-
-    const enterFallbackCapture = () => {
-      if (fallbackActiveRef.current) return;
-      fallbackActiveRef.current = true;
-      pointerLockedRef.current = true;
-      userGestureCallbackRef.current();
-      console.log("[PointerLock] Fallback capture mode activated (Tauri)");
-    };
-
-    const exitFallbackCapture = () => {
-      if (!fallbackActiveRef.current) return;
-      fallbackActiveRef.current = false;
-      pointerLockedRef.current = false;
-      if (triggerHeldRef.current) {
-        triggerHeldRef.current = false;
-        triggerCallbackRef.current(false);
-      }
-      keyStateRef.current = {};
-      jumpQueuedRef.current = false;
-      adsRef.current = false;
-    };
 
     const requestLock = (el: HTMLElement) => {
       if (document.pointerLockElement !== null) return;
-      try {
-        const result = el.requestPointerLock();
-        if (result && typeof result.then === "function") {
-          result.then(() => {
-            console.log("[PointerLock] Acquired via browser API");
-          }).catch(() => {
-            if (isTauri) {
-              enterFallbackCapture();
-            }
-          });
-        }
-      } catch {
-        if (isTauri) {
-          enterFallbackCapture();
-        }
-      }
+      el.requestPointerLock();
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
       const bindings = keybindsRef.current;
-
-      if (event.code === "Escape" && !event.repeat && fallbackActiveRef.current) {
-        exitFallbackCapture();
-        return;
-      }
 
       if (event.code === bindings.pickup && !event.repeat) {
         actionCallbackRef.current("pickup");
@@ -311,7 +272,6 @@ export function usePlayerController({
     };
 
     const onPointerLockChange = () => {
-      if (fallbackActiveRef.current) return;
       const locked = document.pointerLockElement !== null;
       pointerLockedRef.current = locked;
       if (locked) {
@@ -475,12 +435,14 @@ export function usePlayerController({
 
     const currentYaw = yawRef.current + recoilYawRef.current;
     const currentPitch = pitchRef.current + recoilPitchRef.current;
+    const sinCurrentYaw = Math.sin(currentYaw);
+    const cosCurrentYaw = Math.cos(currentYaw);
     const aimDir = tempAimDirRef.current;
     const pitchCos = Math.cos(currentPitch);
     aimDir.set(
-      -Math.sin(currentYaw) * pitchCos,
+      -sinCurrentYaw * pitchCos,
       Math.sin(currentPitch),
-      -Math.cos(currentYaw) * pitchCos,
+      -cosCurrentYaw * pitchCos,
     ).normalize();
 
     const fppCameraPos = tempFirstPersonCameraPosRef.current;
@@ -491,11 +453,9 @@ export function usePlayerController({
     );
     fppCameraPos.addScaledVector(aimDir, FIRST_PERSON_CAMERA_FORWARD_OFFSET);
     if (sniperADS > 0) {
-      const rightX = Math.cos(currentYaw);
-      const rightZ = -Math.sin(currentYaw);
-      fppCameraPos.x += rightX * (0.045 * shoulderSide) * sniperADS;
+      fppCameraPos.x += cosCurrentYaw * (0.045 * shoulderSide) * sniperADS;
       fppCameraPos.y -= 0.02 * sniperADS;
-      fppCameraPos.z += rightZ * (0.045 * shoulderSide) * sniperADS;
+      fppCameraPos.z += -sinCurrentYaw * (0.045 * shoulderSide) * sniperADS;
     }
 
     const elevationAngle = clamp(
@@ -512,10 +472,10 @@ export function usePlayerController({
     const horizontalDist = armLen * Math.cos(elevationAngle);
     const verticalDist = armLen * Math.sin(elevationAngle);
 
-    const backX = Math.sin(currentYaw);
-    const backZ = Math.cos(currentYaw);
-    const rightX = Math.cos(currentYaw);
-    const rightZ = -Math.sin(currentYaw);
+    const backX = sinCurrentYaw;
+    const backZ = cosCurrentYaw;
+    const rightX = cosCurrentYaw;
+    const rightZ = -sinCurrentYaw;
 
     const tppCameraPos = tempThirdPersonCameraPosRef.current;
     tppCameraPos.set(
@@ -549,17 +509,17 @@ export function usePlayerController({
     snapshotAccumulatorRef.current += delta;
     if (snapshotAccumulatorRef.current >= 0.05) {
       snapshotAccumulatorRef.current = 0;
-      snapshotCallbackRef.current({
-        x: positionRef.current.x,
-        y: positionRef.current.y,
-        z: positionRef.current.z,
-        speed,
-        sprinting: sprintingRef.current,
-        moving: movingRef.current,
-        grounded: groundedRef.current,
-        pointerLocked: pointerLockedRef.current,
-        canInteract: false,
-      });
+      const snap = snapshotObjectRef.current;
+      snap.x = positionRef.current.x;
+      snap.y = positionRef.current.y;
+      snap.z = positionRef.current.z;
+      snap.speed = speed;
+      snap.sprinting = sprintingRef.current;
+      snap.moving = movingRef.current;
+      snap.grounded = groundedRef.current;
+      snap.pointerLocked = pointerLockedRef.current;
+      snap.canInteract = false;
+      snapshotCallbackRef.current(snap);
     }
   });
 
@@ -588,23 +548,7 @@ export function usePlayerController({
     requestPointerLock: () => {
       userGestureCallbackRef.current();
       if (pointerLockedRef.current) return;
-      const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-      try {
-        const result = gl.domElement.requestPointerLock();
-        if (result && typeof result.then === "function") {
-          result.catch(() => {
-            if (isTauri) {
-              fallbackActiveRef.current = true;
-              pointerLockedRef.current = true;
-            }
-          });
-        }
-      } catch {
-        if (isTauri) {
-          fallbackActiveRef.current = true;
-          pointerLockedRef.current = true;
-        }
-      }
+      gl.domElement.requestPointerLock();
     },
   };
 }

@@ -81,6 +81,8 @@ export class WeaponSystem {
   private switchFromWeapon: WeaponKind = "rifle";
   private switchStartedAtMs = 0;
   private switchUntilMs = 0;
+  private _tempOrigin = new THREE.Vector3();
+  private _tempDirection = new THREE.Vector3();
 
   setTriggerHeld(next: boolean) {
     this.triggerHeld = next;
@@ -114,19 +116,16 @@ export class WeaponSystem {
       const shotIndex = this.shotIndex;
       this.shotIndex += 1;
 
-      const origin = new THREE.Vector3();
-      camera.getWorldPosition(origin);
-
-      const direction = new THREE.Vector3();
-      camera.getWorldDirection(direction).normalize();
+      camera.getWorldPosition(this._tempOrigin);
+      camera.getWorldDirection(this._tempDirection).normalize();
 
       shotEvents.push({
         timestamp: nowMs,
         shotIndex,
         weaponType: this.activeWeapon,
         damage: config.damage,
-        origin,
-        direction,
+        origin: this._tempOrigin.clone(),
+        direction: this._tempDirection.clone(),
         recoilPitchRadians: 0,
         recoilYawRadians: 0,
       });

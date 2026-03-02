@@ -10,7 +10,7 @@ Prioritize playable behavior over feature breadth.
 1. Reproduce / define the problem clearly
 2. Change one system at a time
 3. Run checks (`pnpm lint`, `pnpm build`)
-4. Smoke test `pnpm dev` and `pnpm tauri dev` when input/window/runtime behavior changes
+4. Smoke test `pnpm dev:web` and `pnpm dev` (Electron) when input/window/runtime behavior changes
 5. Update docs (architecture/process/systems/decisions) if behavior changed
 6. Commit in logical slices
 
@@ -31,12 +31,12 @@ Add/update docs when you change:
 - Runtime architecture / system ownership
 - Asset pipeline or attribution rules
 - Performance tooling / stress test methodology
-- Window behavior (Tauri settings, fullscreen defaults)
+- Window behavior (Electron settings, fullscreen defaults)
 - Target system behavior (HP, respawn, damage values)
 
 ## Debugging Order (Pragmatic)
 
-1. Input / pointer lock state (check Tauri fallback mode)
+1. Input / pointer lock state
 2. Camera positioning / lookAt direction
 3. Frame loop timing
 4. Collision / movement state
@@ -52,18 +52,16 @@ Add/update docs when you change:
 - Pointer Lock API works normally
 - Click to lock, Esc to unlock (browser-managed)
 
-### Tauri (macOS WKWebView)
+### Electron (desktop)
 
-- Pointer Lock API is broken (WrongDocumentError regardless of focus state)
-- Fallback capture mode activates automatically
-- Esc key handled manually to exit capture
-- Cursor can hit screen edges in fast movement (fullscreen mitigates this)
-- Debug with Safari Web Inspector (Develop > Tauri window)
+- Pointer Lock API works natively via bundled Chromium
+- FPS uncapped via `--disable-frame-rate-limit` and `--disable-gpu-vsync` flags
+- F11 or Alt+Enter to toggle fullscreen
 
 ## Definition of Done (Prototype Feature)
 
 - Behavior works in web dev (`pnpm dev`)
-- Behavior works in Tauri dev (`pnpm tauri dev`) if desktop-related
+- Behavior works in Electron dev (`pnpm dev`) if desktop-related
 - No TypeScript errors
 - Lint passes (warnings allowed if intentional and documented)
 - Docs updated if controls/architecture/process changed
