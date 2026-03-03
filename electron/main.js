@@ -57,8 +57,8 @@ function createWindow() {
     title: 'Zero Hour',
     autoHideMenuBar: true,
     icon: isDev
-      ? path.join(__dirname, '..', 'build', 'icon.png')
-      : path.join(process.resourcesPath, 'build', 'icon.png'),
+      ? path.join(__dirname, '..', 'public', 'assets', 'branding', 'logo.svg')
+      : path.join(process.resourcesPath, 'assets', 'branding', 'logo.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
