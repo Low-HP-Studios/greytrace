@@ -414,7 +414,9 @@ export function GameRoot() {
   const [perfMetrics, setPerfMetrics] = useState<PerfMetrics>(
     DEFAULT_PERF_METRICS,
   );
-  const [player, setPlayerRaw] = useState<PlayerSnapshot>(DEFAULT_PLAYER_SNAPSHOT);
+  const [player, setPlayerRaw] = useState<PlayerSnapshot>(
+    DEFAULT_PLAYER_SNAPSHOT,
+  );
   const playerRef = useRef(player);
   const setPlayer = useCallback((snapshot: PlayerSnapshot) => {
     const prev = playerRef.current;
@@ -483,7 +485,8 @@ export function GameRoot() {
   const handleHitMarker = useCallback((kind: HitMarkerKind) => {
     setHitMarker({
       kind,
-      until: performance.now() + (kind === "kill" ? 170 : kind === "head" ? 120 : 90),
+      until: performance.now() +
+        (kind === "kill" ? 170 : kind === "head" ? 120 : 90),
     });
   }, []);
 
@@ -688,7 +691,8 @@ export function GameRoot() {
     ? "error"
     : updaterStatus.phase === "downloaded"
     ? "ok"
-    : updaterStatus.phase === "downloading" || updaterStatus.phase === "checking"
+    : updaterStatus.phase === "downloading" ||
+        updaterStatus.phase === "checking"
     ? "warn"
     : "idle";
   const canInstallUpdate = updaterStatus.phase === "downloaded";
@@ -1494,11 +1498,15 @@ export function GameRoot() {
                               </div>
                               <div className="metric-card">
                                 <span>Latest known</span>
-                                <strong>{updaterStatus.targetVersion ?? "-"}</strong>
+                                <strong>
+                                  {updaterStatus.targetVersion ?? "-"}
+                                </strong>
                               </div>
                               <div className="metric-card">
                                 <span>Platform</span>
-                                <strong>{window.electronAPI?.platform ?? "web"}</strong>
+                                <strong>
+                                  {window.electronAPI?.platform ?? "web"}
+                                </strong>
                               </div>
                               <div className="metric-card">
                                 <span>Status</span>
@@ -1533,7 +1541,8 @@ export function GameRoot() {
                                 type="button"
                                 className="btn"
                                 onClick={handleCheckForUpdates}
-                                disabled={!updaterAvailable || updaterBusyAction !== null}
+                                disabled={!updaterAvailable ||
+                                  updaterBusyAction !== null}
                               >
                                 {updaterBusyAction === "check"
                                   ? "Checking..."
@@ -1543,7 +1552,9 @@ export function GameRoot() {
                                 type="button"
                                 className="btn"
                                 onClick={handleInstallUpdate}
-                                disabled={!updaterAvailable || !canInstallUpdate || updaterBusyAction !== null}
+                                disabled={!updaterAvailable ||
+                                  !canInstallUpdate ||
+                                  updaterBusyAction !== null}
                               >
                                 {updaterBusyAction === "install"
                                   ? "Installing..."
@@ -1553,7 +1564,8 @@ export function GameRoot() {
                                 type="button"
                                 className="btn"
                                 onClick={handleRepairInstall}
-                                disabled={!updaterAvailable || updaterBusyAction !== null}
+                                disabled={!updaterAvailable ||
+                                  updaterBusyAction !== null}
                               >
                                 {updaterBusyAction === "repair"
                                   ? "Repairing..."
@@ -1632,7 +1644,9 @@ export function GameRoot() {
                         key={option.value}
                         type="button"
                         className={`chip-btn ${
-                          settings.pixelRatioScale === option.value ? "active" : ""
+                          settings.pixelRatioScale === option.value
+                            ? "active"
+                            : ""
                         }`}
                         onClick={() =>
                           setSettings((prev) => ({
@@ -1680,17 +1694,19 @@ type MenuSectionProps = {
   children: React.ReactNode;
 };
 
-const MenuSection = memo(function MenuSection({ title, blurb, children }: MenuSectionProps) {
-  return (
-    <section className="menu-section">
-      <header className="menu-section-header">
-        <h3>{title}</h3>
-        {blurb ? <p className="muted">{blurb}</p> : null}
-      </header>
-      <div className="menu-section-body">{children}</div>
-    </section>
-  );
-});
+const MenuSection = memo(
+  function MenuSection({ title, blurb, children }: MenuSectionProps) {
+    return (
+      <section className="menu-section">
+        <header className="menu-section-header">
+          <h3>{title}</h3>
+          {blurb ? <p className="muted">{blurb}</p> : null}
+        </header>
+        <div className="menu-section-body">{children}</div>
+      </section>
+    );
+  },
+);
 
 type MetricCardProps = {
   label: string;
@@ -1713,26 +1729,28 @@ type SwitchRowProps = {
   onChange: (checked: boolean) => void;
 };
 
-const SwitchRow = memo(function SwitchRow({ label, hint, checked, onChange }: SwitchRowProps) {
-  return (
-    <label className="switch-row">
-      <span>
-        <span className="field-label">{label}</span>
-        <span className="field-hint">{hint}</span>
-      </span>
-      <span className="switch-shell">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(event) => onChange(event.currentTarget.checked)}
-        />
-        <span className="switch-track" aria-hidden="true">
-          <span className="switch-thumb" />
+const SwitchRow = memo(
+  function SwitchRow({ label, hint, checked, onChange }: SwitchRowProps) {
+    return (
+      <label className="switch-row">
+        <span>
+          <span className="field-label">{label}</span>
+          <span className="field-hint">{hint}</span>
         </span>
-      </span>
-    </label>
-  );
-});
+        <span className="switch-shell">
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={(event) => onChange(event.currentTarget.checked)}
+          />
+          <span className="switch-track" aria-hidden="true">
+            <span className="switch-thumb" />
+          </span>
+        </span>
+      </label>
+    );
+  },
+);
 
 type RangeFieldProps = {
   label: string;
@@ -1777,24 +1795,26 @@ type VolumeSliderProps = {
   onChange: (value: number) => void;
 };
 
-const VolumeSlider = memo(function VolumeSlider({ label, value, onChange }: VolumeSliderProps) {
-  return (
-    <div className="range-field volume-field">
-      <div className="range-label-row">
-        <span className="field-label">{label}</span>
-        <span className="range-value">{Math.round(value * 100)}%</span>
+const VolumeSlider = memo(
+  function VolumeSlider({ label, value, onChange }: VolumeSliderProps) {
+    return (
+      <div className="range-field volume-field">
+        <div className="range-label-row">
+          <span className="field-label">{label}</span>
+          <span className="range-value">{Math.round(value * 100)}%</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          value={value}
+          onChange={(event) => onChange(Number(event.currentTarget.value))}
+        />
       </div>
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={value}
-        onChange={(event) => onChange(Number(event.currentTarget.value))}
-      />
-    </div>
-  );
-});
+    );
+  },
+);
 
 function menuTitle(tab: PauseMenuTab) {
   switch (tab) {
