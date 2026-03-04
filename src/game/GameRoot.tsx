@@ -395,7 +395,11 @@ function savePersistedSettings(settings: PersistedSettings) {
   }
 }
 
-export function GameRoot() {
+interface GameRootProps {
+  onReturnToLobby?: () => void;
+}
+
+export function GameRoot(_props: GameRootProps) {
   const persistedSettings = useMemo(loadPersistedSettings, []);
   const [settings, setSettings] = useState<GameSettings>(
     persistedSettings.settings,

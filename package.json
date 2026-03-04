@@ -1,7 +1,7 @@
 {
   "name": "zero-hour",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "main": "electron/main.js",
   "repository": "https://github.com/ayushrameja/threeJS",
@@ -12,9 +12,9 @@
     "lint": "eslint .",
     "build": "tsc && vite build",
     "build:electron": "tsc && vite build && electron-builder",
-    "build:mac": "tsc && vite build && electron-builder --mac",
-    "build:win": "tsc && vite build && electron-builder --win",
-    "build:linux": "tsc && vite build && electron-builder --linux",
+    "build:mac": "tsc && vite build && electron-builder --mac --publish never",
+    "build:win": "tsc && vite build && electron-builder --win --publish never",
+    "build:linux": "tsc && vite build && electron-builder --linux --publish never",
     "preview": "vite preview"
   },
   "dependencies": {
