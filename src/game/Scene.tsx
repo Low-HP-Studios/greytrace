@@ -1575,11 +1575,11 @@ function GameplayRuntime({
   );
 }
 
-type MapEnvironmentProps = {
+export type MapEnvironmentProps = {
   shadows: boolean;
 };
 
-function MapEnvironment({ shadows }: MapEnvironmentProps) {
+export function MapEnvironment({ shadows }: MapEnvironmentProps) {
   const sandTexture = useMemo(() => createSandTexture(), []);
   const oceanTexture = useMemo(() => createOceanTexture(), []);
   const skyTexture = useMemo(() => createSkyTexture(), []);

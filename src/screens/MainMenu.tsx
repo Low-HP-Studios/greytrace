@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LobbyCharacter } from "./LobbyCharacter";
+import { LobbyScene } from "./LobbyCharacter";
+
 import { type AudioVolumeSettings, DEFAULT_AUDIO_VOLUMES } from "../game/Audio";
 import {
   MenuSection,
@@ -26,8 +27,9 @@ type MainMenuProps = {
   onStartGame: () => void;
 };
 
-type LobbyTab = "play" | "friends" | "store";
+type LobbyTab = "play" | "friends" | "customise" | "store";
 
+const LOCKED_TABS: LobbyTab[] = ["friends", "customise", "store"];
 const SETTINGS_STORAGE_KEY = "zerohour.settings.v1";
 
 const PIXEL_RATIO_OPTIONS: Array<{ value: PixelRatioScale; label: string }> = [
@@ -41,7 +43,6 @@ const SETTINGS_TABS: Array<{ id: PauseMenuTab; label: string }> = [
   { id: "audio", label: "Audio" },
   { id: "controls", label: "Controls" },
   { id: "graphics", label: "Graphics" },
-  { id: "hud", label: "HUD" },
 ];
 
 type BindingKey = keyof ControlBindings;
@@ -67,16 +68,24 @@ const BINDING_ROWS: Array<{
   { key: "drop", label: "Drop", hint: "Drop weapon" },
 ];
 
-const OVERLAY_ROWS: Array<{
-  key: keyof HudOverlayToggles;
-  label: string;
-  hint: string;
-}> = [
-  { key: "practice", label: "Practice panel", hint: "Top-left range status" },
-  { key: "controls", label: "Controls panel", hint: "Bottom-left shortcut list" },
-  { key: "settings", label: "Settings panel", hint: "Bottom-right quick settings" },
-  { key: "performance", label: "Performance panel", hint: "Top-right perf HUD" },
-];
+function LockIcon() {
+  return (
+    <svg
+      className="menu-lock-icon"
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
 
 const DEFAULT_GAME_SETTINGS: GameSettings = {
   shadows: false,
@@ -132,10 +141,11 @@ export function MainMenu({ onStartGame }: MainMenuProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<PauseMenuTab>("gameplay");
   const [bindingCapture, setBindingCapture] = useState<BindingKey | null>(null);
+  const [transitioning, setTransitioning] = useState(false);
 
   const persisted = useMemo(loadSettings, []);
   const [settings, setSettings] = useState<GameSettings>(persisted.settings);
-  const [hudPanels, setHudPanels] = useState<HudOverlayToggles>(
+  const [hudPanels] = useState<HudOverlayToggles>(
     persisted.hudPanels,
   );
   const [audioVolumes, setAudioVolumes] = useState<AudioVolumeSettings>(
@@ -200,101 +210,81 @@ export function MainMenu({ onStartGame }: MainMenuProps) {
     setBindingCapture(null);
   }, []);
 
+  const handlePlayClick = useCallback(() => {
+    setTransitioning(true);
+  }, []);
+
+  const handleTransitionComplete = useCallback(() => {
+    onStartGame();
+  }, [onStartGame]);
+
+  const isLocked = (tab: LobbyTab) => LOCKED_TABS.includes(tab);
+
   return (
     <div className="lobby-screen">
-      <LobbyCharacter />
+      <LobbyScene
+        transitioning={transitioning}
+        onTransitionComplete={handleTransitionComplete}
+      />
 
-      <div className="lobby-ui">
-        <nav className="lobby-topbar">
-          <div className="lobby-brand">
-            <img
-              src="/assets/branding/logo.svg"
-              alt=""
-              className="lobby-logo-img"
-              draggable={false}
-            />
-            <span className="lobby-title">ZERO HOUR</span>
-          </div>
-          <div className="lobby-nav-tabs">
+      <div className={`menu-container ${transitioning ? "menu-transitioning" : ""}`}>
+        <div className="menu-bar">
+          <h1 className="menu-logo-text">0H</h1>
+          <nav className="menu-nav-tabs">
+            {(["play", "friends", "customise", "store"] as LobbyTab[]).map(
+              (tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  className={`menu-nav-btn ${activeTab === tab ? "active" : ""} ${isLocked(tab) ? "locked" : ""}`}
+                  onClick={() => !isLocked(tab) && setActiveTab(tab)}
+                  disabled={isLocked(tab)}
+                >
+                  {tab.toUpperCase()}
+                  {isLocked(tab) && <LockIcon />}
+                </button>
+              ),
+            )}
+          </nav>
+          <div className="menu-bar-right">
             <button
               type="button"
-              className={`lobby-nav-tab ${activeTab === "play" ? "active" : ""}`}
-              onClick={() => setActiveTab("play")}
+              className="menu-settings-trigger"
+              onClick={() => setSettingsOpen(true)}
             >
-              PLAY
-            </button>
-            <button
-              type="button"
-              className={`lobby-nav-tab ${activeTab === "friends" ? "active" : ""}`}
-              onClick={() => setActiveTab("friends")}
-            >
-              FRIENDS
-            </button>
-            <button
-              type="button"
-              className={`lobby-nav-tab ${activeTab === "store" ? "active" : ""}`}
-              onClick={() => setActiveTab("store")}
-            >
-              STORE
+              <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
             </button>
           </div>
-          <div className="lobby-topbar-right">
-            <span className="lobby-alpha-badge">ALPHA v0.1</span>
-          </div>
-        </nav>
+        </div>
 
-        <div className="lobby-center">
-          {activeTab !== "play" && (
-            <div className="lobby-coming-soon-panel">
-              <div className="coming-soon-icon">&#128679;</div>
-              <h2 className="coming-soon-title">
-                {activeTab === "friends" ? "Friends" : "Store"}
-              </h2>
-              <p className="coming-soon-text">
-                Currently in Alpha stage. This feature is under development.
-              </p>
-              <span className="coming-soon-badge">COMING SOON</span>
+        <div className="menu-sub-bar">
+          {activeTab === "play" && (
+            <div className="menu-sub-nav">
+              <button type="button" className="menu-sub-nav-btn locked" disabled>
+                ONLINE
+                <LockIcon />
+              </button>
+              <button type="button" className="menu-sub-nav-btn active">PRACTICE</button>
             </div>
           )}
         </div>
 
-        <div className="lobby-bottom">
-          <button
-            type="button"
-            className="lobby-settings-btn"
-            onClick={() => setSettingsOpen(true)}
-            aria-label="Settings"
-          >
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-            <span>Settings</span>
-          </button>
-
-          <div className="lobby-play-section">
-            <span className="lobby-mode-label">Practice Mode</span>
-            <button
-              type="button"
-              className="lobby-play-btn"
-              onClick={onStartGame}
-            >
-              START PRACTICE
-            </button>
-          </div>
-
-          <div className="lobby-bottom-right">
-            <span className="lobby-version">Low Hp Studios</span>
-          </div>
+        <div className="menu-content">
+          {activeTab === "play" ? (
+            <div className="menu-play-card-wrapper">
+              <div className="menu-play-card-image"></div>
+              <button type="button" className="menu-play-card-btn" onClick={handlePlayClick}>
+                PLAY PRACTICE
+              </button>
+            </div>
+          ) : (
+            <div className="menu-coming-soon">
+              Module offline in Alpha.
+            </div>
+          )}
         </div>
       </div>
 
@@ -557,26 +547,6 @@ export function MainMenu({ onStartGame }: MainMenuProps) {
                   </div>
                 )}
 
-                {settingsTab === "hud" && (
-                  <div className="menu-sections">
-                    <MenuSection title="Overlay Panels">
-                      {OVERLAY_ROWS.map((row) => (
-                        <SwitchRow
-                          key={row.key}
-                          label={row.label}
-                          hint={row.hint}
-                          checked={hudPanels[row.key]}
-                          onChange={(checked) =>
-                            setHudPanels((prev) => ({
-                              ...prev,
-                              [row.key]: checked,
-                            }))
-                          }
-                        />
-                      ))}
-                    </MenuSection>
-                  </div>
-                )}
               </section>
             </div>
           </div>
