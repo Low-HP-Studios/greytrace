@@ -399,7 +399,7 @@ interface GameRootProps {
   onReturnToLobby?: () => void;
 }
 
-export function GameRoot(_props: GameRootProps) {
+export function GameRoot({ onReturnToLobby }: GameRootProps) {
   const persistedSettings = useMemo(loadPersistedSettings, []);
   const [settings, setSettings] = useState<GameSettings>(
     persistedSettings.settings,
@@ -469,6 +469,31 @@ export function GameRoot(_props: GameRootProps) {
   const updaterApi = window.electronAPI?.updater;
   const updaterAvailable = Boolean(updaterApi);
   const isPaused = !player.pointerLocked;
+  const [hasBeenLocked, setHasBeenLocked] = useState(false);
+
+  useEffect(() => {
+    if (player.pointerLocked && !hasBeenLocked) {
+      setHasBeenLocked(true);
+    }
+  }, [player.pointerLocked, hasBeenLocked]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const canvas = document.querySelector(".game-canvas");
+        if (canvas instanceof HTMLCanvasElement) {
+          const result = canvas.requestPointerLock();
+          if (result && typeof result.then === "function") {
+            void result.catch(() => {});
+          }
+        }
+      } catch {}
+      setResumePointerLockRequestId(1);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const showPauseMenu = hasBeenLocked && isPaused;
 
   const handleCloseMenuAndResume = useCallback(() => {
     setBindingCapture(null);
@@ -673,7 +698,6 @@ export function GameRoot(_props: GameRootProps) {
     (settings.sensitivity.look * settings.sensitivity.rifleAds).toFixed(2);
   const effectiveSniperAds =
     (settings.sensitivity.look * settings.sensitivity.sniperAds).toFixed(2);
-  const visibleOverlayCount = Object.values(hudPanels).filter(Boolean).length;
 
   const controlsPreview = useMemo(() => {
     const b = settings.keybinds;
@@ -850,56 +874,39 @@ export function GameRoot(_props: GameRootProps) {
             )
             : null}
 
-          {isPaused
+          {showPauseMenu
             ? (
               <div
-                className="pause-menu panel tactical-panel"
-                role="dialog"
-                aria-label="Pause menu"
+                className="lobby-settings-overlay"
+                style={{ background: "rgba(5, 5, 5, 0.95)" }}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
               >
-                <button
-                  type="button"
-                  className="pause-close-btn"
-                  aria-label="Close settings and resume game"
-                  onClick={handleCloseMenuAndResume}
+                <div
+                  className="lobby-settings-modal"
+                  role="dialog"
+                  aria-label="Pause menu"
                 >
-                  <span aria-hidden="true">×</span>
-                </button>
-                <div className="pause-shell">
-                  <aside className="pause-sidebar" aria-label="Menu sections">
-                    <div className="pause-logo">
-                      <div className="brand-lockup large" aria-hidden="true">
-                        <span className="brand-word">Zero Hour</span>
-                      </div>
-                      <p className="muted">
-                        Training lobby. Legacy bugs included at no extra cost.
-                      </p>
-                    </div>
-                    <div className="pause-status-card">
-                      <div className="panel-eyebrow">Session</div>
-                      <div className="pause-status-grid">
-                        <span>Weapon</span>
-                        <strong>
-                          {weaponEquipped ? activeWeapon : "unarmed"}
-                        </strong>
-                        <span>Overlays</span>
-                        <strong>{visibleOverlayCount} active</strong>
-                        <span>Range load</span>
-                        <strong>{stressLabel}</strong>
-                      </div>
-                    </div>
-                    <div
-                      className="menu-tab-list"
-                      role="tablist"
-                      aria-label="Settings categories"
+                  <div className="lobby-settings-header">
+                    <h2>{menuTitle(menuTab)}</h2>
+                    <button
+                      type="button"
+                      className="lobby-settings-close"
+                      aria-label="Resume game"
+                      onClick={handleCloseMenuAndResume}
                     >
+                      ×
+                    </button>
+                  </div>
+                  <div className="lobby-settings-body">
+                    <aside className="lobby-settings-sidebar">
                       {MENU_TABS.map((tab) => (
                         <button
                           key={tab.id}
                           type="button"
                           role="tab"
                           aria-selected={menuTab === tab.id}
-                          className={`menu-tab ${
+                          className={`lobby-settings-tab ${
                             menuTab === tab.id ? "active" : ""
                           }`}
                           onClick={() => {
@@ -907,35 +914,28 @@ export function GameRoot(_props: GameRootProps) {
                             setBindingCapture(null);
                           }}
                         >
-                          <span className="menu-tab-label">{tab.label}</span>
-                          <span className="menu-tab-hint">{tab.hint}</span>
+                          {tab.label}
                         </button>
                       ))}
-                    </div>
-                    <div className="pause-footer-note muted">
-                      Press <code>Esc</code> to pause again after resuming.
-                    </div>
-                  </aside>
-
-                  <section
-                    className="pause-content"
-                    role="tabpanel"
-                    aria-label={`${menuTab} settings`}
-                  >
-                    <div className="pause-content-header">
-                      <div>
-                        <div className="panel-eyebrow">Paused Menu</div>
-                        <h2>{menuTitle(menuTab)}</h2>
-                      </div>
+                      <div style={{ flex: 1 }} />
                       <button
                         type="button"
-                        className="btn btn-ghost"
-                        onClick={() => setBindingCapture(null)}
-                        disabled={!bindingCapture}
+                        className="lobby-settings-tab"
+                        onClick={handleCloseMenuAndResume}
                       >
-                        Cancel capture
+                        Resume
                       </button>
-                    </div>
+                      {onReturnToLobby && (
+                        <button
+                          type="button"
+                          className="btn-lobby-return"
+                          onClick={onReturnToLobby}
+                        >
+                          Return to Lobby
+                        </button>
+                      )}
+                    </aside>
+                    <section className="lobby-settings-content">
 
                     {menuTab === "practice"
                       ? (
@@ -1592,7 +1592,8 @@ export function GameRoot(_props: GameRootProps) {
                         </div>
                       )
                       : null}
-                  </section>
+                    </section>
+                  </div>
                 </div>
               </div>
             )
