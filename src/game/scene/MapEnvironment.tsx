@@ -10,7 +10,7 @@ import {
   WORLD_BOUNDS,
 } from "./scene-constants";
 import {
-  createSandTexture,
+  createGrassTexture,
   createSkyTexture,
 } from "./Textures";
 import { DesertProps } from "./DesertProps";
@@ -18,14 +18,14 @@ import { DesertProps } from "./DesertProps";
 const VOID_SKY = new THREE.Color("#0a1628");
 const LIVE_SKY = new THREE.Color("#b8d4e8");
 const VOID_WALKABLE = new THREE.Color("#1c1a14");
-const LIVE_WALKABLE = new THREE.Color("#d4a862");
+const LIVE_WALKABLE = new THREE.Color("#4d8f44");
 const MOON_COLOR = new THREE.Color("#e8eaf0");
 const MOON_GLOW_COLOR = new THREE.Color("#9ab0d0");
 const GRID_MAJOR_COLOR = new THREE.Color("#8fb3ff");
 const GRID_MINOR_COLOR = new THREE.Color("#ffffff");
 const SUN_CORE_COLOR = new THREE.Color("#ffe0b0");
 const SUN_GLOW_COLOR = new THREE.Color("#ffb279");
-const FAR_DESERT_COLOR = new THREE.Color("#c38a47");
+const FAR_DESERT_COLOR = new THREE.Color("#3f7438");
 const BORDER_COLOR = new THREE.Color("#f6d99a");
 const BORDER_GLOW_COLOR = new THREE.Color("#d48b36");
 const FLOOR_GRID_DIVISIONS = 16;
@@ -78,9 +78,9 @@ export function MapEnvironment({
   theme,
   floorGridOpacity,
 }: MapEnvironmentProps) {
-  const sandTexture = useMemo(() => createSandTexture(), []);
-  const farSandTexture = useMemo(() => {
-    const texture = createSandTexture();
+  const grassTexture = useMemo(() => createGrassTexture(), []);
+  const farGrassTexture = useMemo(() => {
+    const texture = createGrassTexture();
     if (texture) {
       texture.repeat.set(120, 120);
     }
@@ -93,10 +93,10 @@ export function MapEnvironment({
   useEffect(() => {
     return () => {
       skyTexture?.dispose();
-      sandTexture?.dispose();
-      farSandTexture?.dispose();
+      grassTexture?.dispose();
+      farGrassTexture?.dispose();
     };
-  }, [farSandTexture, sandTexture, skyTexture]);
+  }, [farGrassTexture, grassTexture, skyTexture]);
 
   const liveTheme = clamp01(theme);
   const textureReveal = clamp01((liveTheme - 0.52) / 0.48);
@@ -217,13 +217,13 @@ export function MapEnvironment({
         <planeGeometry args={[FAR_DESERT_SIZE, FAR_DESERT_SIZE]} />
         <meshStandardMaterial
           color={blendColor(VOID_WALKABLE, FAR_DESERT_COLOR, liveTheme)}
-          map={allowTextures ? farSandTexture ?? undefined : undefined}
+          map={allowTextures ? farGrassTexture ?? undefined : undefined}
           roughness={1}
           metalness={0}
         />
       </mesh>
 
-      {/* Walkable desert floor */}
+      {/* Walkable grassy floor */}
       <mesh
         position={[WALKABLE_CENTER_X, 0, WALKABLE_CENTER_Z]}
         rotation={[-Math.PI / 2, 0, 0]}
@@ -233,7 +233,7 @@ export function MapEnvironment({
         <planeGeometry args={[WALKABLE_SIZE_X, WALKABLE_SIZE_Z]} />
         <meshStandardMaterial
           color={blendColor(VOID_WALKABLE, LIVE_WALKABLE, liveTheme)}
-          map={allowTextures ? sandTexture ?? undefined : undefined}
+          map={allowTextures ? grassTexture ?? undefined : undefined}
           roughness={THREE.MathUtils.lerp(1, 0.92, liveTheme)}
           metalness={0}
         />

@@ -4,17 +4,19 @@ import * as THREE from "three";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import { loadFbxAnimation, loadGlbWithAnimations } from "./AssetLoader";
 import { TARGET_CHARACTER_MODEL_URL } from "./boot-assets";
-import type { TargetState } from "./types";
-import {
-  remapAnimationClip,
-  removeRootMotion,
-} from "./scene/CharacterModel";
+import type {
+  EnemyOutlineColor,
+  EnemyOutlineSettings,
+  TargetState,
+} from "./types";
+import { remapAnimationClip, removeRootMotion } from "./scene/CharacterModel";
 import { CHARACTER_TARGET_HEIGHT } from "./scene/scene-constants";
 
 type TargetsProps = {
   targets: TargetState[];
   shadows: boolean;
   reveal: number;
+  outline: EnemyOutlineSettings;
   onReadyChange?: (ready: boolean) => void;
 };
 
@@ -35,6 +37,12 @@ const TARGET_CHARACTER_HEIGHT = CHARACTER_TARGET_HEIGHT * TARGET_VISUAL_SCALE;
 const TARGET_IDLE_ANIMATION_URL = "/assets/animations/walking/Idle.fbx";
 const TARGET_HP_BAR_Y = 2.4 * TARGET_VISUAL_SCALE;
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const ENEMY_OUTLINE_COLOR_HEX: Record<EnemyOutlineColor, string> = {
+  red: "#ff4d4d",
+  yellow: "#facc15",
+  cyan: "#38d9ff",
+  magenta: "#ff4dc4",
+};
 
 type TargetSphereHitbox = {
   zone: TargetHitZone;
@@ -200,10 +208,31 @@ type TargetCharacterAsset = {
 
 export function createDefaultTargets(): TargetState[] {
   const layout: Array<[number, number]> = [
-    [-54, -22], [-36, -20], [-18, -24], [0, -22], [18, -24], [36, -20], [54, -22],
-    [-48, -34], [-30, -36], [-12, -34], [6, -36], [24, -34], [42, -36],
-    [-52, -48], [-34, -50], [-16, -52], [2, -50], [20, -52], [38, -50], [56, -48],
-    [-44, -64], [-22, -68], [0, -66], [22, -68], [44, -64],
+    [-54, -22],
+    [-36, -20],
+    [-18, -24],
+    [0, -22],
+    [18, -24],
+    [36, -20],
+    [54, -22],
+    [-48, -34],
+    [-30, -36],
+    [-12, -34],
+    [6, -36],
+    [24, -34],
+    [42, -36],
+    [-52, -48],
+    [-34, -50],
+    [-16, -52],
+    [2, -50],
+    [20, -52],
+    [38, -50],
+    [56, -48],
+    [-44, -64],
+    [-22, -68],
+    [0, -66],
+    [22, -68],
+    [44, -64],
   ];
 
   return layout.map(([x, z], index) => {
@@ -287,21 +316,21 @@ export function raycastTargets(
     for (const part of TARGET_HITBOX_PARTS) {
       const partHit = part.kind === "sphere"
         ? raycastSpherePart(
-            target.id,
-            part.hitbox.zone,
-            localOrigin,
-            localDirection,
-            ...part.hitbox.center,
-            part.hitbox.radius,
-          )
+          target.id,
+          part.hitbox.zone,
+          localOrigin,
+          localDirection,
+          ...part.hitbox.center,
+          part.hitbox.radius,
+        )
         : raycastAabbPart(
-            target.id,
-            part.hitbox.zone,
-            localOrigin,
-            localDirection,
-            ...part.hitbox.center,
-            ...part.hitbox.halfSize,
-          );
+          target.id,
+          part.hitbox.zone,
+          localOrigin,
+          localDirection,
+          ...part.hitbox.center,
+          ...part.hitbox.halfSize,
+        );
       if (!partHit) {
         continue;
       }
@@ -309,12 +338,17 @@ export function raycastTargets(
       if (worldPartHit.distance > maxDistance) {
         continue;
       }
-      if (!targetClosestHit || worldPartHit.distance < targetClosestHit.distance) {
+      if (
+        !targetClosestHit || worldPartHit.distance < targetClosestHit.distance
+      ) {
         targetClosestHit = worldPartHit;
       }
     }
 
-    if (targetClosestHit && (!closestHit || targetClosestHit.distance < closestHit.distance)) {
+    if (
+      targetClosestHit &&
+      (!closestHit || targetClosestHit.distance < closestHit.distance)
+    ) {
       closestHit = targetClosestHit;
     }
   }
@@ -356,7 +390,8 @@ function raycastSpherePart(
     origin.y + direction.y * distance,
     origin.z + direction.z * distance,
   );
-  const normal = _tempSphereNormal.set(point.x - cx, point.y - cy, point.z - cz).normalize();
+  const normal = _tempSphereNormal.set(point.x - cx, point.y - cy, point.z - cz)
+    .normalize();
 
   return { id, zone, point: point.clone(), normal: normal.clone(), distance };
 }
@@ -517,62 +552,86 @@ function useTargetCharacterAsset(): TargetCharacterAsset {
   return asset;
 }
 
-const HPBar = memo(function HPBar({ hp, maxHp }: { hp: number; maxHp: number }) {
-  const camera = useThree((state) => state.camera);
-  const groupRef = useRef<THREE.Group>(null);
+const HPBar = memo(
+  function HPBar({ hp, maxHp }: { hp: number; maxHp: number }) {
+    const camera = useThree((state) => state.camera);
+    const groupRef = useRef<THREE.Group>(null);
 
-  useFrame(() => {
-    if (groupRef.current) {
-      groupRef.current.quaternion.copy(camera.quaternion);
-    }
-  });
+    useFrame(() => {
+      if (groupRef.current) {
+        groupRef.current.quaternion.copy(camera.quaternion);
+      }
+    });
 
-  const ratio = Math.max(0, hp / maxHp);
-  const barWidth = 1.0;
-  const barHeight = 0.12;
-  const fillWidth = barWidth * ratio;
-  const fillColor = ratio > 0.5 ? "#4ade80" : ratio > 0.25 ? "#facc15" : "#ef4444";
+    const ratio = Math.max(0, hp / maxHp);
+    const barWidth = 1.0;
+    const barHeight = 0.12;
+    const fillWidth = barWidth * ratio;
+    const fillColor = ratio > 0.5
+      ? "#4ade80"
+      : ratio > 0.25
+      ? "#facc15"
+      : "#ef4444";
 
-  return (
-    <group ref={groupRef} position={[0, TARGET_HP_BAR_Y, 0]}>
-      <mesh position={[0, 0, -0.005]}>
-        <planeGeometry args={[barWidth + 0.06, barHeight + 0.06]} />
-        <meshBasicMaterial color="#000000" opacity={0.6} transparent />
-      </mesh>
-      <mesh position={[0, 0, -0.003]}>
-        <planeGeometry args={[barWidth, barHeight]} />
-        <meshBasicMaterial color="#1a1a1a" />
-      </mesh>
-      {fillWidth > 0.001 ? (
-        <mesh position={[(fillWidth - barWidth) / 2, 0, 0]}>
-          <planeGeometry args={[fillWidth, barHeight]} />
-          <meshBasicMaterial color={fillColor} />
+    return (
+      <group ref={groupRef} position={[0, TARGET_HP_BAR_Y, 0]}>
+        <mesh position={[0, 0, -0.005]}>
+          <planeGeometry args={[barWidth + 0.06, barHeight + 0.06]} />
+          <meshBasicMaterial color="#000000" opacity={0.6} transparent />
         </mesh>
-      ) : null}
-    </group>
-  );
-});
+        <mesh position={[0, 0, -0.003]}>
+          <planeGeometry args={[barWidth, barHeight]} />
+          <meshBasicMaterial color="#1a1a1a" />
+        </mesh>
+        {fillWidth > 0.001
+          ? (
+            <mesh position={[(fillWidth - barWidth) / 2, 0, 0]}>
+              <planeGeometry args={[fillWidth, barHeight]} />
+              <meshBasicMaterial color={fillColor} />
+            </mesh>
+          )
+          : null}
+      </group>
+    );
+  },
+);
 
 const TargetDummy = memo(function TargetDummy({
   target,
   shadows,
   reveal,
+  outline,
   characterAsset,
 }: {
   target: TargetState;
   shadows: boolean;
   reveal: number;
+  outline: EnemyOutlineSettings;
   characterAsset: TargetCharacterAsset;
 }) {
   const [x, baseY, z] = target.position;
   const now = performance.now();
   const isHit = target.hitUntil > now;
-  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const characterMixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const outlineMixerRef = useRef<THREE.AnimationMixer | null>(null);
   const groupRef = useRef<THREE.Group>(null);
   const characterInstance = useMemo(
-    () => (characterAsset.model ? (SkeletonUtils.clone(characterAsset.model) as THREE.Group) : null),
+    () => (characterAsset.model
+      ? (SkeletonUtils.clone(characterAsset.model) as THREE.Group)
+      : null),
     [characterAsset.model],
   );
+  const outlineInstance = useMemo(
+    () =>
+      outline.enabled && characterAsset.model
+        ? (SkeletonUtils.clone(characterAsset.model) as THREE.Group)
+        : null,
+    [characterAsset.model, outline.enabled],
+  );
+  const outlineColor = ENEMY_OUTLINE_COLOR_HEX[outline.color];
+  const outlineOpacity = outline.opacity * reveal;
+  // Keep silhouette tight to the target mesh; large boosts look like a ghost clone.
+  const outlineScaleBoost = 1 + outline.thickness * 0.000000001 - 0.1;
 
   useEffect(() => {
     if (!characterInstance) return;
@@ -582,16 +641,34 @@ const TargetDummy = memo(function TargetDummy({
       const action = mixer.clipAction(characterAsset.idleClip);
       action.setLoop(THREE.LoopRepeat, Infinity);
       action.play();
-      mixerRef.current = mixer;
+      characterMixerRef.current = mixer;
 
       return () => {
         mixer.stopAllAction();
-        mixerRef.current = null;
+        characterMixerRef.current = null;
       };
     }
 
     return undefined;
   }, [characterAsset.idleClip, characterInstance]);
+
+  useEffect(() => {
+    if (!outlineInstance) return;
+    if (characterAsset.idleClip) {
+      const mixer = new THREE.AnimationMixer(outlineInstance);
+      const action = mixer.clipAction(characterAsset.idleClip);
+      action.setLoop(THREE.LoopRepeat, Infinity);
+      action.play();
+      outlineMixerRef.current = mixer;
+
+      return () => {
+        mixer.stopAllAction();
+        outlineMixerRef.current = null;
+      };
+    }
+
+    return undefined;
+  }, [characterAsset.idleClip, outlineInstance]);
 
   useEffect(() => {
     if (!characterInstance) return;
@@ -600,7 +677,9 @@ const TargetDummy = memo(function TargetDummy({
       const mesh = child as THREE.Mesh;
       mesh.castShadow = shadows;
       mesh.receiveShadow = shadows;
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const materials = Array.isArray(mesh.material)
+        ? mesh.material
+        : [mesh.material];
       for (const material of materials) {
         const litMaterial = material as THREE.MeshStandardMaterial;
         litMaterial.transparent = reveal < 0.999;
@@ -613,13 +692,76 @@ const TargetDummy = memo(function TargetDummy({
     });
   }, [characterInstance, isHit, reveal, shadows]);
 
+  useEffect(() => {
+    if (!outlineInstance) return;
+    outlineInstance.traverse((child) => {
+      if (!(child as THREE.Mesh).isMesh) return;
+      const mesh = child as THREE.Mesh;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      const data = mesh.userData as {
+        __outlineMaterials?: THREE.MeshBasicMaterial[];
+      };
+      if (!data.__outlineMaterials) {
+        const sourceMaterials = Array.isArray(mesh.material)
+          ? mesh.material
+          : [mesh.material];
+        data.__outlineMaterials = sourceMaterials.map(() => {
+          const material = new THREE.MeshBasicMaterial({
+            toneMapped: false,
+          });
+          if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) {
+            (
+              material as THREE.MeshBasicMaterial & {
+                skinning?: boolean;
+              }
+            ).skinning = true;
+          }
+          return material;
+        });
+        mesh.material = Array.isArray(mesh.material)
+          ? data.__outlineMaterials
+          : data.__outlineMaterials[0];
+      }
+      for (const material of data.__outlineMaterials) {
+        material.color.set(outlineColor);
+        material.opacity = outlineOpacity;
+        material.transparent = outlineOpacity < 0.999;
+        material.side = THREE.BackSide;
+        material.depthWrite = false;
+        material.depthTest = true;
+        material.needsUpdate = true;
+      }
+    });
+  }, [outlineColor, outlineInstance, outlineOpacity]);
+
+  useEffect(() => {
+    return () => {
+      if (!outlineInstance) return;
+      outlineInstance.traverse((child) => {
+        if (!(child as THREE.Mesh).isMesh) return;
+        const mesh = child as THREE.Mesh;
+        const data = mesh.userData as {
+          __outlineMaterials?: THREE.MeshBasicMaterial[];
+        };
+        if (!data.__outlineMaterials) return;
+        for (const material of data.__outlineMaterials) {
+          material.dispose();
+        }
+        delete data.__outlineMaterials;
+      });
+    };
+  }, [outlineInstance]);
+
   useFrame((_, delta) => {
     if (reveal <= 0.01 || target.disabled) return;
-    mixerRef.current?.update(delta);
+    characterMixerRef.current?.update(delta);
+    outlineMixerRef.current?.update(delta);
   });
 
   const scale = 0.82 + reveal * 0.18;
   const visible = !target.disabled && reveal > 0.01;
+  const outlineVisible = outline.enabled && outlineOpacity > 0.01 && visible;
 
   return (
     <group
@@ -629,18 +771,49 @@ const TargetDummy = memo(function TargetDummy({
       scale={scale}
       visible={visible}
     >
-      {characterInstance ? (
-        <primitive object={characterInstance} />
-      ) : (
-        <mesh position={[0, 1.6, 0]} castShadow={shadows} receiveShadow={shadows}>
-          <sphereGeometry args={[0.22, 12, 12]} />
-          <meshStandardMaterial
-            color={isHit ? "#ff5555" : "#e8d5b7"}
-            transparent={reveal < 0.999}
-            opacity={reveal}
+      {outlineVisible && outlineInstance
+        ? (
+          <primitive
+            object={outlineInstance}
+            scale={[outlineScaleBoost, outlineScaleBoost, outlineScaleBoost]}
+            renderOrder={1}
           />
-        </mesh>
-      )}
+        )
+        : null}
+      {characterInstance
+        ? <primitive object={characterInstance} renderOrder={2} />
+        : (
+          <>
+            {outlineVisible
+              ? (
+                <mesh position={[0, 1.6, 0]} renderOrder={1}>
+                  <sphereGeometry args={[0.22 * outlineScaleBoost, 12, 12]} />
+                  <meshBasicMaterial
+                    color={outlineColor}
+                    side={THREE.BackSide}
+                    transparent={outlineOpacity < 0.999}
+                    opacity={outlineOpacity}
+                    depthWrite={false}
+                    toneMapped={false}
+                  />
+                </mesh>
+              )
+              : null}
+            <mesh
+              position={[0, 1.6, 0]}
+              castShadow={shadows}
+              receiveShadow={shadows}
+              renderOrder={2}
+            >
+              <sphereGeometry args={[0.22, 12, 12]} />
+              <meshStandardMaterial
+                color={isHit ? "#ff5555" : "#e8d5b7"}
+                transparent={reveal < 0.999}
+                opacity={reveal}
+              />
+            </mesh>
+          </>
+        )}
       {reveal >= 0.55 ? <HPBar hp={target.hp} maxHp={target.maxHp} /> : null}
     </group>
   );
@@ -650,6 +823,7 @@ export function Targets({
   targets,
   shadows,
   reveal,
+  outline,
   onReadyChange,
 }: TargetsProps) {
   const characterAsset = useTargetCharacterAsset();
@@ -667,6 +841,7 @@ export function Targets({
           target={target}
           shadows={shadows}
           reveal={reveal}
+          outline={outline}
           characterAsset={characterAsset}
         />
       ))}
