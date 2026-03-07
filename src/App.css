@@ -365,71 +365,133 @@ code {
   top: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
-  --sniper-cycle-progress: 1;
-}
-
-.crosshair.rifle {
-  width: clamp(4px, 0.4vw, 8px);
-  height: clamp(4px, 0.4vw, 8px);
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.84);
-  background: rgba(248, 253, 255, 0.96);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.66),
-    0 0 5px rgba(255, 179, 88, 0.24);
-}
-
-.crosshair.sniper-hip {
   width: 0;
   height: 0;
+  --sniper-cycle-progress: 1;
+  --ch-color: #eff7ff;
+  --ch-outline-enabled: 1;
+  --ch-outline-thickness: 1;
+  --ch-outline-opacity: 0.85;
+  --ch-center-size: 4;
+  --ch-center-thickness: 3;
+  --ch-inner-length: 9;
+  --ch-inner-thickness: 2;
+  --ch-inner-gap: 6;
+  --ch-outer-length: 7;
+  --ch-outer-thickness: 2;
+  --ch-outer-gap: 13;
 }
 
-.sniper-hip-lines {
+.crosshair-center {
   position: relative;
   width: 0;
   height: 0;
 }
 
-.sniper-hip-lines .line {
+.crosshair-center-line {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  background: var(--ch-color);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 calc(var(--ch-outline-enabled) * var(--ch-outline-thickness) * 1px)
+      rgba(0, 0, 0, var(--ch-outline-opacity)),
+    0 0 6px color-mix(in srgb, var(--ch-color) 42%, transparent);
+}
+
+.crosshair-center-line.horizontal {
+  width: calc(var(--ch-center-size) * 1px);
+  height: calc(var(--ch-center-thickness) * 1px);
+  transform: translate(-50%, -50%);
+}
+
+.crosshair-center-line.vertical {
+  width: calc(var(--ch-center-thickness) * 1px);
+  height: calc(var(--ch-center-size) * 1px);
+  transform: translate(-50%, -50%);
+}
+
+.crosshair-lines {
+  position: relative;
+  width: 0;
+  height: 0;
+}
+
+.crosshair-lines .line {
   position: absolute;
   display: block;
   border-radius: 999px;
-  background: #6ec8ff;
+  background: var(--ch-color);
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.66),
-    0 0 8px rgba(66, 197, 255, 0.42);
+    0 0 0 calc(var(--ch-outline-enabled) * var(--ch-outline-thickness) * 1px)
+      rgba(0, 0, 0, var(--ch-outline-opacity)),
+    0 0 8px color-mix(in srgb, var(--ch-color) 48%, transparent);
 }
 
-.sniper-hip-lines .line.top,
-.sniper-hip-lines .line.bottom {
-  width: clamp(2px, 0.16vw, 3px);
-  height: clamp(8px, 0.72vw, 13px);
+.crosshair-lines.inner .line.top,
+.crosshair-lines.inner .line.bottom {
+  width: calc(var(--ch-inner-thickness) * 1px);
+  height: calc(var(--ch-inner-length) * 1px);
   left: 50%;
   transform: translateX(-50%);
 }
 
-.sniper-hip-lines .line.left,
-.sniper-hip-lines .line.right {
-  width: clamp(8px, 0.74vw, 14px);
-  height: clamp(2px, 0.16vw, 3px);
+.crosshair-lines.inner .line.left,
+.crosshair-lines.inner .line.right {
+  width: calc(var(--ch-inner-length) * 1px);
+  height: calc(var(--ch-inner-thickness) * 1px);
   top: 50%;
   transform: translateY(-50%);
 }
 
-.sniper-hip-lines .line.top {
-  top: calc(clamp(6px, 0.55vw, 10px) * -1 - clamp(8px, 0.72vw, 13px));
+.crosshair-lines.inner .line.top {
+  top: calc(var(--ch-inner-gap) * -1px - var(--ch-inner-length) * 1px);
 }
 
-.sniper-hip-lines .line.bottom {
-  top: clamp(6px, 0.55vw, 10px);
+.crosshair-lines.inner .line.bottom {
+  top: calc(var(--ch-inner-gap) * 1px);
 }
 
-.sniper-hip-lines .line.left {
-  left: calc(clamp(6px, 0.55vw, 10px) * -1 - clamp(8px, 0.74vw, 14px));
+.crosshair-lines.inner .line.left {
+  left: calc(var(--ch-inner-gap) * -1px - var(--ch-inner-length) * 1px);
 }
 
-.sniper-hip-lines .line.right {
-  left: clamp(6px, 0.55vw, 10px);
+.crosshair-lines.inner .line.right {
+  left: calc(var(--ch-inner-gap) * 1px);
+}
+
+.crosshair-lines.outer .line.top,
+.crosshair-lines.outer .line.bottom {
+  width: calc(var(--ch-outer-thickness) * 1px);
+  height: calc(var(--ch-outer-length) * 1px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.crosshair-lines.outer .line.left,
+.crosshair-lines.outer .line.right {
+  width: calc(var(--ch-outer-length) * 1px);
+  height: calc(var(--ch-outer-thickness) * 1px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.crosshair-lines.outer .line.top {
+  top: calc(var(--ch-outer-gap) * -1px - var(--ch-outer-length) * 1px);
+}
+
+.crosshair-lines.outer .line.bottom {
+  top: calc(var(--ch-outer-gap) * 1px);
+}
+
+.crosshair-lines.outer .line.left {
+  left: calc(var(--ch-outer-gap) * -1px - var(--ch-outer-length) * 1px);
+}
+
+.crosshair-lines.outer .line.right {
+  left: calc(var(--ch-outer-gap) * 1px);
 }
 
 .crosshair-progress {
@@ -456,7 +518,7 @@ code {
   transition: opacity 100ms ease;
 }
 
-.crosshair.sniper-hip.rechambering .crosshair-progress.active {
+.crosshair.rechambering .crosshair-progress.active {
   opacity: 1;
 }
 
@@ -464,6 +526,11 @@ code {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  --ads-dot-size: 5;
+  --ads-dot-color: #ff374e;
+  --ch-outline-enabled: 1;
+  --ch-outline-thickness: 1;
+  --ch-outline-opacity: 0.85;
 }
 
 .rifle-ads-ring {
@@ -484,14 +551,15 @@ code {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: clamp(4px, 0.38vw, 6px);
-  height: clamp(4px, 0.38vw, 6px);
+  width: calc(var(--ads-dot-size) * 1px);
+  height: calc(var(--ads-dot-size) * 1px);
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: #ff374e;
+  background: var(--ads-dot-color);
   box-shadow:
-    0 0 0 1px rgba(18, 8, 8, 0.9),
-    0 0 10px rgba(255, 55, 78, 0.7);
+    0 0 0 calc(var(--ch-outline-enabled) * var(--ch-outline-thickness) * 1px)
+      rgba(0, 0, 0, var(--ch-outline-opacity)),
+    0 0 10px color-mix(in srgb, var(--ads-dot-color) 66%, transparent);
 }
 
 .sniper-scope-overlay {
@@ -499,6 +567,8 @@ code {
   inset: 0;
   pointer-events: none;
   --scope-size: min(76vh, 76vw);
+  --scope-dot-size: 6;
+  --scope-dot-color: #ff455a;
 }
 
 .scope-outside {
@@ -565,12 +635,15 @@ code {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: clamp(4px, 0.4vw, 7px);
-  height: clamp(4px, 0.4vw, 7px);
+  width: calc(var(--scope-dot-size) * 1px);
+  height: calc(var(--scope-dot-size) * 1px);
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: #ff455a;
-  box-shadow: 0 0 8px rgba(255, 69, 90, 0.65);
+  background: var(--scope-dot-color);
+  box-shadow:
+    0 0 0 calc(var(--ch-outline-enabled) * var(--ch-outline-thickness) * 1px)
+      rgba(0, 0, 0, var(--ch-outline-opacity)),
+    0 0 8px color-mix(in srgb, var(--scope-dot-color) 64%, transparent);
 }
 
 .scope-hash {
@@ -1290,6 +1363,50 @@ code {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.color-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.color-chip {
+  pointer-events: auto;
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.86);
+  padding: 6px 8px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.color-chip:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.color-chip.active {
+  border-color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.color-chip-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.62);
 }
 
 .pill-chip {

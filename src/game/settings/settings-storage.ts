@@ -2,8 +2,12 @@ import { type AudioVolumeSettings, DEFAULT_AUDIO_VOLUMES } from "../Audio";
 import {
   DEFAULT_AIM_SENSITIVITY_SETTINGS,
   DEFAULT_CONTROL_BINDINGS,
+  DEFAULT_CROSSHAIR_SETTINGS,
+  DEFAULT_ENEMY_OUTLINE_SETTINGS,
   DEFAULT_HUD_OVERLAY_TOGGLES,
   DEFAULT_WEAPON_ALIGNMENT,
+  type CrosshairColor,
+  type EnemyOutlineColor,
   type GameSettings,
   type HudOverlayToggles,
   type PixelRatioScale,
@@ -14,6 +18,39 @@ import { PIXEL_RATIO_OPTIONS, STRESS_STEPS } from "./settings-constants";
 const LEGACY_SETTINGS_STORAGE_KEY = "zerohour.settings.v1";
 export const SETTINGS_STORAGE_KEY = "greytrace.settings.v1";
 
+function cloneDefaultCrosshairSettings() {
+  return {
+    ...DEFAULT_CROSSHAIR_SETTINGS,
+    centerDot: { ...DEFAULT_CROSSHAIR_SETTINGS.centerDot },
+    innerLines: { ...DEFAULT_CROSSHAIR_SETTINGS.innerLines },
+    outerLines: { ...DEFAULT_CROSSHAIR_SETTINGS.outerLines },
+    outline: { ...DEFAULT_CROSSHAIR_SETTINGS.outline },
+    dynamic: { ...DEFAULT_CROSSHAIR_SETTINGS.dynamic },
+    weaponModifiers: { ...DEFAULT_CROSSHAIR_SETTINGS.weaponModifiers },
+    ads: { ...DEFAULT_CROSSHAIR_SETTINGS.ads },
+  };
+}
+
+function cloneDefaultEnemyOutlineSettings() {
+  return { ...DEFAULT_ENEMY_OUTLINE_SETTINGS };
+}
+
+const CROSSHAIR_COLORS: CrosshairColor[] = [
+  "white",
+  "green",
+  "red",
+  "yellow",
+  "cyan",
+  "magenta",
+];
+
+const ENEMY_OUTLINE_COLORS: EnemyOutlineColor[] = [
+  "red",
+  "yellow",
+  "cyan",
+  "magenta",
+];
+
 export const DEFAULT_GAME_SETTINGS: GameSettings = {
   shadows: false,
   pixelRatioScale: 0.75,
@@ -22,6 +59,8 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   keybinds: { ...DEFAULT_CONTROL_BINDINGS },
   fov: 45,
   weaponAlignment: { ...DEFAULT_WEAPON_ALIGNMENT },
+  crosshair: cloneDefaultCrosshairSettings(),
+  enemyOutline: cloneDefaultEnemyOutlineSettings(),
 };
 
 export type PersistedSettings = {
@@ -38,6 +77,8 @@ export function createDefaultPersistedSettings(): PersistedSettings {
       sensitivity: { ...DEFAULT_AIM_SENSITIVITY_SETTINGS },
       keybinds: { ...DEFAULT_CONTROL_BINDINGS },
       weaponAlignment: { ...DEFAULT_WEAPON_ALIGNMENT },
+      crosshair: cloneDefaultCrosshairSettings(),
+      enemyOutline: cloneDefaultEnemyOutlineSettings(),
     },
     hudPanels: { ...DEFAULT_HUD_OVERLAY_TOGGLES },
     stressCount: 0,
@@ -97,6 +138,24 @@ function readStressModeCount(
     : fallback;
 }
 
+function readCrosshairColor(
+  value: unknown,
+  fallback: CrosshairColor,
+): CrosshairColor {
+  return CROSSHAIR_COLORS.includes(value as CrosshairColor)
+    ? (value as CrosshairColor)
+    : fallback;
+}
+
+function readEnemyOutlineColor(
+  value: unknown,
+  fallback: EnemyOutlineColor,
+): EnemyOutlineColor {
+  return ENEMY_OUTLINE_COLORS.includes(value as EnemyOutlineColor)
+    ? (value as EnemyOutlineColor)
+    : fallback;
+}
+
 export function parsePersistedSettings(value: unknown): PersistedSettings {
   const defaults = createDefaultPersistedSettings();
   if (!isRecord(value)) {
@@ -110,6 +169,19 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
   const keybinds = isRecord(settings.keybinds) ? settings.keybinds : {};
   const weaponAlignment = isRecord(settings.weaponAlignment)
     ? settings.weaponAlignment
+    : {};
+  const crosshair = isRecord(settings.crosshair) ? settings.crosshair : {};
+  const centerDot = isRecord(crosshair.centerDot) ? crosshair.centerDot : {};
+  const innerLines = isRecord(crosshair.innerLines) ? crosshair.innerLines : {};
+  const outerLines = isRecord(crosshair.outerLines) ? crosshair.outerLines : {};
+  const crosshairOutline = isRecord(crosshair.outline) ? crosshair.outline : {};
+  const crosshairDynamic = isRecord(crosshair.dynamic) ? crosshair.dynamic : {};
+  const crosshairWeaponModifiers = isRecord(crosshair.weaponModifiers)
+    ? crosshair.weaponModifiers
+    : {};
+  const crosshairAds = isRecord(crosshair.ads) ? crosshair.ads : {};
+  const enemyOutline = isRecord(settings.enemyOutline)
+    ? settings.enemyOutline
     : {};
   const hudPanels = isRecord(value.hudPanels) ? value.hudPanels : {};
   const audioVolumes = isRecord(value.audioVolumes) ? value.audioVolumes : {};
@@ -231,6 +303,190 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
           -Math.PI,
           Math.PI,
           defaults.settings.weaponAlignment.rotZ,
+        ),
+      },
+      crosshair: {
+        color: readCrosshairColor(
+          crosshair.color,
+          defaults.settings.crosshair.color,
+        ),
+        centerDot: {
+          enabled: readBoolean(
+            centerDot.enabled,
+            defaults.settings.crosshair.centerDot.enabled,
+          ),
+          size: readClampedNumber(
+            centerDot.size,
+            1,
+            18,
+            defaults.settings.crosshair.centerDot.size,
+          ),
+          thickness: readClampedNumber(
+            centerDot.thickness,
+            1,
+            12,
+            defaults.settings.crosshair.centerDot.thickness,
+          ),
+        },
+        innerLines: {
+          enabled: readBoolean(
+            innerLines.enabled,
+            defaults.settings.crosshair.innerLines.enabled,
+          ),
+          length: readClampedNumber(
+            innerLines.length,
+            1,
+            28,
+            defaults.settings.crosshair.innerLines.length,
+          ),
+          thickness: readClampedNumber(
+            innerLines.thickness,
+            1,
+            10,
+            defaults.settings.crosshair.innerLines.thickness,
+          ),
+          gap: readClampedNumber(
+            innerLines.gap,
+            0,
+            28,
+            defaults.settings.crosshair.innerLines.gap,
+          ),
+        },
+        outerLines: {
+          enabled: readBoolean(
+            outerLines.enabled,
+            defaults.settings.crosshair.outerLines.enabled,
+          ),
+          length: readClampedNumber(
+            outerLines.length,
+            1,
+            28,
+            defaults.settings.crosshair.outerLines.length,
+          ),
+          thickness: readClampedNumber(
+            outerLines.thickness,
+            1,
+            10,
+            defaults.settings.crosshair.outerLines.thickness,
+          ),
+          gap: readClampedNumber(
+            outerLines.gap,
+            0,
+            36,
+            defaults.settings.crosshair.outerLines.gap,
+          ),
+        },
+        outline: {
+          enabled: readBoolean(
+            crosshairOutline.enabled,
+            defaults.settings.crosshair.outline.enabled,
+          ),
+          thickness: readClampedNumber(
+            crosshairOutline.thickness,
+            0,
+            4,
+            defaults.settings.crosshair.outline.thickness,
+          ),
+          opacity: readClampedNumber(
+            crosshairOutline.opacity,
+            0,
+            1,
+            defaults.settings.crosshair.outline.opacity,
+          ),
+        },
+        dynamic: {
+          enabled: readBoolean(
+            crosshairDynamic.enabled,
+            defaults.settings.crosshair.dynamic.enabled,
+          ),
+          idleSpread: readClampedNumber(
+            crosshairDynamic.idleSpread,
+            0,
+            16,
+            defaults.settings.crosshair.dynamic.idleSpread,
+          ),
+          walkSpread: readClampedNumber(
+            crosshairDynamic.walkSpread,
+            0,
+            20,
+            defaults.settings.crosshair.dynamic.walkSpread,
+          ),
+          runSpread: readClampedNumber(
+            crosshairDynamic.runSpread,
+            0,
+            28,
+            defaults.settings.crosshair.dynamic.runSpread,
+          ),
+          shotKick: readClampedNumber(
+            crosshairDynamic.shotKick,
+            0,
+            8,
+            defaults.settings.crosshair.dynamic.shotKick,
+          ),
+          recoveryPerSecond: readClampedNumber(
+            crosshairDynamic.recoveryPerSecond,
+            1,
+            60,
+            defaults.settings.crosshair.dynamic.recoveryPerSecond,
+          ),
+        },
+        weaponModifiers: {
+          rifleGapMultiplier: readClampedNumber(
+            crosshairWeaponModifiers.rifleGapMultiplier,
+            0.5,
+            2,
+            defaults.settings.crosshair.weaponModifiers.rifleGapMultiplier,
+          ),
+          sniperGapMultiplier: readClampedNumber(
+            crosshairWeaponModifiers.sniperGapMultiplier,
+            0.5,
+            2,
+            defaults.settings.crosshair.weaponModifiers.sniperGapMultiplier,
+          ),
+        },
+        ads: {
+          rifleDotSize: readClampedNumber(
+            crosshairAds.rifleDotSize,
+            1,
+            16,
+            defaults.settings.crosshair.ads.rifleDotSize,
+          ),
+          rifleDotColor: readCrosshairColor(
+            crosshairAds.rifleDotColor,
+            defaults.settings.crosshair.ads.rifleDotColor,
+          ),
+          sniperDotSize: readClampedNumber(
+            crosshairAds.sniperDotSize,
+            1,
+            18,
+            defaults.settings.crosshair.ads.sniperDotSize,
+          ),
+          sniperDotColor: readCrosshairColor(
+            crosshairAds.sniperDotColor,
+            defaults.settings.crosshair.ads.sniperDotColor,
+          ),
+        },
+      },
+      enemyOutline: {
+        enabled: readBoolean(
+          enemyOutline.enabled,
+          defaults.settings.enemyOutline.enabled,
+        ),
+        color: readEnemyOutlineColor(
+          enemyOutline.color,
+          defaults.settings.enemyOutline.color,
+        ),
+        thickness: readClampedNumber(
+          enemyOutline.thickness,
+          0,
+          8,
+          defaults.settings.enemyOutline.thickness,
+        ),
+        opacity: readClampedNumber(
+          enemyOutline.opacity,
+          0,
+          1,
+          defaults.settings.enemyOutline.opacity,
         ),
       },
     },

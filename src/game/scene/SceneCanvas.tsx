@@ -32,6 +32,7 @@ import {
   type GameplayRuntimeHandle,
   type HitMarkerKind,
   type AimingState,
+  type ShotFiredState,
 } from "./GameplayRuntime";
 import { MapEnvironment, StressBoxes } from "./MapEnvironment";
 import {
@@ -42,7 +43,7 @@ import {
   WORLD_BOUNDS,
 } from "./scene-constants";
 
-export type { HitMarkerKind, AimingState };
+export type { HitMarkerKind, AimingState, ShotFiredState };
 
 const VOID_BG = new THREE.Color("#0a1628");
 const LIVE_BG = new THREE.Color("#b8d4e8");
@@ -79,6 +80,7 @@ type SceneProps = {
   onPlayerSnapshot: (snapshot: PlayerSnapshot) => void;
   onPerfMetrics: (metrics: PerfMetrics) => void;
   onHitMarker: (kind: HitMarkerKind) => void;
+  onShotFired: (state: ShotFiredState) => void;
   onWeaponEquippedChange: (equipped: boolean) => void;
   onActiveWeaponChange: (weapon: WeaponKind) => void;
   onSniperRechamberChange: (state: SniperRechamberState) => void;
@@ -159,6 +161,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
   onPlayerSnapshot,
   onPerfMetrics,
   onHitMarker,
+  onShotFired,
   onWeaponEquippedChange,
   onActiveWeaponChange,
   onSniperRechamberChange,
@@ -339,6 +342,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
         targets={targets}
         shadows={settings.shadows && worldTheme > 0.6}
         reveal={presentation.targetReveal}
+        outline={settings.enemyOutline}
         onReadyChange={setTargetAssetsReady}
       />
       <StressBoxes count={stressCount} shadows={settings.shadows} />
@@ -358,6 +362,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
         onPlayerSnapshot={onPlayerSnapshot}
         onPerfMetrics={onPerfMetrics}
         onHitMarker={onHitMarker}
+        onShotFired={onShotFired}
         onWeaponEquippedChange={onWeaponEquippedChange}
         onActiveWeaponChange={onActiveWeaponChange}
         onSniperRechamberChange={onSniperRechamberChange}

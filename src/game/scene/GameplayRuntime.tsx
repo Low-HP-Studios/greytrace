@@ -80,6 +80,12 @@ export type AimingState = {
   firstPerson: boolean;
 };
 
+export type ShotFiredState = {
+  weaponType: WeaponKind;
+  shotCount: number;
+  nowMs: number;
+};
+
 export type GameplayRuntimeHandle = {
   requestPointerLock: () => void;
   releasePointerLock: () => void;
@@ -102,6 +108,7 @@ type GameplayRuntimeProps = {
   onPlayerSnapshot: (snapshot: PlayerSnapshot) => void;
   onPerfMetrics: (metrics: PerfMetrics) => void;
   onHitMarker: (kind: HitMarkerKind) => void;
+  onShotFired: (state: ShotFiredState) => void;
   onWeaponEquippedChange: (equipped: boolean) => void;
   onActiveWeaponChange: (weapon: WeaponKind) => void;
   onSniperRechamberChange: (state: SniperRechamberState) => void;
@@ -389,6 +396,7 @@ export const GameplayRuntime = forwardRef<
   onPlayerSnapshot,
   onPerfMetrics,
   onHitMarker,
+  onShotFired,
   onWeaponEquippedChange,
   onActiveWeaponChange,
   onSniperRechamberChange,
@@ -435,6 +443,7 @@ export const GameplayRuntime = forwardRef<
   const targetHitCallbackRef = useRef(onTargetHit);
   const resetTargetsCallbackRef = useRef(onResetTargets);
   const hitMarkerCallbackRef = useRef(onHitMarker);
+  const shotFiredCallbackRef = useRef(onShotFired);
   const weaponEquippedCallbackRef = useRef(onWeaponEquippedChange);
   const activeWeaponCallbackRef = useRef(onActiveWeaponChange);
   const sniperRechamberCallbackRef = useRef(onSniperRechamberChange);
@@ -529,6 +538,10 @@ export const GameplayRuntime = forwardRef<
   useEffect(() => {
     hitMarkerCallbackRef.current = onHitMarker;
   }, [onHitMarker]);
+
+  useEffect(() => {
+    shotFiredCallbackRef.current = onShotFired;
+  }, [onShotFired]);
 
   useEffect(() => {
     weaponEquippedCallbackRef.current = onWeaponEquippedChange;
@@ -1072,6 +1085,11 @@ export const GameplayRuntime = forwardRef<
     }
 
     for (const shot of shots) {
+      shotFiredCallbackRef.current({
+        weaponType: shot.weaponType,
+        shotCount: shot.shotIndex + 1,
+        nowMs,
+      });
       audio.playGunshot(shot.weaponType);
       if (shot.recoilPitchRadians !== 0 || shot.recoilYawRadians !== 0) {
         controller.addRecoil(shot.recoilPitchRadians, shot.recoilYawRadians);

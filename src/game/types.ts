@@ -87,6 +87,125 @@ export const DEFAULT_WEAPON_ALIGNMENT: WeaponAlignmentOffset = {
   rotZ: -1.23,
 };
 
+export type CrosshairColor =
+  | "white"
+  | "green"
+  | "red"
+  | "yellow"
+  | "cyan"
+  | "magenta";
+
+export type CrosshairCenterDotSettings = {
+  enabled: boolean;
+  size: number;
+  thickness: number;
+};
+
+export type CrosshairLineSettings = {
+  enabled: boolean;
+  length: number;
+  thickness: number;
+  gap: number;
+};
+
+export type CrosshairOutlineSettings = {
+  enabled: boolean;
+  thickness: number;
+  opacity: number;
+};
+
+export type CrosshairDynamicSettings = {
+  enabled: boolean;
+  idleSpread: number;
+  walkSpread: number;
+  runSpread: number;
+  shotKick: number;
+  recoveryPerSecond: number;
+};
+
+export type CrosshairWeaponModifierSettings = {
+  rifleGapMultiplier: number;
+  sniperGapMultiplier: number;
+};
+
+export type CrosshairAdsSettings = {
+  rifleDotSize: number;
+  rifleDotColor: CrosshairColor;
+  sniperDotSize: number;
+  sniperDotColor: CrosshairColor;
+};
+
+export type CrosshairSettings = {
+  color: CrosshairColor;
+  centerDot: CrosshairCenterDotSettings;
+  innerLines: CrosshairLineSettings;
+  outerLines: CrosshairLineSettings;
+  outline: CrosshairOutlineSettings;
+  dynamic: CrosshairDynamicSettings;
+  weaponModifiers: CrosshairWeaponModifierSettings;
+  ads: CrosshairAdsSettings;
+};
+
+export const DEFAULT_CROSSHAIR_SETTINGS: CrosshairSettings = {
+  color: "white",
+  centerDot: {
+    enabled: true,
+    size: 4,
+    thickness: 3,
+  },
+  innerLines: {
+    enabled: true,
+    length: 9,
+    thickness: 2,
+    gap: 6,
+  },
+  outerLines: {
+    enabled: false,
+    length: 7,
+    thickness: 2,
+    gap: 13,
+  },
+  outline: {
+    enabled: true,
+    thickness: 1,
+    opacity: 0.85,
+  },
+  dynamic: {
+    enabled: true,
+    idleSpread: 0,
+    walkSpread: 2.2,
+    runSpread: 5.2,
+    shotKick: 1.4,
+    recoveryPerSecond: 12,
+  },
+  weaponModifiers: {
+    rifleGapMultiplier: 1,
+    sniperGapMultiplier: 1.25,
+  },
+  ads: {
+    rifleDotSize: 5,
+    rifleDotColor: "red",
+    sniperDotSize: 6,
+    sniperDotColor: "red",
+  },
+};
+
+export type EnemyOutlineColor = "red" | "yellow" | "cyan" | "magenta";
+
+export type EnemyOutlineSettings = {
+  enabled: boolean;
+  color: EnemyOutlineColor;
+  thickness: number;
+  opacity: number;
+};
+
+export const DEFAULT_ENEMY_OUTLINE_SETTINGS: EnemyOutlineSettings = {
+  enabled: true,
+  color: "red",
+  thickness: 3,
+  opacity: 0.88,
+};
+
 export type GameSettings = {
   shadows: boolean;
   pixelRatioScale: PixelRatioScale;
@@ -95,6 +214,8 @@ export type GameSettings = {
   keybinds: ControlBindings;
   fov: number;
   weaponAlignment: WeaponAlignmentOffset;
+  crosshair: CrosshairSettings;
+  enemyOutline: EnemyOutlineSettings;
 };
 
 export type PerfMetrics = {

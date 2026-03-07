@@ -14,6 +14,7 @@ import {
   type AimingState,
   type HitMarkerKind,
   type SceneHandle,
+  type ShotFiredState,
   Scene,
 } from "./scene/SceneCanvas";
 import {
@@ -30,6 +31,8 @@ import {
   DEFAULT_PERF_METRICS,
   DEFAULT_PLAYER_SNAPSHOT,
   DEFAULT_WEAPON_ALIGNMENT,
+  type CrosshairColor,
+  type EnemyOutlineColor,
   type ExperiencePhase,
   type GameSettings,
   type HudOverlayToggles,
@@ -64,6 +67,45 @@ const CHECKING_UPDATE_TOAST_ID = "greytrace-updater-checking";
 const UPDATE_AVAILABLE_TOAST_ID = "greytrace-updater-available";
 const READY_TO_INSTALL_TOAST_ID = "greytrace-updater-ready";
 const MENU_AUTO_UPDATE_CHECK_COOLDOWN_MS = 30_000;
+const MAX_SHOT_BLOOM = 24;
+
+const CROSSHAIR_COLOR_HEX: Record<CrosshairColor, string> = {
+  white: "#eff7ff",
+  green: "#57f287",
+  red: "#ff5666",
+  yellow: "#ffd45e",
+  cyan: "#53dfff",
+  magenta: "#ff63df",
+};
+
+const ENEMY_OUTLINE_COLOR_HEX: Record<EnemyOutlineColor, string> = {
+  red: "#ff4d4d",
+  yellow: "#facc15",
+  cyan: "#38d9ff",
+  magenta: "#ff4dc4",
+};
+
+const CROSSHAIR_COLOR_OPTIONS: Array<{
+  id: CrosshairColor;
+  label: string;
+}> = [
+  { id: "white", label: "White" },
+  { id: "green", label: "Green" },
+  { id: "red", label: "Red" },
+  { id: "yellow", label: "Yellow" },
+  { id: "cyan", label: "Cyan" },
+  { id: "magenta", label: "Magenta" },
+];
+
+const ENEMY_OUTLINE_COLOR_OPTIONS: Array<{
+  id: EnemyOutlineColor;
+  label: string;
+}> = [
+  { id: "red", label: "Red" },
+  { id: "yellow", label: "Yellow" },
+  { id: "cyan", label: "Cyan" },
+  { id: "magenta", label: "Magenta" },
+];
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
@@ -167,6 +209,10 @@ export function GameRoot({
     until: 0,
     kind: "body",
   });
+  const [shotBloom, setShotBloom] = useState(0);
+  const shotBloomRef = useRef(0);
+  const shotBloomFrameRef = useRef<number | null>(null);
+  const shotBloomLastTimeRef = useRef(0);
   const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatusPayload>(
     DEFAULT_UPDATER_STATUS,
   );
@@ -352,6 +398,25 @@ export function GameRoot({
       setKillPulseToken((previous) => previous + 1);
     }
   }, [phase]);
+
+  const handleShotFired = useCallback((state: ShotFiredState) => {
+    if (phase !== "playing") {
+      return;
+    }
+    if (!settings.crosshair.dynamic.enabled) {
+      return;
+    }
+    const kick = settings.crosshair.dynamic.shotKick;
+    if (kick <= 0) {
+      return;
+    }
+    setShotBloom((previous) => {
+      const next = Math.min(MAX_SHOT_BLOOM, previous + kick);
+      shotBloomRef.current = next;
+      return next;
+    });
+    shotBloomLastTimeRef.current = state.nowMs;
+  }, [phase, settings.crosshair.dynamic.enabled, settings.crosshair.dynamic.shotKick]);
 
   useEffect(() => {
     if (!updaterApi) {
@@ -613,8 +678,64 @@ export function GameRoot({
   useEffect(() => {
     if (phase !== "playing") {
       setHitMarker({ until: 0, kind: "body" });
+      shotBloomRef.current = 0;
+      setShotBloom(0);
     }
   }, [phase]);
+
+  useEffect(() => {
+    shotBloomRef.current = shotBloom;
+  }, [shotBloom]);
+
+  useEffect(() => {
+    if (settings.crosshair.dynamic.enabled) {
+      return;
+    }
+    if (shotBloomRef.current !== 0) {
+      shotBloomRef.current = 0;
+      setShotBloom(0);
+    }
+  }, [settings.crosshair.dynamic.enabled]);
+
+  useEffect(() => {
+    if (phase !== "playing" || isPaused) {
+      if (shotBloomFrameRef.current !== null) {
+        window.cancelAnimationFrame(shotBloomFrameRef.current);
+        shotBloomFrameRef.current = null;
+      }
+      if (shotBloomRef.current !== 0) {
+        shotBloomRef.current = 0;
+        setShotBloom(0);
+      }
+      return;
+    }
+
+    shotBloomLastTimeRef.current = performance.now();
+    const tick = (now: number) => {
+      const previous = shotBloomRef.current;
+      const dt = Math.min(0.06, Math.max(0, (now - shotBloomLastTimeRef.current) / 1000));
+      shotBloomLastTimeRef.current = now;
+      if (previous > 0.0001) {
+        const recoveryPerSecond = settings.crosshair.dynamic.enabled
+          ? settings.crosshair.dynamic.recoveryPerSecond
+          : 120;
+        const next = Math.max(0, previous - recoveryPerSecond * dt);
+        if (Math.abs(next - previous) > 0.0001) {
+          shotBloomRef.current = next;
+          setShotBloom(next);
+        }
+      }
+      shotBloomFrameRef.current = window.requestAnimationFrame(tick);
+    };
+
+    shotBloomFrameRef.current = window.requestAnimationFrame(tick);
+    return () => {
+      if (shotBloomFrameRef.current !== null) {
+        window.cancelAnimationFrame(shotBloomFrameRef.current);
+        shotBloomFrameRef.current = null;
+      }
+    };
+  }, [isPaused, phase, settings.crosshair.dynamic.enabled, settings.crosshair.dynamic.recoveryPerSecond]);
 
   const scenePresentation = useMemo<ScenePresentation>(() => {
     const progress = clamp01(phaseProgress);
@@ -676,12 +797,58 @@ export function GameRoot({
   const lockLabel = player.pointerLocked
     ? "Live look mode"
     : "Paused / cursor shown";
-  const crosshairStyle =
-    activeWeapon === "sniper" && (sniperRechamber.active || sniperScopeActive)
-      ? ({
-        ["--sniper-cycle-progress" as string]: `${sniperRechamber.progress}`,
-      } as CSSProperties)
-      : undefined;
+  const movementSpread = !settings.crosshair.dynamic.enabled
+    ? 0
+    : player.grounded && player.moving
+    ? player.sprinting
+      ? settings.crosshair.dynamic.runSpread
+      : settings.crosshair.dynamic.walkSpread
+    : settings.crosshair.dynamic.idleSpread;
+  const weaponSpreadMultiplier = activeWeapon === "sniper"
+    ? settings.crosshair.weaponModifiers.sniperGapMultiplier
+    : settings.crosshair.weaponModifiers.rifleGapMultiplier;
+  const spreadOffset = (settings.crosshair.dynamic.enabled
+    ? movementSpread + shotBloom
+    : 0) * weaponSpreadMultiplier;
+  const innerGap = settings.crosshair.innerLines.gap + spreadOffset;
+  const outerGap = settings.crosshair.outerLines.gap + spreadOffset * 1.15;
+  const crosshairStyle = ({
+    ["--ch-color" as string]: CROSSHAIR_COLOR_HEX[settings.crosshair.color],
+    ["--ch-outline-enabled" as string]: settings.crosshair.outline.enabled
+      ? "1"
+      : "0",
+    ["--ch-outline-thickness" as string]: `${settings.crosshair.outline.thickness}`,
+    ["--ch-outline-opacity" as string]: `${settings.crosshair.outline.opacity}`,
+    ["--ch-center-size" as string]: `${settings.crosshair.centerDot.size}`,
+    ["--ch-center-thickness" as string]: `${settings.crosshair.centerDot.thickness}`,
+    ["--ch-inner-length" as string]: `${settings.crosshair.innerLines.length}`,
+    ["--ch-inner-thickness" as string]: `${settings.crosshair.innerLines.thickness}`,
+    ["--ch-inner-gap" as string]: `${innerGap}`,
+    ["--ch-outer-length" as string]: `${settings.crosshair.outerLines.length}`,
+    ["--ch-outer-thickness" as string]: `${settings.crosshair.outerLines.thickness}`,
+    ["--ch-outer-gap" as string]: `${outerGap}`,
+    ["--sniper-cycle-progress" as string]: `${
+      activeWeapon === "sniper" && (sniperRechamber.active || sniperScopeActive)
+        ? sniperRechamber.progress
+        : 1
+    }`,
+  } as CSSProperties);
+  const rifleAdsStyle = ({
+    ["--ads-dot-size" as string]: `${settings.crosshair.ads.rifleDotSize}`,
+    ["--ads-dot-color" as string]:
+      CROSSHAIR_COLOR_HEX[settings.crosshair.ads.rifleDotColor],
+    ["--ch-outline-enabled" as string]: settings.crosshair.outline.enabled
+      ? "1"
+      : "0",
+    ["--ch-outline-thickness" as string]: `${settings.crosshair.outline.thickness}`,
+    ["--ch-outline-opacity" as string]: `${settings.crosshair.outline.opacity}`,
+  } as CSSProperties);
+  const sniperScopeStyle = ({
+    ...crosshairStyle,
+    ["--scope-dot-size" as string]: `${settings.crosshair.ads.sniperDotSize}`,
+    ["--scope-dot-color" as string]:
+      CROSSHAIR_COLOR_HEX[settings.crosshair.ads.sniperDotColor],
+  } as CSSProperties);
 
   const playerSummary = useMemo(() => {
     return {
@@ -756,6 +923,7 @@ export function GameRoot({
         onPerfMetrics={setPerfMetrics}
         onPlayerSnapshot={setPlayer}
         onHitMarker={handleHitMarker}
+        onShotFired={handleShotFired}
         onWeaponEquippedChange={setWeaponEquipped}
         onActiveWeaponChange={setActiveWeapon}
         onSniperRechamberChange={setSniperRechamber}
@@ -842,17 +1010,33 @@ export function GameRoot({
             ? (
               <div
                 className={`crosshair ${
-                  activeWeapon === "sniper" ? "sniper-hip" : "rifle"
-                } ${
                   activeWeapon === "sniper" && sniperRechamber.active
                     ? "rechambering"
                     : ""
                 }`}
                 style={crosshairStyle}
               >
-                {activeWeapon === "sniper"
+                {settings.crosshair.centerDot.enabled
                   ? (
-                    <div className="sniper-hip-lines" aria-hidden="true">
+                    <div className="crosshair-center" aria-hidden="true">
+                      <span className="crosshair-center-line horizontal" />
+                      <span className="crosshair-center-line vertical" />
+                    </div>
+                  )
+                  : null}
+                {settings.crosshair.innerLines.enabled
+                  ? (
+                    <div className="crosshair-lines inner" aria-hidden="true">
+                      <span className="line top" />
+                      <span className="line right" />
+                      <span className="line bottom" />
+                      <span className="line left" />
+                    </div>
+                  )
+                  : null}
+                {settings.crosshair.outerLines.enabled
+                  ? (
+                    <div className="crosshair-lines outer" aria-hidden="true">
                       <span className="line top" />
                       <span className="line right" />
                       <span className="line bottom" />
@@ -874,7 +1058,7 @@ export function GameRoot({
             : null}
           {gameplayHudVisible && rifleScopeActive
             ? (
-              <div className="rifle-ads-overlay">
+              <div className="rifle-ads-overlay" style={rifleAdsStyle}>
                 <div className="rifle-ads-ring" />
                 <div className="rifle-ads-dot" />
               </div>
@@ -882,7 +1066,7 @@ export function GameRoot({
             : null}
           {gameplayHudVisible && sniperScopeActive
             ? (
-              <div className="sniper-scope-overlay" style={crosshairStyle}>
+              <div className="sniper-scope-overlay" style={sniperScopeStyle}>
                 <div className="scope-outside" />
                 <div className="scope-lens">
                   <div className="scope-reticle">
@@ -1648,7 +1832,7 @@ export function GameRoot({
                         <div className="menu-sections">
                           <MenuSection
                             title="Overlay Panels"
-                            blurb="Toggle the old debug panels individually. Default preset is perf-only."
+                            blurb="Toggle corner debug panels independently."
                           >
                             {OVERLAY_ROWS.map((row) => (
                               <SwitchRow
@@ -1663,11 +1847,664 @@ export function GameRoot({
                                   }))}
                               />
                             ))}
-                            <p className="muted compact-note">
-                              Crosshair and hit markers stay visible during
-                              gameplay. This tab only controls the corner
-                              panels.
-                            </p>
+                          </MenuSection>
+
+                          <MenuSection
+                            title="Crosshair"
+                            blurb="Valorant-style base profile with weapon modifiers."
+                          >
+                            <div className="field-row">
+                              <div>
+                                <div className="field-label">Primary Color</div>
+                                <div className="field-hint">
+                                  Applies to center, inner, and outer lines
+                                </div>
+                              </div>
+                              <div className="color-chip-row">
+                                {CROSSHAIR_COLOR_OPTIONS.map((option) => (
+                                  <button
+                                    key={option.id}
+                                    type="button"
+                                    className={`color-chip ${
+                                      settings.crosshair.color === option.id
+                                        ? "active"
+                                        : ""
+                                    }`}
+                                    onClick={() =>
+                                      setSettings((prev) => ({
+                                        ...prev,
+                                        crosshair: {
+                                          ...prev.crosshair,
+                                          color: option.id,
+                                        },
+                                      }))}
+                                  >
+                                    <span
+                                      className="color-chip-swatch"
+                                      style={{
+                                        backgroundColor:
+                                          CROSSHAIR_COLOR_HEX[option.id],
+                                      }}
+                                    />
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <SwitchRow
+                              label="Center Dot"
+                              hint="Enable center mark"
+                              checked={settings.crosshair.centerDot.enabled}
+                              onChange={(checked) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    centerDot: {
+                                      ...prev.crosshair.centerDot,
+                                      enabled: checked,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Center Size"
+                              value={settings.crosshair.centerDot.size}
+                              min={1}
+                              max={18}
+                              step={0.5}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    centerDot: {
+                                      ...prev.crosshair.centerDot,
+                                      size: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Center Thickness"
+                              value={settings.crosshair.centerDot.thickness}
+                              min={1}
+                              max={12}
+                              step={0.5}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    centerDot: {
+                                      ...prev.crosshair.centerDot,
+                                      thickness: value,
+                                    },
+                                  },
+                                }))}
+                            />
+
+                            <SwitchRow
+                              label="Inner Lines"
+                              hint="Main four lines around center"
+                              checked={settings.crosshair.innerLines.enabled}
+                              onChange={(checked) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    innerLines: {
+                                      ...prev.crosshair.innerLines,
+                                      enabled: checked,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Inner Length"
+                              value={settings.crosshair.innerLines.length}
+                              min={1}
+                              max={28}
+                              step={0.5}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    innerLines: {
+                                      ...prev.crosshair.innerLines,
+                                      length: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Inner Thickness"
+                              value={settings.crosshair.innerLines.thickness}
+                              min={1}
+                              max={10}
+                              step={0.5}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    innerLines: {
+                                      ...prev.crosshair.innerLines,
+                                      thickness: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Inner Gap"
+                              value={settings.crosshair.innerLines.gap}
+                              min={0}
+                              max={28}
+                              step={0.5}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    innerLines: {
+                                      ...prev.crosshair.innerLines,
+                                      gap: value,
+                                    },
+                                  },
+                                }))}
+                            />
+
+                            <SwitchRow
+                              label="Outer Lines"
+                              hint="Secondary line ring"
+                              checked={settings.crosshair.outerLines.enabled}
+                              onChange={(checked) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    outerLines: {
+                                      ...prev.crosshair.outerLines,
+                                      enabled: checked,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Outer Length"
+                              value={settings.crosshair.outerLines.length}
+                              min={1}
+                              max={28}
+                              step={0.5}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    outerLines: {
+                                      ...prev.crosshair.outerLines,
+                                      length: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Outer Thickness"
+                              value={settings.crosshair.outerLines.thickness}
+                              min={1}
+                              max={10}
+                              step={0.5}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    outerLines: {
+                                      ...prev.crosshair.outerLines,
+                                      thickness: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Outer Gap"
+                              value={settings.crosshair.outerLines.gap}
+                              min={0}
+                              max={36}
+                              step={0.5}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    outerLines: {
+                                      ...prev.crosshair.outerLines,
+                                      gap: value,
+                                    },
+                                  },
+                                }))}
+                            />
+
+                            <SwitchRow
+                              label="Black Outline"
+                              hint="Adds contrast behind center + lines"
+                              checked={settings.crosshair.outline.enabled}
+                              onChange={(checked) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    outline: {
+                                      ...prev.crosshair.outline,
+                                      enabled: checked,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Outline Thickness"
+                              value={settings.crosshair.outline.thickness}
+                              min={0}
+                              max={4}
+                              step={0.1}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    outline: {
+                                      ...prev.crosshair.outline,
+                                      thickness: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Outline Opacity"
+                              value={settings.crosshair.outline.opacity}
+                              min={0}
+                              max={1}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    outline: {
+                                      ...prev.crosshair.outline,
+                                      opacity: value,
+                                    },
+                                  },
+                                }))}
+                            />
+
+                            <RangeField
+                              label="Rifle Gap Multiplier"
+                              value={settings.crosshair.weaponModifiers.rifleGapMultiplier}
+                              min={0.5}
+                              max={2}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    weaponModifiers: {
+                                      ...prev.crosshair.weaponModifiers,
+                                      rifleGapMultiplier: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Sniper Gap Multiplier"
+                              value={settings.crosshair.weaponModifiers.sniperGapMultiplier}
+                              min={0.5}
+                              max={2}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    weaponModifiers: {
+                                      ...prev.crosshair.weaponModifiers,
+                                      sniperGapMultiplier: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                          </MenuSection>
+
+                          <MenuSection
+                            title="Dynamic Spread"
+                            blurb="Movement + firing bloom feedback. Visual only."
+                          >
+                            <SwitchRow
+                              label="Dynamic Spread"
+                              hint="Enable idle/walk/run + shot bloom expansion"
+                              checked={settings.crosshair.dynamic.enabled}
+                              onChange={(checked) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    dynamic: {
+                                      ...prev.crosshair.dynamic,
+                                      enabled: checked,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Idle Spread"
+                              value={settings.crosshair.dynamic.idleSpread}
+                              min={0}
+                              max={16}
+                              step={0.1}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    dynamic: {
+                                      ...prev.crosshair.dynamic,
+                                      idleSpread: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Walk Spread"
+                              value={settings.crosshair.dynamic.walkSpread}
+                              min={0}
+                              max={20}
+                              step={0.1}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    dynamic: {
+                                      ...prev.crosshair.dynamic,
+                                      walkSpread: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Run Spread"
+                              value={settings.crosshair.dynamic.runSpread}
+                              min={0}
+                              max={28}
+                              step={0.1}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    dynamic: {
+                                      ...prev.crosshair.dynamic,
+                                      runSpread: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Shot Bloom Kick"
+                              value={settings.crosshair.dynamic.shotKick}
+                              min={0}
+                              max={8}
+                              step={0.1}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    dynamic: {
+                                      ...prev.crosshair.dynamic,
+                                      shotKick: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Bloom Recovery"
+                              value={settings.crosshair.dynamic.recoveryPerSecond}
+                              min={1}
+                              max={60}
+                              step={0.5}
+                              suffix=" /s"
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    dynamic: {
+                                      ...prev.crosshair.dynamic,
+                                      recoveryPerSecond: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                          </MenuSection>
+
+                          <MenuSection
+                            title="ADS Basics"
+                            blurb="Rifle ADS and sniper scope center-dot tuning."
+                          >
+                            <RangeField
+                              label="Rifle Dot Size"
+                              value={settings.crosshair.ads.rifleDotSize}
+                              min={1}
+                              max={16}
+                              step={0.5}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    ads: {
+                                      ...prev.crosshair.ads,
+                                      rifleDotSize: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <div className="field-row">
+                              <div>
+                                <div className="field-label">Rifle Dot Color</div>
+                                <div className="field-hint">
+                                  ADS center indicator
+                                </div>
+                              </div>
+                              <div className="color-chip-row">
+                                {CROSSHAIR_COLOR_OPTIONS.map((option) => (
+                                  <button
+                                    key={`rifle-dot-${option.id}`}
+                                    type="button"
+                                    className={`color-chip ${
+                                      settings.crosshair.ads.rifleDotColor ===
+                                        option.id
+                                        ? "active"
+                                        : ""
+                                    }`}
+                                    onClick={() =>
+                                      setSettings((prev) => ({
+                                        ...prev,
+                                        crosshair: {
+                                          ...prev.crosshair,
+                                          ads: {
+                                            ...prev.crosshair.ads,
+                                            rifleDotColor: option.id,
+                                          },
+                                        },
+                                      }))}
+                                  >
+                                    <span
+                                      className="color-chip-swatch"
+                                      style={{
+                                        backgroundColor:
+                                          CROSSHAIR_COLOR_HEX[option.id],
+                                      }}
+                                    />
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <RangeField
+                              label="Sniper Dot Size"
+                              value={settings.crosshair.ads.sniperDotSize}
+                              min={1}
+                              max={18}
+                              step={0.5}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  crosshair: {
+                                    ...prev.crosshair,
+                                    ads: {
+                                      ...prev.crosshair.ads,
+                                      sniperDotSize: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <div className="field-row">
+                              <div>
+                                <div className="field-label">
+                                  Sniper Dot Color
+                                </div>
+                                <div className="field-hint">
+                                  Scope center marker
+                                </div>
+                              </div>
+                              <div className="color-chip-row">
+                                {CROSSHAIR_COLOR_OPTIONS.map((option) => (
+                                  <button
+                                    key={`sniper-dot-${option.id}`}
+                                    type="button"
+                                    className={`color-chip ${
+                                      settings.crosshair.ads.sniperDotColor ===
+                                        option.id
+                                        ? "active"
+                                        : ""
+                                    }`}
+                                    onClick={() =>
+                                      setSettings((prev) => ({
+                                        ...prev,
+                                        crosshair: {
+                                          ...prev.crosshair,
+                                          ads: {
+                                            ...prev.crosshair.ads,
+                                            sniperDotColor: option.id,
+                                          },
+                                        },
+                                      }))}
+                                  >
+                                    <span
+                                      className="color-chip-swatch"
+                                      style={{
+                                        backgroundColor:
+                                          CROSSHAIR_COLOR_HEX[option.id],
+                                      }}
+                                    />
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </MenuSection>
+
+                          <MenuSection
+                            title="Enemy Visibility"
+                            blurb="Visible-only silhouette outline for bots."
+                          >
+                            <SwitchRow
+                              label="Enemy Outline"
+                              hint="Enable target silhouette"
+                              checked={settings.enemyOutline.enabled}
+                              onChange={(checked) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  enemyOutline: {
+                                    ...prev.enemyOutline,
+                                    enabled: checked,
+                                  },
+                                }))}
+                            />
+                            <div className="field-row">
+                              <div>
+                                <div className="field-label">Outline Color</div>
+                                <div className="field-hint">
+                                  Visible palette for fast acquisition
+                                </div>
+                              </div>
+                              <div className="color-chip-row">
+                                {ENEMY_OUTLINE_COLOR_OPTIONS.map((option) => (
+                                  <button
+                                    key={option.id}
+                                    type="button"
+                                    className={`color-chip ${
+                                      settings.enemyOutline.color === option.id
+                                        ? "active"
+                                        : ""
+                                    }`}
+                                    onClick={() =>
+                                      setSettings((prev) => ({
+                                        ...prev,
+                                        enemyOutline: {
+                                          ...prev.enemyOutline,
+                                          color: option.id,
+                                        },
+                                      }))}
+                                  >
+                                    <span
+                                      className="color-chip-swatch"
+                                      style={{
+                                        backgroundColor:
+                                          ENEMY_OUTLINE_COLOR_HEX[option.id],
+                                      }}
+                                    />
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <RangeField
+                              label="Outline Thickness"
+                              value={settings.enemyOutline.thickness}
+                              min={0}
+                              max={8}
+                              step={0.1}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  enemyOutline: {
+                                    ...prev.enemyOutline,
+                                    thickness: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Outline Opacity"
+                              value={settings.enemyOutline.opacity}
+                              min={0}
+                              max={1}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  enemyOutline: {
+                                    ...prev.enemyOutline,
+                                    opacity: value,
+                                  },
+                                }))}
+                            />
                           </MenuSection>
                         </div>
                       )

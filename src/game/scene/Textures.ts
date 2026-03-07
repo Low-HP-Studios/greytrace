@@ -191,6 +191,71 @@ export function createSandTexture(): THREE.CanvasTexture | null {
   return texture;
 }
 
+export function createGrassTexture(): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return null;
+  }
+
+  const rng = createSeededRandom(45109);
+  const base = ctx.createLinearGradient(0, 0, 0, size);
+  base.addColorStop(0, "#4c8f42");
+  base.addColorStop(0.55, "#3f7f37");
+  base.addColorStop(1, "#2f632d");
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 5200; i += 1) {
+    const x = rng() * size;
+    const y = rng() * size;
+    const width = 0.7 + rng() * 1.6;
+    const height = 1.4 + rng() * 3.8;
+    const alpha = 0.08 + rng() * 0.18;
+    const tone = rng();
+    const r = tone > 0.7 ? 124 : tone > 0.35 ? 100 : 76;
+    const g = tone > 0.7 ? 184 : tone > 0.35 ? 154 : 118;
+    const b = tone > 0.7 ? 88 : tone > 0.35 ? 72 : 50;
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    ctx.fillRect(x, y, width, height);
+  }
+
+  for (let i = 0; i < 120; i += 1) {
+    const y = rng() * size;
+    const amplitude = 1.5 + rng() * 4;
+    const wavelength = 14 + rng() * 22;
+    const phase = rng() * Math.PI * 2;
+    ctx.beginPath();
+    ctx.lineWidth = 0.6 + rng() * 1;
+    ctx.strokeStyle = `rgba(200, 240, 190, ${0.03 + rng() * 0.06})`;
+    for (let x = -8; x <= size + 8; x += 6) {
+      const waveY = y + Math.sin(x / wavelength + phase) * amplitude;
+      if (x <= -8) {
+        ctx.moveTo(x, waveY);
+      } else {
+        ctx.lineTo(x, waveY);
+      }
+    }
+    ctx.stroke();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(10, 10);
+  texture.needsUpdate = true;
+  return texture;
+}
+
 export function createCanyonWallTexture(): THREE.Texture | null {
   const loader = new THREE.TextureLoader();
   try {
