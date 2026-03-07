@@ -1,4 +1,4 @@
-import * as THREE from "three";
+import * as THREE from 'three';
 
 export type WeaponShotEvent = {
   timestamp: number;
@@ -11,7 +11,7 @@ export type WeaponShotEvent = {
   recoilYawRadians: number;
 };
 
-export type WeaponKind = "rifle" | "sniper";
+export type WeaponKind = 'rifle' | 'sniper';
 
 export type WeaponWorldState = {
   equipped: boolean;
@@ -32,19 +32,39 @@ type WeaponConfig = {
   damage: number;
   muzzleFlashMs: number;
   rechamberMs?: number;
+  // Recoil — PUBG-style vertical climb with horizontal wobble
+  recoilPitchBase: number; // upward kick per shot (radians)
+  recoilPitchRamp: number; // extra upward kick added per consecutive shot
+  recoilYawRange: number; // max horizontal wobble (radians, ± random)
+  recoilYawDrift: number; // slow horizontal drift direction per shot
+  // Spread added when moving (radians offset applied to the shot direction)
+  moveSpreadBase: number;
+  moveSpreadSprint: number;
 };
 
 const WEAPON_CONFIG: Record<WeaponKind, WeaponConfig> = {
   rifle: {
-    fireIntervalMs: 112,
-    damage: 25,
-    muzzleFlashMs: 45,
+    fireIntervalMs: 130,
+    damage: 15,
+    muzzleFlashMs: 15,
+    recoilPitchBase: 0.0007,
+    recoilPitchRamp: 0.00015,
+    recoilYawRange: 0.003,
+    recoilYawDrift: 0.000005,
+    moveSpreadBase: 0.1,
+    moveSpreadSprint: 0.1,
   },
   sniper: {
     fireIntervalMs: 700,
-    damage: 90,
+    damage: 60,
     muzzleFlashMs: 70,
     rechamberMs: 980,
+    recoilPitchBase: 0.05,
+    recoilPitchRamp: 0,
+    recoilYawRange: 0.05,
+    recoilYawDrift: 0.0005,
+    moveSpreadBase: 0.05,
+    moveSpreadSprint: 0.05,
   },
 };
 
@@ -69,7 +89,7 @@ const DEFAULT_DROPPED_POSITION = new THREE.Vector3(1.5, DROP_HEIGHT, 3.5);
 
 export class WeaponSystem {
   private equipped = false;
-  private activeWeapon: WeaponKind = "rifle";
+  private activeWeapon: WeaponKind = 'rifle';
   private droppedPosition = DEFAULT_DROPPED_POSITION.clone();
   private triggerHeld = false;
   private nextShotInMs = 0;
@@ -79,21 +99,37 @@ export class WeaponSystem {
   private sniperRechamberStartedAtMs = 0;
   private sniperRechamberUntilMs = 0;
   private pendingWeapon: WeaponKind | null = null;
-  private switchFromWeapon: WeaponKind = "rifle";
+  private switchFromWeapon: WeaponKind = 'rifle';
   private switchStartedAtMs = 0;
   private switchUntilMs = 0;
   private _tempOrigin = new THREE.Vector3();
   private _tempDirection = new THREE.Vector3();
+  private _tempSpreadRight = new THREE.Vector3();
+  private _tempSpreadUp = new THREE.Vector3();
+  private yawDriftDirection = 1;
+  private moving = false;
+  private sprinting = false;
 
   setTriggerHeld(next: boolean) {
     this.triggerHeld = next;
     if (!next) {
       this.nextShotInMs = 0;
       this.shotIndex = 0;
+      // Reset drift direction when trigger released
+      this.yawDriftDirection = Math.random() > 0.5 ? 1 : -1;
     }
   }
 
-  update(deltaSeconds: number, nowMs: number, camera: THREE.Camera): WeaponShotEvent[] {
+  setMovementState(moving: boolean, sprinting: boolean) {
+    this.moving = moving;
+    this.sprinting = sprinting;
+  }
+
+  update(
+    deltaSeconds: number,
+    nowMs: number,
+    camera: THREE.Camera,
+  ): WeaponShotEvent[] {
     const shotEvents: WeaponShotEvent[] = [];
     this.applyPendingSwitch(nowMs);
     if (!this.equipped || !this.triggerHeld || this.isSwitching(nowMs)) {
@@ -103,8 +139,11 @@ export class WeaponSystem {
     const config = WEAPON_CONFIG[this.activeWeapon];
     this.nextShotInMs -= deltaSeconds * 1000;
 
-    if (this.activeWeapon === "sniper" && this.sniperRechamberUntilMs > nowMs) {
-      this.nextShotInMs = Math.max(this.nextShotInMs, this.sniperRechamberUntilMs - nowMs);
+    if (this.activeWeapon === 'sniper' && this.sniperRechamberUntilMs > nowMs) {
+      this.nextShotInMs = Math.max(
+        this.nextShotInMs,
+        this.sniperRechamberUntilMs - nowMs,
+      );
       return shotEvents;
     }
 
@@ -120,6 +159,46 @@ export class WeaponSystem {
       camera.getWorldPosition(this._tempOrigin);
       camera.getWorldDirection(this._tempDirection).normalize();
 
+      // Movement spread: offset the shot direction when moving
+      let spreadAngle = 0;
+      if (this.sprinting) {
+        spreadAngle = config.moveSpreadSprint;
+      } else if (this.moving) {
+        spreadAngle = config.moveSpreadBase;
+      }
+
+      if (spreadAngle > 0) {
+        // Build perpendicular axes for spread
+        this._tempSpreadUp.set(0, 1, 0);
+        this._tempSpreadRight
+          .crossVectors(this._tempDirection, this._tempSpreadUp)
+          .normalize();
+        this._tempSpreadUp
+          .crossVectors(this._tempSpreadRight, this._tempDirection)
+          .normalize();
+
+        const angle = Math.random() * Math.PI * 2;
+        const radius = spreadAngle * Math.sqrt(Math.random());
+        this._tempDirection
+          .addScaledVector(this._tempSpreadRight, Math.cos(angle) * radius)
+          .addScaledVector(this._tempSpreadUp, Math.sin(angle) * radius)
+          .normalize();
+      }
+
+      // Recoil: vertical climb + horizontal wobble (PUBG-style)
+      const recoilPitch =
+        config.recoilPitchBase + config.recoilPitchRamp * shotIndex;
+      // Horizontal: random wobble + slow drift that occasionally flips
+      let recoilYaw = (Math.random() - 0.5) * 2 * config.recoilYawRange;
+      recoilYaw += this.yawDriftDirection * config.recoilYawDrift;
+      // Occasionally flip drift direction for that PUBG S-pattern
+      if (
+        shotIndex > 0 &&
+        shotIndex % (5 + Math.floor(Math.random() * 4)) === 0
+      ) {
+        this.yawDriftDirection *= -1;
+      }
+
       shotEvents.push({
         timestamp: nowMs,
         shotIndex,
@@ -127,12 +206,12 @@ export class WeaponSystem {
         damage: config.damage,
         origin: this._tempOrigin.clone(),
         direction: this._tempDirection.clone(),
-        recoilPitchRadians: 0,
-        recoilYawRadians: 0,
+        recoilPitchRadians: recoilPitch,
+        recoilYawRadians: recoilYaw,
       });
 
       this.muzzleFlashUntil = nowMs + config.muzzleFlashMs;
-      if (this.activeWeapon === "sniper" && config.rechamberMs) {
+      if (this.activeWeapon === 'sniper' && config.rechamberMs) {
         this.sniperRechamberStartedAtMs = nowMs;
         this.sniperRechamberUntilMs = nowMs + config.rechamberMs;
       }
@@ -142,7 +221,10 @@ export class WeaponSystem {
   }
 
   switchWeapon(next: WeaponKind, nowMs: number): boolean {
-    if (this.pendingWeapon === next || (this.activeWeapon === next && !this.isSwitching(nowMs))) {
+    if (
+      this.pendingWeapon === next ||
+      (this.activeWeapon === next && !this.isSwitching(nowMs))
+    ) {
       return false;
     }
     this.applyPendingSwitch(nowMs);
@@ -189,7 +271,10 @@ export class WeaponSystem {
     if (this.sniperRechamberUntilMs <= nowMs) {
       return { active: false, progress: 1, remainingMs: 0 };
     }
-    const durationMs = Math.max(1, this.sniperRechamberUntilMs - this.sniperRechamberStartedAtMs);
+    const durationMs = Math.max(
+      1,
+      this.sniperRechamberUntilMs - this.sniperRechamberStartedAtMs,
+    );
     const elapsedMs = Math.max(0, nowMs - this.sniperRechamberStartedAtMs);
     return {
       active: true,
@@ -241,7 +326,11 @@ export class WeaponSystem {
       equipped: this.equipped,
       droppedPosition: this.equipped
         ? null
-        : [this.droppedPosition.x, this.droppedPosition.y, this.droppedPosition.z],
+        : [
+            this.droppedPosition.x,
+            this.droppedPosition.y,
+            this.droppedPosition.z,
+          ],
     };
   }
 
@@ -276,7 +365,7 @@ export class WeaponSystem {
 
   reset() {
     this.equipped = false;
-    this.activeWeapon = "rifle";
+    this.activeWeapon = 'rifle';
     this.droppedPosition.copy(DEFAULT_DROPPED_POSITION);
     this.triggerHeld = false;
     this.nextShotInMs = 0;
@@ -285,9 +374,12 @@ export class WeaponSystem {
     this.sniperRechamberStartedAtMs = 0;
     this.sniperRechamberUntilMs = 0;
     this.pendingWeapon = null;
-    this.switchFromWeapon = "rifle";
+    this.switchFromWeapon = 'rifle';
     this.switchStartedAtMs = 0;
     this.switchUntilMs = 0;
+    this.yawDriftDirection = 1;
+    this.moving = false;
+    this.sprinting = false;
     this.clearTracer();
   }
 

@@ -461,8 +461,8 @@ export function usePlayerController({
       positionRef.current.y = GROUND_Y;
     }
 
-    recoilPitchRef.current = THREE.MathUtils.damp(recoilPitchRef.current, 0, 18, delta);
-    recoilYawRef.current = THREE.MathUtils.damp(recoilYawRef.current, 0, 18, delta);
+    recoilPitchRef.current = THREE.MathUtils.damp(recoilPitchRef.current, 0, 8, delta);
+    recoilYawRef.current = THREE.MathUtils.damp(recoilYawRef.current, 0, 10, delta);
 
     const adsTarget = adsRef.current ? 1 : 0;
     adsLerpRef.current = THREE.MathUtils.damp(adsLerpRef.current, adsTarget, 12, delta);

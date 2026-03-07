@@ -51,7 +51,6 @@ import {
 } from "./WeaponModels";
 import {
   BLOOD_SPLAT_LIFETIME_MS,
-  BLOOD_SPLAT_SURFACE_OFFSET,
   BULLET_HIT_EPSILON,
   BULLET_IMPACT_CLEANUP_INTERVAL_MS,
   BULLET_IMPACT_LIFETIME_MS,
@@ -482,8 +481,6 @@ export const GameplayRuntime = forwardRef<
   const tempImpactPositionRef = useRef(new THREE.Vector3());
   const tempBloodTangentRef = useRef(new THREE.Vector3());
   const tempBloodBitangentRef = useRef(new THREE.Vector3());
-  const tempBloodSpreadOffsetRef = useRef(new THREE.Vector3());
-  const tempBloodRollQuaternionRef = useRef(new THREE.Quaternion());
   const raycasterRef = useRef(new THREE.Raycaster());
   const bulletHittableMeshesRef = useRef<THREE.Object3D[]>([]);
   const bulletHittableMeshesDirtyRef = useRef(true);
@@ -655,7 +652,7 @@ export const GameplayRuntime = forwardRef<
   );
 
   const pushBloodSpray = useCallback(
-    (point: THREE.Vector3, normal: THREE.Vector3, hitType: "body" | "head") => {
+    (point: THREE.Vector3, normal: THREE.Vector3, hitType: "body" | "head" | "leg") => {
       const safeNormal = tempImpactNormalRef.current;
       safeNormal.copy(normal);
       if (safeNormal.lengthSq() < 1e-6) {
@@ -677,60 +674,62 @@ export const GameplayRuntime = forwardRef<
         .normalize();
 
       const nowMs = performance.now();
-      const splatCount = hitType === "head" ? 9 : 6;
-      const spread = hitType === "head" ? 0.2 : 0.13;
+      const splatCount = hitType === "head" ? 18 : hitType === "body" ? 10 : 6;
+      const spraySpeed = hitType === "head" ? 3.5 : hitType === "body" ? 2.2 : 1.4;
+      const spreadAngle = hitType === "head" ? 0.8 : hitType === "body" ? 0.6 : 0.4;
       const lifetimeMs = hitType === "head"
-        ? BLOOD_SPLAT_LIFETIME_MS + 220
-        : BLOOD_SPLAT_LIFETIME_MS;
+        ? BLOOD_SPLAT_LIFETIME_MS + 200
+        : hitType === "body"
+        ? BLOOD_SPLAT_LIFETIME_MS
+        : BLOOD_SPLAT_LIFETIME_MS - 100;
       const nextSplats: BloodSplatMark[] = [];
 
       for (let i = 0; i < splatCount; i += 1) {
         const angle = Math.random() * Math.PI * 2;
-        const radial =
-          (0.018 + Math.random() * spread) * (0.55 + Math.random() * 0.65);
-        const offset = tempBloodSpreadOffsetRef.current
-          .copy(tangent)
-          .multiplyScalar(Math.cos(angle) * radial)
-          .addScaledVector(bitangent, Math.sin(angle) * radial)
-          .addScaledVector(
-            safeNormal,
-            BLOOD_SPLAT_SURFACE_OFFSET + Math.random() * 0.012,
-          );
+        const coneSpread = Math.random() * spreadAngle;
+        // Velocity: spray outward along the hit normal with randomized cone spread
+        const speed = spraySpeed * (0.4 + Math.random() * 0.8);
+        const vx = safeNormal.x * speed
+          + tangent.x * Math.cos(angle) * coneSpread * speed
+          + bitangent.x * Math.sin(angle) * coneSpread * speed;
+        const vy = safeNormal.y * speed
+          + tangent.y * Math.cos(angle) * coneSpread * speed
+          + bitangent.y * Math.sin(angle) * coneSpread * speed
+          + Math.random() * 1.2; // slight upward bias
+        const vz = safeNormal.z * speed
+          + tangent.z * Math.cos(angle) * coneSpread * speed
+          + bitangent.z * Math.sin(angle) * coneSpread * speed;
 
-        const position = tempImpactPositionRef.current.copy(point).add(offset);
-        const quaternion = tempImpactQuaternionRef.current.setFromUnitVectors(
-          Z_AXIS,
-          safeNormal,
-        );
-        tempBloodRollQuaternionRef.current.setFromAxisAngle(
-          safeNormal,
-          (Math.random() - 0.5) * Math.PI,
-        );
-        quaternion.multiply(tempBloodRollQuaternionRef.current);
+        const quaternion = tempImpactQuaternionRef.current.set(
+          Math.random() - 0.5,
+          Math.random() - 0.5,
+          Math.random() - 0.5,
+          Math.random(),
+        ).normalize();
 
         nextSplats.push({
           id: bloodSplatIdRef.current,
-          expiresAt: nowMs + lifetimeMs + Math.random() * 140,
-          position: [position.x, position.y, position.z],
+          createdAt: nowMs,
+          expiresAt: nowMs + lifetimeMs + Math.random() * 120,
+          position: [point.x, point.y, point.z],
+          velocity: [vx, vy, vz],
           quaternion: [quaternion.x, quaternion.y, quaternion.z, quaternion.w],
-          radius: (hitType === "head" ? 0.065 : 0.05) *
-            (0.5 + Math.random() * 0.9),
+          radius: (hitType === "head" ? 0.055 : hitType === "body" ? 0.04 : 0.03) *
+            (0.5 + Math.random() * 0.8),
           opacity: hitType === "head"
-            ? 0.92 - Math.random() * 0.2
-            : 0.8 - Math.random() * 0.2,
+            ? 0.95 - Math.random() * 0.15
+            : 0.85 - Math.random() * 0.2,
         });
         bloodSplatIdRef.current += 1;
       }
 
-      startTransition(() => {
-        setBloodSplats((previous) => {
-          const alive = previous.filter((splat) => splat.expiresAt > nowMs);
-          const merged = [...alive, ...nextSplats];
-          if (merged.length > MAX_BLOOD_SPLAT_MARKS) {
-            return merged.slice(merged.length - MAX_BLOOD_SPLAT_MARKS);
-          }
-          return merged;
-        });
+      setBloodSplats((previous) => {
+        const alive = previous.filter((splat) => splat.expiresAt > nowMs);
+        const merged = [...alive, ...nextSplats];
+        if (merged.length > MAX_BLOOD_SPLAT_MARKS) {
+          return merged.slice(merged.length - MAX_BLOOD_SPLAT_MARKS);
+        }
+        return merged;
       });
     },
     [],
@@ -1069,6 +1068,7 @@ export const GameplayRuntime = forwardRef<
       sniperMuzzleOffsetRef.current,
     );
 
+    weapon.setMovementState(moving && hasDirectionalInput, sprinting);
     const shots = weapon.update(clampedDelta, nowMs, camera);
     if (shots.length > 0 && bulletHittableMeshesDirtyRef.current) {
       const meshes: THREE.Object3D[] = [];
@@ -1209,7 +1209,7 @@ export const GameplayRuntime = forwardRef<
         const killed = targetBeforeHit
           ? targetBeforeHit.hp - resolvedDamage <= 0
           : false;
-        const hitType = resolvedTargetHit.zone === "head" ? "head" : "body";
+        const hitType: "head" | "body" | "leg" = resolvedTargetHit.zone;
 
         // Immediately update targetsRef so subsequent shots in this frame
         // (and future frames before React re-renders) see the correct HP/disabled state.
@@ -1224,7 +1224,8 @@ export const GameplayRuntime = forwardRef<
 
         pushBloodSpray(resolvedTargetHit.point, resolvedTargetHit.normal, hitType);
         targetHitCallbackRef.current(resolvedTargetHit.id, resolvedDamage, nowMs);
-        hitMarkerCallbackRef.current(killed ? "kill" : hitType);
+        const markerKind: HitMarkerKind = killed ? "kill" : hitType === "head" ? "head" : "body";
+        hitMarkerCallbackRef.current(markerKind);
         if (killed) {
           audio.playKill();
         }
@@ -1642,11 +1643,11 @@ export const GameplayRuntime = forwardRef<
         frustumCulled={false}
         renderOrder={8}
       >
-        <boxGeometry args={[0.008, 0.008, 1]} />
+        <boxGeometry args={[0.004, 0.004, 1]} />
         <meshBasicMaterial
-          color="#ffd95f"
+          color="#ffeaba"
           transparent
-          opacity={0.95}
+          opacity={0.12}
           depthWrite={false}
           toneMapped={false}
         />
