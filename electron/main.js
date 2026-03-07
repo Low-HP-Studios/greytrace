@@ -162,7 +162,6 @@ app.whenReady().then(() => {
     getMainWindow: () => mainWindow,
   });
   registerUpdaterHandlers();
-  updaterService.scheduleStartupCheck();
 
   globalShortcut.register('F11', () => {
     if (mainWindow) {

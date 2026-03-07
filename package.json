@@ -1,13 +1,13 @@
 {
   "name": "greytrace",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.3",
   "type": "module",
   "main": "electron/main.js",
-  "repository": "https://github.com/ayushrameja/threeJS",
+  "repository": "https://github.com/Low-HP-Studios/greytrace",
   "scripts": {
     "dev": "vite",
-    "dev:electron": "concurrently -k \"vite\" \"wait-on http://localhost:1420 && electron .\"",
+    "app": "concurrently -k \"vite\" \"wait-on http://localhost:1420 && electron .\"",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "build": "tsc && vite build",
@@ -55,8 +55,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "ayushrameja",
-        "repo": "threeJS"
+        "owner": "Low-HP-Studios",
+        "repo": "greytrace"
       }
     ],
     "files": [

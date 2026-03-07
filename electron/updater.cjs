@@ -8,8 +8,8 @@ const path = require("node:path");
 const { pipeline } = require("node:stream/promises");
 const { Readable } = require("node:stream");
 
-const REPO_OWNER = "ayushrameja";
-const REPO_NAME = "threeJS";
+const REPO_OWNER = "Low-HP-Studios";
+const REPO_NAME = "greytrace";
 const LATEST_RELEASE_URL =
   `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 const WINDOWS_LATEST_YML_URL =
@@ -33,6 +33,7 @@ const WINDOWS_LATEST_YML_URL =
 function createUpdaterService(options) {
   const { getMainWindow } = options;
   let repairInFlight = false;
+  let checkInFlight = false;
 
   /** @type {UpdaterStatusPayload} */
   let currentStatus = {
@@ -131,6 +132,19 @@ function createUpdaterService(options) {
       return { status: status.phase, version: status.targetVersion };
     }
 
+    if (checkInFlight) {
+      return { status: currentStatus.phase, version: currentStatus.targetVersion };
+    }
+
+    if (
+      currentStatus.phase === "checking" ||
+      currentStatus.phase === "downloading" ||
+      currentStatus.phase === "downloaded"
+    ) {
+      return { status: currentStatus.phase, version: currentStatus.targetVersion };
+    }
+
+    checkInFlight = true;
     try {
       const result = await autoUpdater.checkForUpdates();
       const status = emitStatus({});
@@ -145,6 +159,8 @@ function createUpdaterService(options) {
         message: `Update check failed: ${error?.message ?? "unknown failure"}`,
       });
       return { status: status.phase, version: status.targetVersion };
+    } finally {
+      checkInFlight = false;
     }
   }
 
@@ -222,16 +238,6 @@ function createUpdaterService(options) {
     return currentStatus;
   }
 
-  function scheduleStartupCheck() {
-    if (!app.isPackaged) {
-      return;
-    }
-
-    setTimeout(() => {
-      void checkForUpdates();
-    }, 6000);
-  }
-
   /**
    * @returns {Promise<string>}
    */
@@ -255,7 +261,6 @@ function createUpdaterService(options) {
     installNow,
     repairInstallation,
     getStatus,
-    scheduleStartupCheck,
   };
 }
 

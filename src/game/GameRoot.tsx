@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { type AudioVolumeSettings } from "./Audio";
 import { ExperienceMenuOverlay } from "./ExperienceMenuOverlay";
 import { PerfHUD } from "./PerfHUD";
@@ -59,6 +60,10 @@ const ENTER_TRANSITION_MS = 1800;
 const RETURN_TRANSITION_MS = 1350;
 const RETURN_RESET_PROGRESS = 0.58;
 const KILL_PULSE_MS = 450;
+const CHECKING_UPDATE_TOAST_ID = "greytrace-updater-checking";
+const UPDATE_AVAILABLE_TOAST_ID = "greytrace-updater-available";
+const READY_TO_INSTALL_TOAST_ID = "greytrace-updater-ready";
+const MENU_AUTO_UPDATE_CHECK_COOLDOWN_MS = 30_000;
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
@@ -153,6 +158,7 @@ export function GameRoot({
   const [phase, setPhase] = useState<ExperiencePhase>("menu");
   const [phaseProgress, setPhaseProgress] = useState(0);
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
+  const [menuUpdatesOpen, setMenuUpdatesOpen] = useState(false);
   const [killPulseToken, setKillPulseToken] = useState(0);
   const [killPulseAmount, setKillPulseAmount] = useState(0);
   const [hitMarker, setHitMarker] = useState<
@@ -174,6 +180,8 @@ export function GameRoot({
   const returnResetDoneRef = useRef(false);
   const enteredPlayingAtRef = useRef(0);
   const [needsPointerLock, setNeedsPointerLock] = useState(false);
+  const previousUpdaterPhaseRef = useRef<UpdaterPhase | null>(null);
+  const lastMenuAutoCheckAtRef = useRef(0);
 
   useEffect(() => {
     if (player.pointerLocked && !hasBeenLocked) {
@@ -216,6 +224,7 @@ export function GameRoot({
         } else {
           setPhase("menu");
           setMenuSettingsOpen(false);
+          setMenuUpdatesOpen(false);
           setHasBeenLocked(false);
         }
         return;
@@ -282,7 +291,10 @@ export function GameRoot({
 
   const showPauseMenu = phase === "playing" && hasBeenLocked && isPaused &&
     (performance.now() - enteredPlayingAtRef.current > 600);
+  const inLobbyPhase = phase === "menu" || phase === "entering" ||
+    phase === "returning";
   const showSettingsModal = menuSettingsOpen || showPauseMenu;
+  const showUpdatesModal = inLobbyPhase && menuUpdatesOpen;
 
   const handleCloseMenuAndResume = useCallback(() => {
     setBindingCapture(null);
@@ -294,8 +306,25 @@ export function GameRoot({
     setMenuSettingsOpen(false);
   }, []);
 
+  const handleCloseUpdatesModal = useCallback(() => {
+    setMenuUpdatesOpen(false);
+  }, []);
+
+  const handleOpenSettingsModal = useCallback(() => {
+    setBindingCapture(null);
+    setMenuUpdatesOpen(false);
+    setMenuSettingsOpen(true);
+  }, []);
+
+  const handleOpenUpdatesModal = useCallback(() => {
+    setBindingCapture(null);
+    setMenuSettingsOpen(false);
+    setMenuUpdatesOpen(true);
+  }, []);
+
   const handleEnterPractice = useCallback(() => {
     setMenuSettingsOpen(false);
+    setMenuUpdatesOpen(false);
     setBindingCapture(null);
     setHitMarker({ until: 0, kind: "body" });
     setPhaseProgress(0);
@@ -305,6 +334,7 @@ export function GameRoot({
   const handleReturnToLobby = useCallback(() => {
     setBindingCapture(null);
     setMenuSettingsOpen(false);
+    setMenuUpdatesOpen(false);
     sceneRef.current?.releasePointerLock();
     sceneRef.current?.dropWeaponForReturn();
     setPhaseProgress(0);
@@ -362,6 +392,24 @@ export function GameRoot({
     };
   }, [updaterApi]);
 
+  useEffect(() => {
+    if (phase !== "menu" || !updaterApi) {
+      return;
+    }
+
+    const now = Date.now();
+    if (
+      now - lastMenuAutoCheckAtRef.current < MENU_AUTO_UPDATE_CHECK_COOLDOWN_MS
+    ) {
+      return;
+    }
+    lastMenuAutoCheckAtRef.current = now;
+
+    void updaterApi.check().catch(() => {
+      // Updater status events surface errors to UI and toast channel.
+    });
+  }, [phase, updaterApi]);
+
   const handleCheckForUpdates = useCallback(async () => {
     if (!updaterApi) {
       return;
@@ -400,6 +448,84 @@ export function GameRoot({
       setUpdaterBusyAction(null);
     }
   }, [updaterApi]);
+
+  useEffect(() => {
+    if (inLobbyPhase && updaterApi) {
+      return;
+    }
+
+    toast.dismiss(CHECKING_UPDATE_TOAST_ID);
+    toast.dismiss(UPDATE_AVAILABLE_TOAST_ID);
+    toast.dismiss(READY_TO_INSTALL_TOAST_ID);
+  }, [inLobbyPhase, updaterApi]);
+
+  useEffect(() => {
+    const previousPhase = previousUpdaterPhaseRef.current;
+    previousUpdaterPhaseRef.current = updaterStatus.phase;
+
+    if (!inLobbyPhase || !updaterApi) {
+      return;
+    }
+
+    if (updaterStatus.phase === "checking" && previousPhase !== "checking") {
+      toast.info("Checking for latest release...", {
+        id: CHECKING_UPDATE_TOAST_ID,
+        duration: 5000,
+        description: "Polling GitHub release metadata in the background.",
+      });
+    }
+
+    if (updaterStatus.phase === "available" && previousPhase !== "available") {
+      toast.info(`Update ${updaterStatus.targetVersion ?? "found"}.`, {
+        id: UPDATE_AVAILABLE_TOAST_ID,
+        duration: 5000,
+        description: "Download started. Restart button appears when ready.",
+      });
+    }
+
+    if (updaterStatus.phase === "downloaded") {
+      toast.success(
+        `Update ${updaterStatus.targetVersion ?? "package"} ready to install.`,
+        {
+          id: READY_TO_INSTALL_TOAST_ID,
+          duration: Infinity,
+          closeButton: false,
+          action: {
+            label: updaterBusyAction === "install"
+              ? "Restarting..."
+              : "Restart now",
+            onClick: () => {
+              void handleInstallUpdate();
+            },
+          },
+        },
+      );
+    } else {
+      toast.dismiss(READY_TO_INSTALL_TOAST_ID);
+    }
+
+    if (
+      updaterStatus.phase !== "available" &&
+      updaterStatus.phase !== "downloading"
+    ) {
+      toast.dismiss(UPDATE_AVAILABLE_TOAST_ID);
+    }
+
+    if (updaterStatus.phase === "error" && previousPhase !== "error") {
+      toast.error("Updater hit an error.", {
+        duration: 5000,
+        description: updaterStatus.message ?? "Unknown updater failure.",
+      });
+    }
+  }, [
+    handleInstallUpdate,
+    inLobbyPhase,
+    updaterApi,
+    updaterBusyAction,
+    updaterStatus.message,
+    updaterStatus.phase,
+    updaterStatus.targetVersion,
+  ]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -612,6 +738,7 @@ export function GameRoot({
       typeof updaterStatus.progress === "number"
     ? `${updaterStatus.progress}%`
     : null;
+  const installUpdateInProgress = updaterBusyAction === "install";
   const gameplayHudVisible = phase === "playing";
 
   return (
@@ -641,7 +768,14 @@ export function GameRoot({
           <ExperienceMenuOverlay
             transitioning={phase === "entering"}
             onEnterPractice={handleEnterPractice}
-            onOpenSettings={() => setMenuSettingsOpen(true)}
+            onOpenSettings={handleOpenSettingsModal}
+            onOpenUpdates={handleOpenUpdatesModal}
+            updateReadyToInstall={canInstallUpdate}
+            updateTargetVersion={updaterStatus.targetVersion}
+            installingUpdate={installUpdateInProgress}
+            onInstallUpdate={() => {
+              void handleInstallUpdate();
+            }}
           />
         )
         : null}
@@ -773,6 +907,132 @@ export function GameRoot({
                   hitMarkerVisible ? "visible" : ""
                 } ${hitMarker.kind}`}
               />
+            )
+            : null}
+
+          {showUpdatesModal
+            ? (
+              <div
+                className="lobby-settings-overlay lobby-updates-overlay"
+                onClick={handleCloseUpdatesModal}
+                onMouseDown={handleCloseUpdatesModal}
+              >
+                <div
+                  className="lobby-settings-modal lobby-updates-modal"
+                  onClick={(event) => event.stopPropagation()}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  role="dialog"
+                  aria-label="Updates and repair"
+                >
+                  <div className="lobby-settings-header">
+                    <h2>Updates &amp; Repair</h2>
+                    <button
+                      type="button"
+                      className="lobby-settings-close"
+                      aria-label="Close updates panel"
+                      onClick={handleCloseUpdatesModal}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="lobby-updates-content">
+                    <div className="menu-sections">
+                      <MenuSection
+                        title="Version Status"
+                        blurb="Background updater checks GitHub releases every minute."
+                      >
+                        <div className="update-summary-grid">
+                          <div className="metric-card">
+                            <span>Current build</span>
+                            <strong>{updaterStatus.currentVersion}</strong>
+                          </div>
+                          <div className="metric-card">
+                            <span>Latest known</span>
+                            <strong>{updaterStatus.targetVersion ?? "-"}</strong>
+                          </div>
+                          <div className="metric-card">
+                            <span>Platform</span>
+                            <strong>{window.electronAPI?.platform ?? "web"}</strong>
+                          </div>
+                          <div className="metric-card">
+                            <span>Status</span>
+                            <strong>{updaterPhaseLabel}</strong>
+                          </div>
+                        </div>
+                        <div className="update-status-row">
+                          <span
+                            className={`status-pill status-pill-inline status-${updaterPhaseClass}`}
+                          >
+                            {updaterPhaseLabel}
+                          </span>
+                          {downloaderProgressLabel
+                            ? (
+                              <span className="pill-chip">
+                                Download {downloaderProgressLabel}
+                              </span>
+                            )
+                            : null}
+                        </div>
+                        <p className="muted compact-note">
+                          {updaterStatus.message ?? "No updater message."}
+                        </p>
+                      </MenuSection>
+
+                      <MenuSection
+                        title="Actions"
+                        blurb="Check now, install now, or run repair/reinstall flow."
+                      >
+                        <div className="update-action-row">
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={handleCheckForUpdates}
+                            disabled={!updaterAvailable || updaterBusyAction !== null}
+                          >
+                            {updaterBusyAction === "check"
+                              ? "Checking..."
+                              : "Check for updates"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={handleInstallUpdate}
+                            disabled={!updaterAvailable ||
+                              !canInstallUpdate ||
+                              updaterBusyAction !== null}
+                          >
+                            {updaterBusyAction === "install"
+                              ? "Installing..."
+                              : "Restart to install"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={handleRepairInstall}
+                            disabled={!updaterAvailable || updaterBusyAction !== null}
+                          >
+                            {updaterBusyAction === "repair"
+                              ? "Repairing..."
+                              : "Repair installation"}
+                          </button>
+                        </div>
+                        {!updaterAvailable
+                          ? (
+                            <p className="warning-note">
+                              Updater API is unavailable in this runtime.
+                            </p>
+                          )
+                          : null}
+                        <p className="muted compact-note">
+                          Repair verifies download integrity via updater metadata
+                          and runs update/reinstall flow. It is not a full
+                          disk-level forensic scan.
+                        </p>
+                      </MenuSection>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )
             : null}
 
@@ -1413,110 +1673,6 @@ export function GameRoot({
                       )
                       : null}
 
-                    {menuTab === "updates"
-                      ? (
-                        <div className="menu-sections">
-                          <MenuSection
-                            title="Version Status"
-                            blurb="Discord-style background updater, but with fewer corporate layers."
-                          >
-                            <div className="update-summary-grid">
-                              <div className="metric-card">
-                                <span>Current build</span>
-                                <strong>{updaterStatus.currentVersion}</strong>
-                              </div>
-                              <div className="metric-card">
-                                <span>Latest known</span>
-                                <strong>
-                                  {updaterStatus.targetVersion ?? "-"}
-                                </strong>
-                              </div>
-                              <div className="metric-card">
-                                <span>Platform</span>
-                                <strong>
-                                  {window.electronAPI?.platform ?? "web"}
-                                </strong>
-                              </div>
-                              <div className="metric-card">
-                                <span>Status</span>
-                                <strong>{updaterPhaseLabel}</strong>
-                              </div>
-                            </div>
-                            <div className="update-status-row">
-                              <span
-                                className={`status-pill status-pill-inline status-${updaterPhaseClass}`}
-                              >
-                                {updaterPhaseLabel}
-                              </span>
-                              {downloaderProgressLabel
-                                ? (
-                                  <span className="pill-chip">
-                                    Download {downloaderProgressLabel}
-                                  </span>
-                                )
-                                : null}
-                            </div>
-                            <p className="muted compact-note">
-                              {updaterStatus.message ?? "No updater message."}
-                            </p>
-                          </MenuSection>
-
-                          <MenuSection
-                            title="Actions"
-                            blurb="Check now, install now, or run repair/reinstall flow."
-                          >
-                            <div className="update-action-row">
-                              <button
-                                type="button"
-                                className="btn"
-                                onClick={handleCheckForUpdates}
-                                disabled={!updaterAvailable ||
-                                  updaterBusyAction !== null}
-                              >
-                                {updaterBusyAction === "check"
-                                  ? "Checking..."
-                                  : "Check for updates"}
-                              </button>
-                              <button
-                                type="button"
-                                className="btn"
-                                onClick={handleInstallUpdate}
-                                disabled={!updaterAvailable ||
-                                  !canInstallUpdate ||
-                                  updaterBusyAction !== null}
-                              >
-                                {updaterBusyAction === "install"
-                                  ? "Installing..."
-                                  : "Restart to install"}
-                              </button>
-                              <button
-                                type="button"
-                                className="btn"
-                                onClick={handleRepairInstall}
-                                disabled={!updaterAvailable ||
-                                  updaterBusyAction !== null}
-                              >
-                                {updaterBusyAction === "repair"
-                                  ? "Repairing..."
-                                  : "Repair installation"}
-                              </button>
-                            </div>
-                            {!updaterAvailable
-                              ? (
-                                <p className="warning-note">
-                                  Updater API is unavailable in this runtime.
-                                </p>
-                              )
-                              : null}
-                            <p className="muted compact-note">
-                              Repair verifies download integrity via updater
-                              metadata and runs update/reinstall flow. It is not
-                              a full disk-level forensic scan.
-                            </p>
-                          </MenuSection>
-                        </div>
-                      )
-                      : null}
                     </section>
                   </div>
                 </div>

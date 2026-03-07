@@ -11,8 +11,7 @@ export type PauseMenuTab =
   | "audio"
   | "controls"
   | "graphics"
-  | "hud"
-  | "updates";
+  | "hud";
 
 export type BindingKey = keyof ControlBindings;
 
@@ -43,7 +42,6 @@ export const MENU_TABS: MenuTabOption[] = [
   { id: "controls", label: "Controls", hint: "Keybinds" },
   { id: "graphics", label: "Graphics", hint: "Render" },
   { id: "hud", label: "HUD", hint: "Panels" },
-  { id: "updates", label: "Updates", hint: "Patch & repair" },
 ];
 
 export const BINDING_ROWS: BindingDefinition[] = [

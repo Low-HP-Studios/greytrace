@@ -160,8 +160,6 @@ export function menuTitle(tab: import("./settings").PauseMenuTab) {
       return "Graphics Settings";
     case "hud":
       return "HUD Settings";
-    case "updates":
-      return "Updates & Repair";
     default:
       return "Settings";
   }
