@@ -1211,6 +1211,17 @@ export const GameplayRuntime = forwardRef<
           : false;
         const hitType = resolvedTargetHit.zone === "head" ? "head" : "body";
 
+        // Immediately update targetsRef so subsequent shots in this frame
+        // (and future frames before React re-renders) see the correct HP/disabled state.
+        if (targetBeforeHit) {
+          const newHp = Math.max(0, targetBeforeHit.hp - resolvedDamage);
+          targetsRef.current = targetsRef.current.map((target) =>
+            target.id === resolvedTargetHit.id
+              ? { ...target, hp: newHp, disabled: newHp <= 0 }
+              : target
+          );
+        }
+
         pushBloodSpray(resolvedTargetHit.point, resolvedTargetHit.normal, hitType);
         targetHitCallbackRef.current(resolvedTargetHit.id, resolvedDamage, nowMs);
         hitMarkerCallbackRef.current(killed ? "kill" : hitType);

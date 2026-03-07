@@ -53,6 +53,14 @@ const OUTER_COMMON_TREES: Placement[] = [
   [-188, -42, 2.1, 1.05],
   [176, 66, 0.9, 0.96],
   [96, -176, 2.8, 1.1],
+  [-120, -130, 1.4, 0.92],
+  [140, -60, 0.6, 1.02],
+  [-160, 30, 2.8, 0.88],
+  [100, 100, 1.0, 0.94],
+  [-90, 140, 0.3, 1.08],
+  [180, -140, 2.2, 0.9],
+  [-200, -80, 1.7, 0.86],
+  [160, 160, 0.8, 0.98],
 ];
 
 const OUTER_BUSHES: Placement[] = [
@@ -60,6 +68,14 @@ const OUTER_BUSHES: Placement[] = [
   [114, 78, 2.1, 0.88],
   [-142, 118, 1.2, 0.81],
   [154, -134, 2.7, 0.86],
+  [-110, -110, 0.9, 0.78],
+  [130, 50, 1.5, 0.84],
+  [-170, -20, 2.0, 0.76],
+  [90, -90, 0.3, 0.82],
+  [-130, 70, 1.8, 0.74],
+  [170, 120, 2.4, 0.8],
+  [-86, 96, 0.7, 0.72],
+  [120, -150, 1.3, 0.78],
 ];
 
 const OUTER_ROCKS_MEDIUM: Placement[] = [
@@ -75,6 +91,23 @@ const OUTER_PLANTS: Placement[] = [
   [102, 104, 1.7, 0.84],
   [-124, 152, 2.3, 0.78],
   [148, -52, 0.9, 0.8],
+  [-90, -70, 1.4, 0.72],
+  [110, -40, 0.5, 0.82],
+  [-150, 60, 2.6, 0.76],
+  [86, 130, 1.1, 0.68],
+];
+
+const OUTER_FLOWERS: Placement[] = [
+  [-100, -35, 0.4, 0.6],
+  [95, 60, 1.8, 0.55],
+  [-130, 90, 2.2, 0.52],
+  [140, -80, 0.7, 0.58],
+  [-85, 110, 1.3, 0.5],
+  [115, -120, 2.6, 0.54],
+  [-160, -60, 0.1, 0.56],
+  [170, 40, 1.9, 0.48],
+  [-110, 140, 2.8, 0.52],
+  [90, 85, 0.5, 0.5],
 ];
 
 export const PATH_POINTS: [number, number][] = [
@@ -312,8 +345,10 @@ export function DesertProps({ theme, shadows }: { theme: number; shadows: boolea
   const deadTreeModels = useLoadedModels(["DeadTree_1", "DeadTree_2"]);
   const commonTreeModels = useLoadedModels(["CommonTree_1", "CommonTree_2"]);
   const bushModel = useLoadedModel("Bush_Common");
+  const bushFlowersModel = useLoadedModel("Bush_Common_Flowers");
   const rockModels = useLoadedModels(["Rock_Medium_1", "Rock_Medium_2"]);
   const plantModels = useLoadedModels(["Plant_1"]);
+  const flowerModels = useLoadedModels(["Flower_3_Group", "Flower_4_Group"]);
 
   return (
     <group visible={theme >= 0.2}>
@@ -383,6 +418,26 @@ export function DesertProps({ theme, shadows }: { theme: number; shadows: boolea
       <PlacedModels
         models={plantModels}
         placements={OUTER_PLANTS}
+        shadows={shadows}
+        variantCount={1}
+      />
+
+      <PlacedModels
+        models={flowerModels}
+        placements={OUTER_FLOWERS}
+        shadows={shadows}
+        variantCount={2}
+      />
+
+      {/* Extra flowering bushes in the outer area */}
+      <PlacedModels
+        models={bushFlowersModel ? [bushFlowersModel] : []}
+        placements={[
+          [-105, -90, 1.2, 0.78],
+          [125, 95, 2.4, 0.72],
+          [-145, 50, 0.5, 0.68],
+          [155, -110, 1.9, 0.74],
+        ]}
         shadows={shadows}
         variantCount={1}
       />
