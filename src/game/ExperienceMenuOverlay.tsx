@@ -5,6 +5,11 @@ type ExperienceMenuOverlayProps = {
   transitioning: boolean;
   onEnterPractice: () => void;
   onOpenSettings: () => void;
+  onOpenUpdates: () => void;
+  updateReadyToInstall: boolean;
+  updateTargetVersion?: string;
+  installingUpdate: boolean;
+  onInstallUpdate: () => void;
 };
 
 type LobbyTab = "play" | "friends" | "customise" | "store";
@@ -106,6 +111,11 @@ export function ExperienceMenuOverlay({
   transitioning,
   onEnterPractice,
   onOpenSettings,
+  onOpenUpdates,
+  updateReadyToInstall,
+  updateTargetVersion,
+  installingUpdate,
+  onInstallUpdate,
 }: ExperienceMenuOverlayProps) {
   const [activeTab, setActiveTab] = useState<LobbyTab>("play");
 
@@ -162,6 +172,29 @@ export function ExperienceMenuOverlay({
         </nav>
 
         <div className="menu-topbar-footer-expressive">
+          {updateReadyToInstall ? (
+            <button
+              type="button"
+              className="menu-settings-btn-expressive menu-restart-btn-expressive"
+              onClick={onInstallUpdate}
+              disabled={installingUpdate}
+            >
+              <span>
+                {installingUpdate
+                  ? "Restarting..."
+                  : `Restart to install${
+                    updateTargetVersion ? ` ${updateTargetVersion}` : ""
+                  }`}
+              </span>
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="menu-settings-btn-expressive menu-updates-btn-expressive"
+            onClick={onOpenUpdates}
+          >
+            <span>Updates</span>
+          </button>
           <button
             type="button"
             className="menu-settings-btn-expressive"

@@ -26,7 +26,7 @@ If any of these are missing, treat the release as broken.
 
 ## Auto-update behavior
 
-- In-app checks run on launch for packaged builds.
+- In-app checks run when the user lands in lobby/menu (startup and returns from practice).
 - Update downloads are validated via SHA512 metadata.
 - `Restart to install` applies downloaded updates.
 - Repair mode:

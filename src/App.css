@@ -1891,6 +1891,11 @@ code {
   color: #fff;
 }
 
+.menu-settings-btn-expressive:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .menu-settings-btn-expressive:active {
   transform: scale(0.98);
 }
@@ -1910,6 +1915,26 @@ code {
 .menu-settings-btn-expressive:hover .settings-icon-wrapper-expressive {
   transform: rotate(90deg);
   color: #fff;
+}
+
+.menu-updates-btn-expressive {
+  border-color: rgba(166, 194, 255, 0.35);
+  color: rgba(206, 223, 255, 0.95);
+}
+
+.menu-updates-btn-expressive:hover {
+  background: rgba(110, 147, 231, 0.22);
+  border-color: rgba(171, 203, 255, 0.58);
+}
+
+.menu-restart-btn-expressive {
+  border-color: rgba(67, 213, 135, 0.4);
+  color: rgba(184, 247, 211, 0.95);
+}
+
+.menu-restart-btn-expressive:hover {
+  background: rgba(45, 171, 108, 0.2);
+  border-color: rgba(106, 230, 166, 0.62);
 }
 
 .menu-main-expressive {
@@ -2274,6 +2299,32 @@ code {
   margin-bottom: 20px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.lobby-updates-overlay {
+  background: rgba(0, 0, 0, 0.94);
+}
+
+.lobby-updates-modal {
+  max-width: 920px;
+  width: min(92vw, 920px);
+  height: min(88vh, 820px);
+  margin: auto;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: #05080d;
+}
+
+.lobby-updates-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px 28px;
+  background: linear-gradient(180deg, #0b1019 0%, #070a11 100%);
+}
+
+.lobby-updates-content .menu-sections {
+  display: grid;
+  gap: 18px;
 }
 
 .btn-lobby-return {
