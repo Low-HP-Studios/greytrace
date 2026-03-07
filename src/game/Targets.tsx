@@ -63,14 +63,42 @@ type TargetHitboxPart =
 const TARGET_COLLISION_RADIUS = 0.35;
 
 const TARGET_HITBOX_PARTS: TargetHitboxPart[] = [
+  // Skull — raised and sized so it doesn't extend into the chest
   {
     kind: "sphere",
     hitbox: {
       zone: "head",
-      center: [0, 1.58 * TARGET_VISUAL_SCALE, 0.01 * TARGET_VISUAL_SCALE],
-      radius: 0.28 * TARGET_VISUAL_SCALE,
+      center: [0, 1.66 * TARGET_VISUAL_SCALE, 0.01 * TARGET_VISUAL_SCALE],
+      radius: 0.26 * TARGET_VISUAL_SCALE,
     },
   },
+  // Face / jaw area
+  {
+    kind: "box",
+    hitbox: {
+      zone: "head",
+      center: [0, 1.46 * TARGET_VISUAL_SCALE, 0.02 * TARGET_VISUAL_SCALE],
+      halfSize: [
+        0.16 * TARGET_VISUAL_SCALE,
+        0.1 * TARGET_VISUAL_SCALE,
+        0.14 * TARGET_VISUAL_SCALE,
+      ],
+    },
+  },
+  // Neck
+  {
+    kind: "box",
+    hitbox: {
+      zone: "head",
+      center: [0, 1.34 * TARGET_VISUAL_SCALE, 0],
+      halfSize: [
+        0.1 * TARGET_VISUAL_SCALE,
+        0.06 * TARGET_VISUAL_SCALE,
+        0.1 * TARGET_VISUAL_SCALE,
+      ],
+    },
+  },
+  // Upper torso
   {
     kind: "box",
     hitbox: {

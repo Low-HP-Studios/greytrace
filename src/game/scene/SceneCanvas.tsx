@@ -216,20 +216,19 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
 
   const handleTargetHit = useCallback(
     (targetId: string, damage: number, nowMs: number) => {
-      startTransition(() => {
-        setTargets((previousTargets) =>
-          previousTargets.map((target) => {
-            if (target.id !== targetId) return target;
-            const newHp = Math.max(0, target.hp - damage);
-            return {
-              ...target,
-              hp: newHp,
-              disabled: newHp <= 0,
-              hitUntil: nowMs + TARGET_FLASH_MS,
-            };
-          }),
-        );
-      });
+      // No startTransition — kills must render immediately
+      setTargets((previousTargets) =>
+        previousTargets.map((target) => {
+          if (target.id !== targetId) return target;
+          const newHp = Math.max(0, target.hp - damage);
+          return {
+            ...target,
+            hp: newHp,
+            disabled: newHp <= 0,
+            hitUntil: nowMs + TARGET_FLASH_MS,
+          };
+        }),
+      );
 
       const currentTarget = sceneTargetsRef.current.find(
         (target: TargetState) => target.id === targetId,
@@ -241,15 +240,13 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
         }
         const timeoutId = window.setTimeout(() => {
           resetTimeoutsRef.current.delete(targetId);
-          startTransition(() => {
-            setTargets((previousTargets) =>
-              previousTargets.map((target) =>
-                target.id === targetId
-                  ? { ...target, disabled: false, hp: target.maxHp }
-                  : target
-              ),
-            );
-          });
+          setTargets((previousTargets) =>
+            previousTargets.map((target) =>
+              target.id === targetId
+                ? { ...target, disabled: false, hp: target.maxHp }
+                : target
+            ),
+          );
         }, RESPAWN_DELAY_MS);
         resetTimeoutsRef.current.set(targetId, timeoutId);
       }

@@ -40,8 +40,8 @@ export const BULLET_IMPACT_CLEANUP_INTERVAL_MS = 250;
 export const BULLET_IMPACT_MARK_RADIUS = 0.05;
 export const BULLET_IMPACT_MARK_SURFACE_OFFSET = 0.01;
 
-export const MAX_BLOOD_SPLAT_MARKS = 280;
-export const BLOOD_SPLAT_LIFETIME_MS = 1100;
+export const MAX_BLOOD_SPLAT_MARKS = 400;
+export const BLOOD_SPLAT_LIFETIME_MS = 650;
 export const BLOOD_SPLAT_SURFACE_OFFSET = 0.014;
 export const BULLET_HIT_EPSILON = 0.0001;
 
@@ -152,7 +152,9 @@ export type BulletImpactMark = {
 export type BloodSplatMark = {
   id: number;
   expiresAt: number;
+  createdAt: number;
   position: [number, number, number];
+  velocity: [number, number, number];
   quaternion: [number, number, number, number];
   radius: number;
   opacity: number;
