@@ -26,15 +26,15 @@ const GRID_MINOR_COLOR = new THREE.Color("#ffffff");
 const SUN_CORE_COLOR = new THREE.Color("#ffe0b0");
 const SUN_GLOW_COLOR = new THREE.Color("#ffb279");
 const FAR_DESERT_COLOR = new THREE.Color("#3f7438");
-const BORDER_COLOR = new THREE.Color("#f6d99a");
-const BORDER_GLOW_COLOR = new THREE.Color("#d48b36");
+const BORDER_COLOR = new THREE.Color("#8a7a5a");
+const BORDER_GLOW_COLOR = new THREE.Color("#6a5a3a");
 const FLOOR_GRID_DIVISIONS = 16;
 const FAR_DESERT_SIZE = 2200;
-const BORDER_STRIP_THICKNESS = 0.9;
-const BORDER_STRIP_HEIGHT = 0.18;
-const BORDER_POST_SPACING = 20;
-const BORDER_POST_HEIGHT = 1.4;
-const BORDER_POST_WIDTH = 0.14;
+const BORDER_STRIP_THICKNESS = 0.12;
+const BORDER_STRIP_HEIGHT = 0.05;
+const BORDER_POST_SPACING = 40;
+const BORDER_POST_HEIGHT = 0.45;
+const BORDER_POST_WIDTH = 0.06;
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
@@ -103,7 +103,7 @@ export function MapEnvironment({
   const sunOpacity = clamp01((liveTheme - 0.42) / 0.48);
   const allowTextures = textureReveal > 0.001;
   const shadowEnabled = shadows && liveTheme > 0.6;
-  const borderGlow = THREE.MathUtils.lerp(0.45, 1.05, liveTheme);
+  const borderGlow = THREE.MathUtils.lerp(0.15, 0.35, liveTheme);
 
   useEffect(() => {
     const helper = floorGridRef.current;
@@ -180,29 +180,42 @@ export function MapEnvironment({
       {sunOpacity > 0.001 ? (
         <group position={[24, 430, -32]}>
           <mesh>
-            <sphereGeometry args={[9, 28, 28]} />
+            <sphereGeometry args={[14, 32, 32]} />
             <meshBasicMaterial
               color={SUN_CORE_COLOR}
               transparent
               opacity={sunOpacity}
+              toneMapped={false}
             />
           </mesh>
           <mesh>
-            <sphereGeometry args={[18, 26, 26]} />
+            <sphereGeometry args={[24, 28, 28]} />
             <meshBasicMaterial
               color={SUN_GLOW_COLOR}
               transparent
-              opacity={sunOpacity * 0.34}
+              opacity={sunOpacity * 0.3}
               depthWrite={false}
+              toneMapped={false}
             />
           </mesh>
           <mesh>
-            <sphereGeometry args={[30, 24, 24]} />
+            <sphereGeometry args={[42, 24, 24]} />
             <meshBasicMaterial
               color={SUN_GLOW_COLOR}
               transparent
-              opacity={sunOpacity * 0.16}
+              opacity={sunOpacity * 0.12}
               depthWrite={false}
+              toneMapped={false}
+            />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[65, 20, 20]} />
+            <meshBasicMaterial
+              color="#ffe8c0"
+              transparent
+              opacity={sunOpacity * 0.05}
+              depthWrite={false}
+              toneMapped={false}
             />
           </mesh>
         </group>
@@ -223,6 +236,22 @@ export function MapEnvironment({
         />
       </mesh>
 
+      {/* Outer ring: darker grass fading to horizon — hides the abrupt edge */}
+      {allowTextures ? (
+        <mesh
+          position={[WALKABLE_CENTER_X, -0.18, WALKABLE_CENTER_Z]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <ringGeometry args={[FAR_DESERT_SIZE * 0.45, FAR_DESERT_SIZE * 0.55, 64]} />
+          <meshBasicMaterial
+            color="#2a5c24"
+            transparent
+            opacity={liveTheme * 0.6}
+            depthWrite={false}
+          />
+        </mesh>
+      ) : null}
+
       {/* Walkable grassy floor */}
       <mesh
         position={[WALKABLE_CENTER_X, 0, WALKABLE_CENTER_Z]}
@@ -234,8 +263,8 @@ export function MapEnvironment({
         <meshStandardMaterial
           color={blendColor(VOID_WALKABLE, LIVE_WALKABLE, liveTheme)}
           map={allowTextures ? grassTexture ?? undefined : undefined}
-          roughness={THREE.MathUtils.lerp(1, 0.92, liveTheme)}
-          metalness={0}
+          roughness={THREE.MathUtils.lerp(1, 0.85, liveTheme)}
+          metalness={THREE.MathUtils.lerp(0, 0.02, liveTheme)}
         />
       </mesh>
 
@@ -274,26 +303,14 @@ export function MapEnvironment({
       ))}
 
       {borderPosts.map(([x, z], index) => (
-        <group key={`border-post-${index}`} position={[x, 0, z]}>
-          <mesh position={[0, BORDER_POST_HEIGHT * 0.5, 0]}>
-            <boxGeometry args={[BORDER_POST_WIDTH, BORDER_POST_HEIGHT, BORDER_POST_WIDTH]} />
-            <meshStandardMaterial
-              color="#7f5a34"
-              roughness={0.92}
-              metalness={0.04}
-            />
-          </mesh>
-          <mesh position={[0, BORDER_POST_HEIGHT + 0.18, 0]}>
-            <sphereGeometry args={[0.12, 10, 10]} />
-            <meshStandardMaterial
-              color={BORDER_COLOR}
-              emissive={BORDER_GLOW_COLOR}
-              emissiveIntensity={borderGlow * 1.1}
-              roughness={0.36}
-              metalness={0.05}
-            />
-          </mesh>
-        </group>
+        <mesh key={`border-post-${index}`} position={[x, BORDER_POST_HEIGHT * 0.5, z]}>
+          <cylinderGeometry args={[BORDER_POST_WIDTH, BORDER_POST_WIDTH, BORDER_POST_HEIGHT, 6]} />
+          <meshStandardMaterial
+            color="#5a4a30"
+            roughness={0.9}
+            metalness={0.04}
+          />
+        </mesh>
       ))}
 
       {floorGridOpacity > 0.001 ? (
