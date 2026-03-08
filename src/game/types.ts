@@ -146,6 +146,34 @@ export type CrosshairSettings = {
   ads: CrosshairAdsSettings;
 };
 
+export type WeaponRecoilProfile = {
+  recoilPitchBase: number;
+  recoilPitchRamp: number;
+  recoilYawRange: number;
+  recoilYawDrift: number;
+  moveSpreadBase: number;
+  moveSpreadSprint: number;
+};
+
+export type WeaponRecoilProfiles = {
+  rifle: WeaponRecoilProfile;
+  sniper: WeaponRecoilProfile;
+};
+
+export type MovementProfileSettings = {
+  rifleWalkSpeedScale: number;
+  rifleJogSpeedScale: number;
+  rifleRunSpeedScale: number;
+  rifleFirePrepSpeedScale: number;
+  rifleRunStaminaMaxMs: number;
+  rifleRunStaminaDrainPerSec: number;
+  rifleRunStaminaRegenPerSec: number;
+  rifleRunStartMs: number;
+  rifleRunStopMs: number;
+  rifleRunForwardThreshold: number;
+  rifleRunLateralThreshold: number;
+};
+
 export const DEFAULT_CROSSHAIR_SETTINGS: CrosshairSettings = {
   color: "white",
   centerDot: {
@@ -190,6 +218,39 @@ export const DEFAULT_CROSSHAIR_SETTINGS: CrosshairSettings = {
   },
 };
 
+export const DEFAULT_WEAPON_RECOIL_PROFILES: WeaponRecoilProfiles = {
+  rifle: {
+    recoilPitchBase: 0.0007,
+    recoilPitchRamp: 0.00015,
+    recoilYawRange: 0.003,
+    recoilYawDrift: 0.000005,
+    moveSpreadBase: 0.1,
+    moveSpreadSprint: 0.1,
+  },
+  sniper: {
+    recoilPitchBase: 0.05,
+    recoilPitchRamp: 0,
+    recoilYawRange: 0.05,
+    recoilYawDrift: 0.0005,
+    moveSpreadBase: 0.05,
+    moveSpreadSprint: 0.05,
+  },
+};
+
+export const DEFAULT_MOVEMENT_SETTINGS: MovementProfileSettings = {
+  rifleWalkSpeedScale: 0.56,
+  rifleJogSpeedScale: 0.82,
+  rifleRunSpeedScale: 1.42,
+  rifleFirePrepSpeedScale: 0.38,
+  rifleRunStaminaMaxMs: 2600,
+  rifleRunStaminaDrainPerSec: 1,
+  rifleRunStaminaRegenPerSec: 0.55,
+  rifleRunStartMs: 220,
+  rifleRunStopMs: 220,
+  rifleRunForwardThreshold: 0.42,
+  rifleRunLateralThreshold: 0.2,
+};
+
 export type EnemyOutlineColor = "red" | "yellow" | "cyan" | "magenta";
 
 export type EnemyOutlineSettings = {
@@ -216,6 +277,8 @@ export type GameSettings = {
   weaponAlignment: WeaponAlignmentOffset;
   crosshair: CrosshairSettings;
   enemyOutline: EnemyOutlineSettings;
+  movement: MovementProfileSettings;
+  weaponRecoilProfiles: WeaponRecoilProfiles;
 };
 
 export type PerfMetrics = {

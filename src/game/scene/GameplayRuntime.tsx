@@ -29,10 +29,12 @@ import {
 import type {
   CollisionRect,
   GameSettings,
+  MovementProfileSettings,
   PerfMetrics,
   PlayerSnapshot,
   ScenePresentation,
   TargetState,
+  WeaponRecoilProfiles,
   WeaponAlignmentOffset,
   WorldBounds,
 } from "../types";
@@ -62,6 +64,7 @@ import {
   PLAYER_SPAWN_PITCH,
   PLAYER_SPAWN_POSITION,
   PLAYER_SPAWN_YAW,
+  RIFLE_FIRE_AIM_PREP_MS,
   TRACER_CAMERA_START_OFFSET,
   TRACER_DISTANCE,
   TRACER_MUZZLE_FORWARD_OFFSET,
@@ -101,6 +104,8 @@ type GameplayRuntimeProps = {
   keybinds: GameSettings["keybinds"];
   fov: number;
   weaponAlignment: WeaponAlignmentOffset;
+  movement: MovementProfileSettings;
+  weaponRecoilProfiles: WeaponRecoilProfiles;
   targets: TargetState[];
   onTargetHit: (targetId: string, damage: number, nowMs: number) => void;
   onResetTargets: () => void;
@@ -162,6 +167,88 @@ function resolveShotDamage(
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
+}
+
+type RifleRunVisualState = "idle" | "start" | "running" | "stop";
+type UnarmedWalkVisualState = "idle" | "start" | "moving" | "stop";
+
+const RIFLE_HOLD_DIAGONAL_THRESHOLD = 0.35;
+const WALK_DIAGONAL_THRESHOLD = 0.35;
+const UNARMED_WALK_START_MS = 220;
+const UNARMED_WALK_STOP_MS = 220;
+
+function resolveRifleWalkState(moveX: number, moveY: number): CharacterAnimState {
+  const absX = Math.abs(moveX);
+  const absY = Math.abs(moveY);
+  const movingDiagonally =
+    absX > RIFLE_HOLD_DIAGONAL_THRESHOLD && absY > RIFLE_HOLD_DIAGONAL_THRESHOLD;
+
+  if (movingDiagonally) {
+    if (moveY >= 0) {
+      return moveX >= 0 ? "rifleWalkForwardRight" : "rifleWalkForwardLeft";
+    }
+    return moveX >= 0 ? "rifleWalkBackwardRight" : "rifleWalkBackwardLeft";
+  }
+
+  if (absY >= absX) {
+    return moveY >= 0 ? "rifleWalk" : "rifleWalkBack";
+  }
+
+  return moveX >= 0 ? "rifleWalkRight" : "rifleWalkLeft";
+}
+
+function resolveWalkState(moveX: number, moveY: number): CharacterAnimState {
+  const absX = Math.abs(moveX);
+  const absY = Math.abs(moveY);
+  const movingDiagonally =
+    absX > WALK_DIAGONAL_THRESHOLD && absY > WALK_DIAGONAL_THRESHOLD;
+
+  if (movingDiagonally) {
+    if (moveY >= 0) {
+      return moveX >= 0 ? "walkForwardRight" : "walkForwardLeft";
+    }
+    return moveX >= 0 ? "walkBackwardRight" : "walkBackwardLeft";
+  }
+
+  if (absY >= absX) {
+    return moveY >= 0 ? "walk" : "walkBack";
+  }
+
+  return moveX >= 0 ? "walkRight" : "walkLeft";
+}
+
+function resolveRifleJogState(moveX: number, moveY: number): CharacterAnimState {
+  const absX = Math.abs(moveX);
+  const absY = Math.abs(moveY);
+  const movingDiagonally =
+    absX > RIFLE_HOLD_DIAGONAL_THRESHOLD && absY > RIFLE_HOLD_DIAGONAL_THRESHOLD;
+
+  if (movingDiagonally) {
+    if (moveY >= 0) {
+      return moveX >= 0 ? "rifleJogForwardRight" : "rifleJogForwardLeft";
+    }
+    return moveX >= 0 ? "rifleJogBackwardRight" : "rifleJogBackwardLeft";
+  }
+
+  if (absY >= absX) {
+    return moveY >= 0 ? "rifleJog" : "rifleJogBack";
+  }
+
+  return moveX >= 0 ? "rifleJogRight" : "rifleJogLeft";
+}
+
+function shouldUseRifleRunInput(
+  moveX: number,
+  moveY: number,
+  sprinting: boolean,
+  forwardThreshold: number,
+  lateralThreshold: number,
+): boolean {
+  return (
+    sprinting &&
+    moveY > forwardThreshold &&
+    Math.abs(moveX) < lateralThreshold
+  );
 }
 
 function easeInOutCubic(value: number) {
@@ -389,6 +476,8 @@ export const GameplayRuntime = forwardRef<
   keybinds,
   fov,
   weaponAlignment,
+  movement,
+  weaponRecoilProfiles,
   targets,
   onTargetHit,
   onResetTargets,
@@ -455,6 +544,16 @@ export const GameplayRuntime = forwardRef<
   const lastActiveWeaponRef = useRef<WeaponKind | null>(null);
   const lastADSRef = useRef<boolean | null>(null);
   const lastFirstPersonRef = useRef<boolean | null>(null);
+  const rifleFireIntentRef = useRef(false);
+  const rifleFireDelayUntilRef = useRef(0);
+  const rifleRunStateRef = useRef<RifleRunVisualState>("idle");
+  const rifleRunStateUntilRef = useRef(0);
+  const movementSettingsRef = useRef<MovementProfileSettings>(movement);
+  const rifleRunStaminaRef = useRef(
+    Math.max(250, movement.rifleRunStaminaMaxMs),
+  );
+  const unarmedWalkStateRef = useRef<UnarmedWalkVisualState>("idle");
+  const unarmedWalkStateUntilRef = useRef(0);
 
   const worldGunRef = useRef<THREE.Group>(null);
   const worldRifleModelRef = useRef<THREE.Group>(null);
@@ -607,6 +706,19 @@ export const GameplayRuntime = forwardRef<
   useEffect(() => {
     audioRef.current.setVolumes(audioVolumes);
   }, [audioVolumes]);
+
+  useEffect(() => {
+    movementSettingsRef.current = movement;
+    const nextStaminaMaxMs = Math.max(250, movement.rifleRunStaminaMaxMs);
+    rifleRunStaminaRef.current = Math.min(
+      rifleRunStaminaRef.current,
+      nextStaminaMaxMs,
+    );
+  }, [movement]);
+
+  useEffect(() => {
+    weaponRef.current.setRecoilProfiles(weaponRecoilProfiles);
+  }, [weaponRecoilProfiles]);
 
   useEffect(() => {
     onCriticalAssetsReadyChange?.(characterReady && weaponModels.ready);
@@ -787,7 +899,11 @@ export const GameplayRuntime = forwardRef<
   }, [presentation.inputEnabled]);
 
   const handleTriggerChange = useCallback((firing: boolean) => {
-    weaponRef.current.setTriggerHeld(firing);
+    rifleFireIntentRef.current = firing;
+    if (!firing) {
+      rifleFireDelayUntilRef.current = 0;
+      weaponRef.current.setTriggerHeld(false);
+    }
   }, []);
 
   const handleUserGesture = useCallback(() => {
@@ -850,6 +966,21 @@ export const GameplayRuntime = forwardRef<
     lastFirstPersonRef.current = false;
     lastSniperRechamberActiveRef.current = false;
     lastSniperRechamberProgressStepRef.current = 100;
+    rifleFireIntentRef.current = false;
+    rifleFireDelayUntilRef.current = 0;
+    rifleRunStateRef.current = "idle";
+    rifleRunStateUntilRef.current = 0;
+    rifleRunStaminaRef.current = Math.max(
+      250,
+      movementSettingsRef.current.rifleRunStaminaMaxMs,
+    );
+    unarmedWalkStateRef.current = "idle";
+    unarmedWalkStateUntilRef.current = 0;
+    controllerRef.current?.setMovementProfile({
+      walkScale: 1,
+      sprintScale: 1,
+      allowSprint: true,
+    });
     weaponEquippedCallbackRef.current(false);
     activeWeaponCallbackRef.current("rifle");
     sniperRechamberCallbackRef.current({
@@ -902,6 +1033,38 @@ export const GameplayRuntime = forwardRef<
     const nowMs = performance.now();
     const weapon = weaponRef.current;
     const audio = audioRef.current;
+    const movementSettings = movementSettingsRef.current;
+    const rifleWalkSpeedScale = Math.max(0.2, movementSettings.rifleWalkSpeedScale);
+    const rifleJogSpeedScale = Math.max(0.2, movementSettings.rifleJogSpeedScale);
+    const rifleRunSpeedScale = Math.max(0.2, movementSettings.rifleRunSpeedScale);
+    const rifleFirePrepSpeedScale = Math.max(
+      0.1,
+      movementSettings.rifleFirePrepSpeedScale,
+    );
+    const rifleRunStaminaMaxMs = Math.max(
+      250,
+      movementSettings.rifleRunStaminaMaxMs,
+    );
+    const rifleRunStaminaDrainPerSec = Math.max(
+      0,
+      movementSettings.rifleRunStaminaDrainPerSec,
+    );
+    const rifleRunStaminaRegenPerSec = Math.max(
+      0,
+      movementSettings.rifleRunStaminaRegenPerSec,
+    );
+    const rifleRunStartMs = Math.max(0, movementSettings.rifleRunStartMs);
+    const rifleRunStopMs = Math.max(0, movementSettings.rifleRunStopMs);
+    const rifleRunForwardThreshold = THREE.MathUtils.clamp(
+      movementSettings.rifleRunForwardThreshold,
+      0.05,
+      1,
+    );
+    const rifleRunLateralThreshold = THREE.MathUtils.clamp(
+      movementSettings.rifleRunLateralThreshold,
+      0,
+      1,
+    );
 
     if (
       nowMs - lastImpactCleanupAtRef.current >=
@@ -943,19 +1106,179 @@ export const GameplayRuntime = forwardRef<
     const moving = controller.isMoving() && controller.isGrounded();
     const sprinting = controller.isSprinting();
     const weaponEquipped = weapon.isEquipped();
+    const activeWeapon = weapon.getActiveWeapon();
+    const adsActive = controller.isADS();
+    const firstPerson = controller.isFirstPerson();
     const moveInput = controller.getMoveInput();
     const moveX = moveInput.x;
     const moveY = moveInput.y;
     const hasDirectionalInput =
       Math.abs(moveX) > 0.05 || Math.abs(moveY) > 0.05;
     const movementActive = moving && hasDirectionalInput;
+    const isRifleEquipped = weaponEquipped && activeWeapon === "rifle";
+    const sprintPressed = isRifleEquipped
+      ? controller.isSprintPressed()
+      : sprinting;
+    const firePrepRequest = isRifleEquipped &&
+      !adsActive &&
+      rifleFireIntentRef.current;
+
+    let runState = rifleRunStateRef.current;
+    let unarmedWalkState = unarmedWalkStateRef.current;
+    let unarmedWalkUntil = unarmedWalkStateUntilRef.current;
+
+    if (!isRifleEquipped || adsActive) {
+      rifleRunStateRef.current = "idle";
+      rifleRunStateUntilRef.current = 0;
+      rifleRunStaminaRef.current = Math.min(
+        rifleRunStaminaMaxMs,
+        rifleRunStaminaRef.current + clampedDelta * 1000 *
+          rifleRunStaminaRegenPerSec,
+      );
+      if (!isRifleEquipped) {
+        if (!movementActive) {
+          if (
+            unarmedWalkState === "start" ||
+            unarmedWalkState === "moving"
+          ) {
+            unarmedWalkState = "stop";
+            unarmedWalkUntil = nowMs + UNARMED_WALK_STOP_MS;
+          } else if (
+            unarmedWalkState === "stop" &&
+            nowMs >= unarmedWalkUntil
+          ) {
+            unarmedWalkState = "idle";
+            unarmedWalkUntil = 0;
+          }
+        } else if (
+          unarmedWalkState === "idle" ||
+          unarmedWalkState === "stop"
+        ) {
+          unarmedWalkState = "start";
+          unarmedWalkUntil = nowMs + UNARMED_WALK_START_MS;
+        } else if (
+          unarmedWalkState === "start" &&
+          nowMs >= unarmedWalkUntil
+        ) {
+          unarmedWalkState = "moving";
+          unarmedWalkUntil = 0;
+        }
+      } else {
+        unarmedWalkState = "idle";
+        unarmedWalkUntil = 0;
+      }
+
+      rifleRunStateRef.current = "idle";
+      rifleRunStateUntilRef.current = 0;
+    } else {
+      let nextRunState = rifleRunStateRef.current;
+      let runStateUntil = rifleRunStateUntilRef.current;
+      const allowRunInput = shouldUseRifleRunInput(
+        moveX,
+        moveY,
+        sprintPressed,
+        rifleRunForwardThreshold,
+        rifleRunLateralThreshold,
+      ) && !firePrepRequest;
+      const runAvailable = rifleRunStaminaRef.current > 0;
+
+      if (!allowRunInput) {
+        if (
+          nextRunState === "start" ||
+          nextRunState === "running"
+        ) {
+          nextRunState = "stop";
+          runStateUntil = nowMs + rifleRunStopMs;
+        } else if (nextRunState === "stop" && nowMs >= runStateUntil) {
+          nextRunState = "idle";
+          runStateUntil = 0;
+        }
+      } else if (nextRunState === "idle") {
+        nextRunState = "start";
+        runStateUntil = nowMs + rifleRunStartMs;
+      } else if (
+        nextRunState === "start" &&
+        nowMs >= runStateUntil
+      ) {
+        nextRunState = runAvailable ? "running" : "stop";
+        runStateUntil = runAvailable ? 0 : nowMs + rifleRunStopMs;
+      } else if (nextRunState === "stop" && nowMs >= runStateUntil) {
+        nextRunState = "start";
+        runStateUntil = nowMs + rifleRunStartMs;
+      }
+
+      if (nextRunState === "running" || nextRunState === "start") {
+        rifleRunStaminaRef.current = Math.max(
+          0,
+          rifleRunStaminaRef.current - clampedDelta * 1000 *
+            rifleRunStaminaDrainPerSec,
+        );
+        if (rifleRunStaminaRef.current <= 0) {
+          nextRunState = "stop";
+          runStateUntil = nowMs + rifleRunStopMs;
+        }
+      } else if (nextRunState !== "running" && nextRunState !== "start") {
+        rifleRunStaminaRef.current = Math.min(
+          rifleRunStaminaMaxMs,
+          rifleRunStaminaRef.current + clampedDelta * 1000 *
+            rifleRunStaminaRegenPerSec,
+        );
+      }
+
+      if (nextRunState === "stop" && nowMs >= runStateUntil) {
+        nextRunState = "idle";
+        runStateUntil = 0;
+      }
+
+      runState = nextRunState;
+      rifleRunStateRef.current = nextRunState;
+      rifleRunStateUntilRef.current = runStateUntil;
+
+      unarmedWalkState = "idle";
+      unarmedWalkUntil = 0;
+    }
+
+    unarmedWalkStateRef.current = unarmedWalkState;
+    unarmedWalkStateUntilRef.current = unarmedWalkUntil;
+    if (firePrepRequest) {
+      runState = "idle";
+      rifleRunStateRef.current = "idle";
+      rifleRunStateUntilRef.current = 0;
+    }
 
     let nextAnimState: CharacterAnimState = weaponEquipped
       ? "rifleIdle"
       : "idle";
     if (movementActive) {
-      if (
-        !weaponEquipped &&
+      if (!weaponEquipped) {
+        if (
+          sprinting &&
+          moveY > 0.2 &&
+          Math.abs(moveX) < 0.35
+        ) {
+          nextAnimState = "sprint";
+        } else if (unarmedWalkState === "start") {
+          nextAnimState = "walkStart";
+        } else if (unarmedWalkState === "stop") {
+          nextAnimState = "walkStop";
+        } else {
+          nextAnimState = resolveWalkState(moveX, moveY);
+        }
+      } else if (isRifleEquipped && !adsActive) {
+        if (firePrepRequest) {
+          nextAnimState = "rifleAimHold";
+        } else if (runState === "start") {
+          nextAnimState = "rifleRunStart";
+        } else if (runState === "running") {
+          nextAnimState = "rifleRun";
+        } else if (runState === "stop") {
+          nextAnimState = "rifleRunStop";
+        } else if (sprintPressed) {
+          nextAnimState = resolveRifleJogState(moveX, moveY);
+        } else {
+          nextAnimState = resolveRifleWalkState(moveX, moveY);
+        }
+      } else if (
         sprinting &&
         moveY > 0.2 &&
         Math.abs(moveX) < 0.35
@@ -970,6 +1293,64 @@ export const GameplayRuntime = forwardRef<
       } else {
         nextAnimState = weaponEquipped ? "rifleWalkLeft" : "walkLeft";
       }
+    } else if (firePrepRequest) {
+      nextAnimState = weaponEquipped ? "rifleAimHold" : "idle";
+    }
+
+    if (rifleFireIntentRef.current) {
+      if (firePrepRequest) {
+        if (rifleFireDelayUntilRef.current === 0) {
+          rifleFireDelayUntilRef.current = nowMs + RIFLE_FIRE_AIM_PREP_MS;
+        }
+      } else {
+        rifleFireDelayUntilRef.current = 0;
+      }
+      const canFireNow = !firePrepRequest ||
+        nowMs >= rifleFireDelayUntilRef.current;
+      weapon.setTriggerHeld(canFireNow);
+    } else {
+      rifleFireDelayUntilRef.current = 0;
+      weapon.setTriggerHeld(false);
+    }
+
+    if (isRifleEquipped && !adsActive) {
+      if (firePrepRequest) {
+        controller.setMovementProfile({
+          walkScale: rifleFirePrepSpeedScale,
+          sprintScale: rifleFirePrepSpeedScale,
+          allowSprint: true,
+        });
+      } else if (runState === "start" || runState === "running") {
+        controller.setMovementProfile({
+          walkScale: 1,
+          sprintScale: rifleRunSpeedScale,
+          allowSprint: true,
+        });
+      } else if (runState === "stop") {
+        controller.setMovementProfile({
+          walkScale: 1,
+          sprintScale: rifleRunSpeedScale,
+          allowSprint: true,
+        });
+      } else if (sprintPressed) {
+        controller.setMovementProfile({
+          walkScale: 1,
+          sprintScale: rifleJogSpeedScale,
+          allowSprint: true,
+        });
+      } else {
+        controller.setMovementProfile({
+          walkScale: rifleWalkSpeedScale,
+          sprintScale: rifleWalkSpeedScale,
+          allowSprint: true,
+        });
+      }
+    } else {
+      controller.setMovementProfile({
+        walkScale: 1,
+        sprintScale: 1,
+        allowSprint: true,
+      });
     }
 
     setCharacterAnim(nextAnimState);
@@ -995,12 +1376,13 @@ export const GameplayRuntime = forwardRef<
     audio.update(
       nowMs / 1000,
       movementActive,
-      nextAnimState === "sprint",
+      nextAnimState === "sprint" ||
+        nextAnimState === "rifleRun" ||
+        nextAnimState === "rifleRunStart" ||
+        nextAnimState === "rifleRunStop",
       audioOpts,
     );
 
-    const firstPerson = controller.isFirstPerson();
-    const adsActive = controller.isADS();
     if (
       lastADSRef.current !== adsActive ||
       lastFirstPersonRef.current !== firstPerson
@@ -1068,7 +1450,14 @@ export const GameplayRuntime = forwardRef<
       sniperMuzzleOffsetRef.current,
     );
 
-    weapon.setMovementState(moving && hasDirectionalInput, sprinting);
+    const weaponSprinting = !weaponEquipped
+      ? sprinting
+      : activeWeapon === "rifle"
+      ? nextAnimState === "rifleRun" ||
+        nextAnimState === "rifleRunStart" ||
+        nextAnimState === "rifleRunStop"
+      : sprinting;
+    weapon.setMovementState(movementActive, weaponSprinting);
     const shots = weapon.update(clampedDelta, nowMs, camera);
     if (shots.length > 0 && bulletHittableMeshesDirtyRef.current) {
       const meshes: THREE.Object3D[] = [];
@@ -1386,10 +1775,10 @@ export const GameplayRuntime = forwardRef<
       weaponEquippedCallbackRef.current(equipped);
     }
 
-    const activeWeapon = weapon.getActiveWeapon();
-    if (lastActiveWeaponRef.current !== activeWeapon) {
-      lastActiveWeaponRef.current = activeWeapon;
-      activeWeaponCallbackRef.current(activeWeapon);
+    const currentActiveWeapon = weapon.getActiveWeapon();
+    if (lastActiveWeaponRef.current !== currentActiveWeapon) {
+      lastActiveWeaponRef.current = currentActiveWeapon;
+      activeWeaponCallbackRef.current(currentActiveWeapon);
     }
 
     perfAccumulatorRef.current += clampedDelta;

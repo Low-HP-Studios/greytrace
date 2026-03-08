@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { type WeaponRecoilProfiles } from "./types";
 
 export type WeaponShotEvent = {
   timestamp: number;
@@ -68,6 +69,25 @@ const WEAPON_CONFIG: Record<WeaponKind, WeaponConfig> = {
   },
 };
 
+const WEAPON_RECOIL_PROFILE: WeaponRecoilProfiles = {
+  rifle: {
+    recoilPitchBase: 0.0007,
+    recoilPitchRamp: 0.00015,
+    recoilYawRange: 0.003,
+    recoilYawDrift: 0.000005,
+    moveSpreadBase: 0.1,
+    moveSpreadSprint: 0.1,
+  },
+  sniper: {
+    recoilPitchBase: 0.05,
+    recoilPitchRamp: 0,
+    recoilYawRange: 0.05,
+    recoilYawDrift: 0.0005,
+    moveSpreadBase: 0.05,
+    moveSpreadSprint: 0.05,
+  },
+};
+
 export type SniperRechamberState = {
   active: boolean;
   progress: number;
@@ -109,6 +129,10 @@ export class WeaponSystem {
   private yawDriftDirection = 1;
   private moving = false;
   private sprinting = false;
+  private recoilProfiles: WeaponRecoilProfiles = {
+    rifle: { ...WEAPON_RECOIL_PROFILE.rifle },
+    sniper: { ...WEAPON_RECOIL_PROFILE.sniper },
+  };
 
   setTriggerHeld(next: boolean) {
     this.triggerHeld = next;
@@ -125,6 +149,63 @@ export class WeaponSystem {
     this.sprinting = sprinting;
   }
 
+  setRecoilProfiles(next: WeaponRecoilProfiles) {
+    this.recoilProfiles = {
+      rifle: {
+        recoilPitchBase: Math.max(
+          0,
+          Math.min(0.25, next.rifle.recoilPitchBase),
+        ),
+        recoilPitchRamp: Math.max(
+          0,
+          Math.min(0.02, next.rifle.recoilPitchRamp),
+        ),
+        recoilYawRange: Math.max(
+          0,
+          Math.min(0.15, next.rifle.recoilYawRange),
+        ),
+        recoilYawDrift: Math.max(
+          0,
+          Math.min(0.02, next.rifle.recoilYawDrift),
+        ),
+        moveSpreadBase: Math.max(
+          0,
+          Math.min(1, next.rifle.moveSpreadBase),
+        ),
+        moveSpreadSprint: Math.max(
+          0,
+          Math.min(1, next.rifle.moveSpreadSprint),
+        ),
+      },
+      sniper: {
+        recoilPitchBase: Math.max(
+          0,
+          Math.min(0.5, next.sniper.recoilPitchBase),
+        ),
+        recoilPitchRamp: Math.max(
+          0,
+          Math.min(0.04, next.sniper.recoilPitchRamp),
+        ),
+        recoilYawRange: Math.max(
+          0,
+          Math.min(1, next.sniper.recoilYawRange),
+        ),
+        recoilYawDrift: Math.max(
+          0,
+          Math.min(0.02, next.sniper.recoilYawDrift),
+        ),
+        moveSpreadBase: Math.max(
+          0,
+          Math.min(1, next.sniper.moveSpreadBase),
+        ),
+        moveSpreadSprint: Math.max(
+          0,
+          Math.min(1, next.sniper.moveSpreadSprint),
+        ),
+      },
+    };
+  }
+
   update(
     deltaSeconds: number,
     nowMs: number,
@@ -137,6 +218,7 @@ export class WeaponSystem {
     }
 
     const config = WEAPON_CONFIG[this.activeWeapon];
+    const recoilProfile = this.recoilProfiles[this.activeWeapon];
     this.nextShotInMs -= deltaSeconds * 1000;
 
     if (this.activeWeapon === 'sniper' && this.sniperRechamberUntilMs > nowMs) {
@@ -162,9 +244,9 @@ export class WeaponSystem {
       // Movement spread: offset the shot direction when moving
       let spreadAngle = 0;
       if (this.sprinting) {
-        spreadAngle = config.moveSpreadSprint;
+        spreadAngle = recoilProfile.moveSpreadSprint;
       } else if (this.moving) {
-        spreadAngle = config.moveSpreadBase;
+        spreadAngle = recoilProfile.moveSpreadBase;
       }
 
       if (spreadAngle > 0) {
@@ -187,10 +269,12 @@ export class WeaponSystem {
 
       // Recoil: vertical climb + horizontal wobble (PUBG-style)
       const recoilPitch =
-        config.recoilPitchBase + config.recoilPitchRamp * shotIndex;
+        recoilProfile.recoilPitchBase +
+        recoilProfile.recoilPitchRamp * shotIndex;
       // Horizontal: random wobble + slow drift that occasionally flips
-      let recoilYaw = (Math.random() - 0.5) * 2 * config.recoilYawRange;
-      recoilYaw += this.yawDriftDirection * config.recoilYawDrift;
+      let recoilYaw =
+        (Math.random() - 0.5) * 2 * recoilProfile.recoilYawRange;
+      recoilYaw += this.yawDriftDirection * recoilProfile.recoilYawDrift;
       // Occasionally flip drift direction for that PUBG S-pattern
       if (
         shotIndex > 0 &&

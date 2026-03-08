@@ -22,6 +22,12 @@ type PlayerAction =
   | "equipRifle"
   | "equipSniper";
 
+type MovementProfile = {
+  walkScale: number;
+  sprintScale: number;
+  allowSprint: boolean;
+};
+
 type UsePlayerControllerOptions = {
   collisionRects: CollisionRect[];
   collisionCircles: CollisionCircle[];
@@ -46,8 +52,10 @@ export type PlayerControllerApi = {
   isFirstPerson: () => boolean;
   isADS: () => boolean;
   isSprinting: () => boolean;
+  isSprintPressed: () => boolean;
   isMoving: () => boolean;
   isGrounded: () => boolean;
+  setMovementProfile: (profile: Partial<MovementProfile>) => void;
   requestPointerLock: () => void;
   releasePointerLock: () => void;
   setPose: (position: THREE.Vector3, yawRadians: number, pitchRadians?: number) => void;
@@ -111,9 +119,15 @@ export function usePlayerController({
   const positionRef = useRef(PLAYER_SPAWN_POSITION.clone());
   const velocityRef = useRef(new THREE.Vector2(0, 0));
   const moveInputRef = useRef(new THREE.Vector2(0, 0));
+  const sprintPressedRef = useRef(false);
   const resolvedXZRef = useRef(new THREE.Vector2(positionRef.current.x, positionRef.current.z));
   const pointerLockedRef = useRef(false);
   const triggerHeldRef = useRef(false);
+  const movementProfileRef = useRef<MovementProfile>({
+    walkScale: 1,
+    sprintScale: 1,
+    allowSprint: true,
+  });
   const movingRef = useRef(false);
   const sprintingRef = useRef(false);
   const groundedRef = useRef(true);
@@ -384,12 +398,18 @@ export function usePlayerController({
       moveInputRef.current.normalize();
     }
 
+    const movementProfile = movementProfileRef.current;
+    const sprintPressed = controlsEnabled && isBindingDown(keys, keybindsRef.current.sprint);
+    sprintPressedRef.current = sprintPressed;
     const sprinting =
       controlsEnabled &&
-      isBindingDown(keys, bindings.sprint) &&
+      movementProfile.allowSprint &&
+      sprintPressed &&
       moveInputRef.current.y >= 0 &&
       groundedRef.current;
-    const moveSpeed = sprinting ? SPRINT_SPEED : WALK_SPEED;
+    const moveSpeed = sprinting
+      ? SPRINT_SPEED * movementProfile.sprintScale
+      : WALK_SPEED * movementProfile.walkScale;
 
     const sinYaw = Math.sin(yawRef.current);
     const cosYaw = Math.cos(yawRef.current);
@@ -615,8 +635,24 @@ export function usePlayerController({
         : viewModeLerpRef.current > FPP_EXIT_VISUAL_THRESHOLD,
     isADS: () => adsRef.current,
     isSprinting: () => sprintingRef.current,
+    isSprintPressed: () => sprintPressedRef.current,
     isMoving: () => movingRef.current,
     isGrounded: () => groundedRef.current,
+    setMovementProfile: (profile) => {
+      movementProfileRef.current = {
+        ...movementProfileRef.current,
+        ...profile,
+        walkScale: Math.max(
+          0.15,
+          profile.walkScale ?? movementProfileRef.current.walkScale,
+        ),
+        sprintScale: Math.max(
+          0.15,
+          profile.sprintScale ?? movementProfileRef.current.sprintScale,
+        ),
+        allowSprint: profile.allowSprint ?? movementProfileRef.current.allowSprint,
+      };
+    },
     requestPointerLock: () => {
       if (!inputEnabledRef.current) return;
       userGestureCallbackRef.current();
@@ -665,6 +701,11 @@ export function usePlayerController({
       snapshot.pointerLocked = pointerLockedRef.current;
       snapshot.canInteract = false;
       snapshotCallbackRef.current(snapshot);
+      movementProfileRef.current = {
+        walkScale: 1,
+        sprintScale: 1,
+        allowSprint: true,
+      };
     },
   };
 }

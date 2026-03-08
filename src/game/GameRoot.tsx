@@ -28,8 +28,10 @@ import {
 } from "./SettingsPanels";
 import type { SniperRechamberState, WeaponKind } from "./Weapon";
 import {
+  DEFAULT_MOVEMENT_SETTINGS,
   DEFAULT_PERF_METRICS,
   DEFAULT_PLAYER_SNAPSHOT,
+  DEFAULT_WEAPON_RECOIL_PROFILES,
   DEFAULT_WEAPON_ALIGNMENT,
   type CrosshairColor,
   type EnemyOutlineColor,
@@ -50,6 +52,7 @@ import {
   BINDING_ROWS,
   OVERLAY_ROWS,
   loadPersistedSettings,
+  parsePersistedSettings,
   savePersistedSettings,
 } from "./settings";
 
@@ -216,6 +219,7 @@ export function GameRoot({
   const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatusPayload>(
     DEFAULT_UPDATER_STATUS,
   );
+  const [settingsImportDraft, setSettingsImportDraft] = useState("");
   const [updaterBusyAction, setUpdaterBusyAction] = useState<
     "check" | "install" | "repair" | null
   >(null);
@@ -417,6 +421,62 @@ export function GameRoot({
     });
     shotBloomLastTimeRef.current = state.nowMs;
   }, [phase, settings.crosshair.dynamic.enabled, settings.crosshair.dynamic.shotKick]);
+
+  const settingsProfileJson = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          settings,
+          hudPanels,
+          stressCount,
+          audioVolumes,
+        },
+        null,
+        2,
+      ),
+    [settings, hudPanels, stressCount, audioVolumes],
+  );
+
+  const handleCopySettingsProfile = useCallback(async () => {
+    if (!navigator.clipboard) {
+      toast.error("Clipboard API is unavailable in this runtime.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(settingsProfileJson);
+      toast.success("Settings profile copied.");
+    } catch (error) {
+      toast.error("Failed to copy settings profile.", {
+        description: error instanceof Error ? error.message : "Unknown clipboard error.",
+      });
+    }
+  }, [settingsProfileJson]);
+
+  const handleImportSettingsProfile = useCallback(() => {
+    const raw = settingsImportDraft.trim();
+    if (!raw) {
+      toast.error("Paste a settings profile JSON before importing.");
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      const normalizedInput =
+        parsed && typeof parsed === "object" && "settings" in parsed
+          ? parsed
+          : { settings: parsed };
+      const next = parsePersistedSettings(normalizedInput);
+      setSettings(next.settings);
+      setHudPanels(next.hudPanels);
+      setStressCount(next.stressCount);
+      setAudioVolumes(next.audioVolumes);
+      toast.success("Settings profile imported.");
+    } catch (error) {
+      toast.error("Invalid settings profile JSON.", {
+        description: error instanceof Error ? error.message : "Unknown JSON parse error.",
+      });
+    }
+  }, [settingsImportDraft]);
 
   useEffect(() => {
     if (!updaterApi) {
@@ -1635,6 +1695,497 @@ export function GameRoot({
                                   }))}
                               >
                                 Reset Alignment
+                              </button>
+                            </div>
+                          </MenuSection>
+
+                          <MenuSection
+                            title="Rifle Movement Tuning"
+                            blurb="Change rifle walk/jog/run feel live. This controls speed scales, run stamina, and run gating."
+                          >
+                            <RangeField
+                              label="Rifle Walk Speed Scale"
+                              value={settings.movement.rifleWalkSpeedScale}
+                              min={0.2}
+                              max={1.2}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  movement: {
+                                    ...prev.movement,
+                                    rifleWalkSpeedScale: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Jog Speed Scale"
+                              value={settings.movement.rifleJogSpeedScale}
+                              min={0.2}
+                              max={2}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  movement: {
+                                    ...prev.movement,
+                                    rifleJogSpeedScale: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Run Speed Scale"
+                              value={settings.movement.rifleRunSpeedScale}
+                              min={0.2}
+                              max={3}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  movement: {
+                                    ...prev.movement,
+                                    rifleRunSpeedScale: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Fire Prep Speed Scale"
+                              value={settings.movement.rifleFirePrepSpeedScale}
+                              min={0.1}
+                              max={1}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  movement: {
+                                    ...prev.movement,
+                                    rifleFirePrepSpeedScale: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Run Start Delay"
+                              value={settings.movement.rifleRunStartMs}
+                              min={0}
+                              max={800}
+                              step={10}
+                              suffix=" ms"
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  movement: {
+                                    ...prev.movement,
+                                    rifleRunStartMs: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Run Stop Delay"
+                              value={settings.movement.rifleRunStopMs}
+                              min={0}
+                              max={800}
+                              step={10}
+                              suffix=" ms"
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  movement: {
+                                    ...prev.movement,
+                                    rifleRunStopMs: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Run Stamina Max"
+                              value={settings.movement.rifleRunStaminaMaxMs}
+                              min={300}
+                              max={10000}
+                              step={50}
+                              suffix=" ms"
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  movement: {
+                                    ...prev.movement,
+                                    rifleRunStaminaMaxMs: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Run Stamina Drain"
+                              value={settings.movement.rifleRunStaminaDrainPerSec}
+                              min={0}
+                              max={5}
+                              step={0.05}
+                              suffix=" /s"
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  movement: {
+                                    ...prev.movement,
+                                    rifleRunStaminaDrainPerSec: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Run Stamina Regen"
+                              value={settings.movement.rifleRunStaminaRegenPerSec}
+                              min={0}
+                              max={5}
+                              step={0.05}
+                              suffix=" /s"
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  movement: {
+                                    ...prev.movement,
+                                    rifleRunStaminaRegenPerSec: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Run Forward Threshold"
+                              value={settings.movement.rifleRunForwardThreshold}
+                              min={0.05}
+                              max={1}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  movement: {
+                                    ...prev.movement,
+                                    rifleRunForwardThreshold: value,
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Run Lateral Threshold"
+                              value={settings.movement.rifleRunLateralThreshold}
+                              min={0}
+                              max={1}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  movement: {
+                                    ...prev.movement,
+                                    rifleRunLateralThreshold: value,
+                                  },
+                                }))}
+                            />
+                            <div className="settings-chip-wrap">
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() =>
+                                  setSettings((prev) => ({
+                                    ...prev,
+                                    movement: {
+                                      ...DEFAULT_MOVEMENT_SETTINGS,
+                                    },
+                                  }))}
+                              >
+                                Reset Movement Tuning
+                              </button>
+                            </div>
+                          </MenuSection>
+
+                          <MenuSection
+                            title="Weapon Recoil Tuning"
+                            blurb="Tune recoil and movement spread for rifle and sniper. Values apply immediately."
+                          >
+                            <div className="settings-chip-wrap">
+                              <span className="pill-chip">Rifle Recoil</span>
+                            </div>
+                            <RangeField
+                              label="Rifle Pitch Base"
+                              value={settings.weaponRecoilProfiles.rifle.recoilPitchBase}
+                              min={0}
+                              max={0.25}
+                              step={0.0001}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponRecoilProfiles: {
+                                    ...prev.weaponRecoilProfiles,
+                                    rifle: {
+                                      ...prev.weaponRecoilProfiles.rifle,
+                                      recoilPitchBase: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Pitch Ramp"
+                              value={settings.weaponRecoilProfiles.rifle.recoilPitchRamp}
+                              min={0}
+                              max={0.02}
+                              step={0.00001}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponRecoilProfiles: {
+                                    ...prev.weaponRecoilProfiles,
+                                    rifle: {
+                                      ...prev.weaponRecoilProfiles.rifle,
+                                      recoilPitchRamp: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Yaw Range"
+                              value={settings.weaponRecoilProfiles.rifle.recoilYawRange}
+                              min={0}
+                              max={0.15}
+                              step={0.0001}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponRecoilProfiles: {
+                                    ...prev.weaponRecoilProfiles,
+                                    rifle: {
+                                      ...prev.weaponRecoilProfiles.rifle,
+                                      recoilYawRange: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Yaw Drift"
+                              value={settings.weaponRecoilProfiles.rifle.recoilYawDrift}
+                              min={0}
+                              max={0.02}
+                              step={0.00001}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponRecoilProfiles: {
+                                    ...prev.weaponRecoilProfiles,
+                                    rifle: {
+                                      ...prev.weaponRecoilProfiles.rifle,
+                                      recoilYawDrift: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Move Spread Base"
+                              value={settings.weaponRecoilProfiles.rifle.moveSpreadBase}
+                              min={0}
+                              max={1}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponRecoilProfiles: {
+                                    ...prev.weaponRecoilProfiles,
+                                    rifle: {
+                                      ...prev.weaponRecoilProfiles.rifle,
+                                      moveSpreadBase: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Rifle Move Spread Sprint"
+                              value={settings.weaponRecoilProfiles.rifle.moveSpreadSprint}
+                              min={0}
+                              max={1}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponRecoilProfiles: {
+                                    ...prev.weaponRecoilProfiles,
+                                    rifle: {
+                                      ...prev.weaponRecoilProfiles.rifle,
+                                      moveSpreadSprint: value,
+                                    },
+                                  },
+                                }))}
+                            />
+
+                            <div className="settings-chip-wrap">
+                              <span className="pill-chip">Sniper Recoil</span>
+                            </div>
+                            <RangeField
+                              label="Sniper Pitch Base"
+                              value={settings.weaponRecoilProfiles.sniper.recoilPitchBase}
+                              min={0}
+                              max={0.5}
+                              step={0.001}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponRecoilProfiles: {
+                                    ...prev.weaponRecoilProfiles,
+                                    sniper: {
+                                      ...prev.weaponRecoilProfiles.sniper,
+                                      recoilPitchBase: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Sniper Pitch Ramp"
+                              value={settings.weaponRecoilProfiles.sniper.recoilPitchRamp}
+                              min={0}
+                              max={0.04}
+                              step={0.0001}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponRecoilProfiles: {
+                                    ...prev.weaponRecoilProfiles,
+                                    sniper: {
+                                      ...prev.weaponRecoilProfiles.sniper,
+                                      recoilPitchRamp: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Sniper Yaw Range"
+                              value={settings.weaponRecoilProfiles.sniper.recoilYawRange}
+                              min={0}
+                              max={1}
+                              step={0.001}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponRecoilProfiles: {
+                                    ...prev.weaponRecoilProfiles,
+                                    sniper: {
+                                      ...prev.weaponRecoilProfiles.sniper,
+                                      recoilYawRange: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Sniper Yaw Drift"
+                              value={settings.weaponRecoilProfiles.sniper.recoilYawDrift}
+                              min={0}
+                              max={0.02}
+                              step={0.0001}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponRecoilProfiles: {
+                                    ...prev.weaponRecoilProfiles,
+                                    sniper: {
+                                      ...prev.weaponRecoilProfiles.sniper,
+                                      recoilYawDrift: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Sniper Move Spread Base"
+                              value={settings.weaponRecoilProfiles.sniper.moveSpreadBase}
+                              min={0}
+                              max={1}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponRecoilProfiles: {
+                                    ...prev.weaponRecoilProfiles,
+                                    sniper: {
+                                      ...prev.weaponRecoilProfiles.sniper,
+                                      moveSpreadBase: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <RangeField
+                              label="Sniper Move Spread Sprint"
+                              value={settings.weaponRecoilProfiles.sniper.moveSpreadSprint}
+                              min={0}
+                              max={1}
+                              step={0.01}
+                              onChange={(value) =>
+                                setSettings((prev) => ({
+                                  ...prev,
+                                  weaponRecoilProfiles: {
+                                    ...prev.weaponRecoilProfiles,
+                                    sniper: {
+                                      ...prev.weaponRecoilProfiles.sniper,
+                                      moveSpreadSprint: value,
+                                    },
+                                  },
+                                }))}
+                            />
+                            <div className="settings-chip-wrap">
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() =>
+                                  setSettings((prev) => ({
+                                    ...prev,
+                                    weaponRecoilProfiles: {
+                                      rifle: {
+                                        ...DEFAULT_WEAPON_RECOIL_PROFILES.rifle,
+                                      },
+                                      sniper: {
+                                        ...DEFAULT_WEAPON_RECOIL_PROFILES.sniper,
+                                      },
+                                    },
+                                  }))}
+                              >
+                                Reset Recoil Tuning
+                              </button>
+                            </div>
+                          </MenuSection>
+
+                          <MenuSection
+                            title="Settings Profile JSON"
+                            blurb="Copy your full profile or import someone else's object for instant presets."
+                          >
+                            <div className="settings-json-actions">
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => {
+                                  void handleCopySettingsProfile();
+                                }}
+                              >
+                                Copy Current Profile
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                onClick={() => setSettingsImportDraft(settingsProfileJson)}
+                              >
+                                Load Current to Import Box
+                              </button>
+                            </div>
+                            <div className="settings-json-block">
+                              <div className="field-label">Current Profile</div>
+                              <textarea
+                                className="settings-json-textarea"
+                                readOnly
+                                value={settingsProfileJson}
+                              />
+                            </div>
+                            <div className="settings-json-block">
+                              <div className="field-label">Import Profile JSON</div>
+                              <textarea
+                                className="settings-json-textarea"
+                                value={settingsImportDraft}
+                                onChange={(event) =>
+                                  setSettingsImportDraft(event.target.value)}
+                                placeholder="Paste settings JSON here"
+                              />
+                            </div>
+                            <div className="settings-chip-wrap">
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={handleImportSettingsProfile}
+                              >
+                                Import Profile
                               </button>
                             </div>
                           </MenuSection>
