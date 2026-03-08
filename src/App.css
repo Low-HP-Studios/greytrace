@@ -1365,6 +1365,41 @@ code {
   gap: 8px;
 }
 
+.settings-json-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.settings-json-block {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-json-block + .settings-json-block {
+  margin-top: 10px;
+}
+
+.settings-json-textarea {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  border-radius: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.86);
+  padding: 10px;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.settings-json-textarea:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.42);
+  outline-offset: 1px;
+}
+
 .color-chip-row {
   display: flex;
   flex-wrap: wrap;

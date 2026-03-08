@@ -11,6 +11,11 @@ import {
   CHARACTER_TARGET_HEIGHT,
   CHARACTER_TEXTURE_BASE,
   CHARACTER_TEXTURE_MAP,
+  RIFLE_HOLD_JOG_TIME_SCALE,
+  RIFLE_HOLD_RUN_START_TIME_SCALE,
+  RIFLE_HOLD_RUN_STOP_TIME_SCALE,
+  RIFLE_HOLD_RUN_TIME_SCALE,
+  RIFLE_HOLD_WALK_TIME_SCALE,
   SPRINT_ANIM_TIME_SCALE,
   WALK_ANIM_TIME_SCALE,
   BASE_FOOTSTEP_INTERVAL_SECONDS,
@@ -27,8 +32,27 @@ function resolveCharacterAnimTimeScale(state: CharacterAnimState): number {
   if (state === "sprint") {
     return SPRINT_ANIM_TIME_SCALE;
   }
-  if (state === "idle" || state === "rifleIdle") {
+  if (
+    state === "idle" ||
+    state === "rifleIdle" ||
+    state === "rifleAimHold"
+  ) {
     return 1;
+  }
+  if (state.startsWith("rifleWalk")) {
+    return RIFLE_HOLD_WALK_TIME_SCALE;
+  }
+  if (state.startsWith("rifleJog")) {
+    return RIFLE_HOLD_JOG_TIME_SCALE;
+  }
+  if (state === "rifleRunStart") {
+    return RIFLE_HOLD_RUN_START_TIME_SCALE;
+  }
+  if (state === "rifleRunStop") {
+    return RIFLE_HOLD_RUN_STOP_TIME_SCALE;
+  }
+  if (state === "rifleRun") {
+    return RIFLE_HOLD_RUN_TIME_SCALE;
   }
   return WALK_ANIM_TIME_SCALE;
 }
@@ -48,10 +72,37 @@ export function resolveFootstepPlaybackRate(state: CharacterAnimState): number {
   if (
     state === "walkLeft" ||
     state === "walkRight" ||
+    state === "walkForwardLeft" ||
+    state === "walkForwardRight" ||
     state === "rifleWalkLeft" ||
-    state === "rifleWalkRight"
+    state === "rifleWalkRight" ||
+    state === "rifleWalkForwardLeft" ||
+    state === "rifleWalkForwardRight" ||
+    state === "rifleJogLeft" ||
+    state === "rifleJogRight" ||
+    state === "rifleJogForwardLeft" ||
+    state === "rifleJogForwardRight"
   ) {
     return 1.06;
+  }
+  if (
+    state === "walkBackwardLeft" ||
+    state === "walkBackwardRight" ||
+    state === "rifleWalkBackwardLeft" ||
+    state === "rifleWalkBackwardRight" ||
+    state === "rifleJogBackwardLeft" ||
+    state === "rifleJogBackwardRight"
+  ) {
+    return 0.98;
+  }
+  if (
+    state === "rifleJog" ||
+    state === "rifleJogBack" ||
+    state === "rifleRun" ||
+    state === "rifleRunStart" ||
+    state === "rifleRunStop"
+  ) {
+    return 1.12;
   }
   return 1;
 }
@@ -289,8 +340,19 @@ export function useCharacterModel(): CharacterModelResult {
             const boneName = splitTrackName(track.name).nodeName;
             return modelBoneNames.has(boneName);
           });
-          const action = mixer.clipAction(remapped);
-          action.setLoop(THREE.LoopRepeat, Infinity);
+      const action = mixer.clipAction(remapped);
+      const clipName = ANIM_CLIPS[i].name;
+      if (
+        clipName === "walkStart" ||
+        clipName === "walkStop" ||
+        clipName === "rifleRunStart" ||
+        clipName === "rifleRunStop"
+      ) {
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+      } else {
+        action.setLoop(THREE.LoopRepeat, Infinity);
+      }
           actions.set(ANIM_CLIPS[i].name, action);
         }
         actionsRef.current = actions;

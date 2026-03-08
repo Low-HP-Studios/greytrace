@@ -6,8 +6,11 @@ import {
   DEFAULT_ENEMY_OUTLINE_SETTINGS,
   DEFAULT_HUD_OVERLAY_TOGGLES,
   DEFAULT_WEAPON_ALIGNMENT,
+  DEFAULT_MOVEMENT_SETTINGS,
+  DEFAULT_WEAPON_RECOIL_PROFILES,
   type CrosshairColor,
   type EnemyOutlineColor,
+  type WeaponRecoilProfiles,
   type GameSettings,
   type HudOverlayToggles,
   type PixelRatioScale,
@@ -61,6 +64,11 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   weaponAlignment: { ...DEFAULT_WEAPON_ALIGNMENT },
   crosshair: cloneDefaultCrosshairSettings(),
   enemyOutline: cloneDefaultEnemyOutlineSettings(),
+  movement: { ...DEFAULT_MOVEMENT_SETTINGS },
+  weaponRecoilProfiles: {
+    rifle: { ...DEFAULT_WEAPON_RECOIL_PROFILES.rifle },
+    sniper: { ...DEFAULT_WEAPON_RECOIL_PROFILES.sniper },
+  },
 };
 
 export type PersistedSettings = {
@@ -79,6 +87,11 @@ export function createDefaultPersistedSettings(): PersistedSettings {
       weaponAlignment: { ...DEFAULT_WEAPON_ALIGNMENT },
       crosshair: cloneDefaultCrosshairSettings(),
       enemyOutline: cloneDefaultEnemyOutlineSettings(),
+      movement: { ...DEFAULT_MOVEMENT_SETTINGS },
+      weaponRecoilProfiles: {
+        rifle: { ...DEFAULT_WEAPON_RECOIL_PROFILES.rifle },
+        sniper: { ...DEFAULT_WEAPON_RECOIL_PROFILES.sniper },
+      },
     },
     hudPanels: { ...DEFAULT_HUD_OVERLAY_TOGGLES },
     stressCount: 0,
@@ -182,6 +195,16 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
   const crosshairAds = isRecord(crosshair.ads) ? crosshair.ads : {};
   const enemyOutline = isRecord(settings.enemyOutline)
     ? settings.enemyOutline
+    : {};
+  const movement = isRecord(settings.movement) ? settings.movement : {};
+  const weaponRecoilProfiles = isRecord(settings.weaponRecoilProfiles)
+    ? settings.weaponRecoilProfiles
+    : {};
+  const rifleRecoilProfile = isRecord(weaponRecoilProfiles.rifle)
+    ? weaponRecoilProfiles.rifle
+    : {};
+  const sniperRecoilProfile = isRecord(weaponRecoilProfiles.sniper)
+    ? weaponRecoilProfiles.sniper
     : {};
   const hudPanels = isRecord(value.hudPanels) ? value.hudPanels : {};
   const audioVolumes = isRecord(value.audioVolumes) ? value.audioVolumes : {};
@@ -489,6 +512,152 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
           defaults.settings.enemyOutline.opacity,
         ),
       },
+      movement: {
+        rifleWalkSpeedScale: readClampedNumber(
+          movement.rifleWalkSpeedScale,
+          0.2,
+          3,
+          defaults.settings.movement.rifleWalkSpeedScale,
+        ),
+        rifleJogSpeedScale: readClampedNumber(
+          movement.rifleJogSpeedScale,
+          0.2,
+          3,
+          defaults.settings.movement.rifleJogSpeedScale,
+        ),
+        rifleRunSpeedScale: readClampedNumber(
+          movement.rifleRunSpeedScale,
+          0.5,
+          3.5,
+          defaults.settings.movement.rifleRunSpeedScale,
+        ),
+        rifleFirePrepSpeedScale: readClampedNumber(
+          movement.rifleFirePrepSpeedScale,
+          0.1,
+          2,
+          defaults.settings.movement.rifleFirePrepSpeedScale,
+        ),
+        rifleRunStaminaMaxMs: readClampedNumber(
+          movement.rifleRunStaminaMaxMs,
+          400,
+          12000,
+          defaults.settings.movement.rifleRunStaminaMaxMs,
+        ),
+        rifleRunStaminaDrainPerSec: readClampedNumber(
+          movement.rifleRunStaminaDrainPerSec,
+          0.05,
+          12,
+          defaults.settings.movement.rifleRunStaminaDrainPerSec,
+        ),
+        rifleRunStaminaRegenPerSec: readClampedNumber(
+          movement.rifleRunStaminaRegenPerSec,
+          0,
+          12,
+          defaults.settings.movement.rifleRunStaminaRegenPerSec,
+        ),
+        rifleRunStartMs: readClampedNumber(
+          movement.rifleRunStartMs,
+          60,
+          2200,
+          defaults.settings.movement.rifleRunStartMs,
+        ),
+        rifleRunStopMs: readClampedNumber(
+          movement.rifleRunStopMs,
+          60,
+          2200,
+          defaults.settings.movement.rifleRunStopMs,
+        ),
+        rifleRunForwardThreshold: readClampedNumber(
+          movement.rifleRunForwardThreshold,
+          0,
+          1,
+          defaults.settings.movement.rifleRunForwardThreshold,
+        ),
+        rifleRunLateralThreshold: readClampedNumber(
+          movement.rifleRunLateralThreshold,
+          0,
+          1,
+          defaults.settings.movement.rifleRunLateralThreshold,
+        ),
+      },
+      weaponRecoilProfiles: {
+        rifle: {
+          recoilPitchBase: readClampedNumber(
+            rifleRecoilProfile.recoilPitchBase,
+            0,
+            0.25,
+            defaults.settings.weaponRecoilProfiles.rifle.recoilPitchBase,
+          ),
+          recoilPitchRamp: readClampedNumber(
+            rifleRecoilProfile.recoilPitchRamp,
+            0,
+            0.02,
+            defaults.settings.weaponRecoilProfiles.rifle.recoilPitchRamp,
+          ),
+          recoilYawRange: readClampedNumber(
+            rifleRecoilProfile.recoilYawRange,
+            0,
+            0.15,
+            defaults.settings.weaponRecoilProfiles.rifle.recoilYawRange,
+          ),
+          recoilYawDrift: readClampedNumber(
+            rifleRecoilProfile.recoilYawDrift,
+            0,
+            0.02,
+            defaults.settings.weaponRecoilProfiles.rifle.recoilYawDrift,
+          ),
+          moveSpreadBase: readClampedNumber(
+            rifleRecoilProfile.moveSpreadBase,
+            0,
+            1,
+            defaults.settings.weaponRecoilProfiles.rifle.moveSpreadBase,
+          ),
+          moveSpreadSprint: readClampedNumber(
+            rifleRecoilProfile.moveSpreadSprint,
+            0,
+            1,
+            defaults.settings.weaponRecoilProfiles.rifle.moveSpreadSprint,
+          ),
+        },
+        sniper: {
+          recoilPitchBase: readClampedNumber(
+            sniperRecoilProfile.recoilPitchBase,
+            0,
+            0.5,
+            defaults.settings.weaponRecoilProfiles.sniper.recoilPitchBase,
+          ),
+          recoilPitchRamp: readClampedNumber(
+            sniperRecoilProfile.recoilPitchRamp,
+            0,
+            0.04,
+            defaults.settings.weaponRecoilProfiles.sniper.recoilPitchRamp,
+          ),
+          recoilYawRange: readClampedNumber(
+            sniperRecoilProfile.recoilYawRange,
+            0,
+            1,
+            defaults.settings.weaponRecoilProfiles.sniper.recoilYawRange,
+          ),
+          recoilYawDrift: readClampedNumber(
+            sniperRecoilProfile.recoilYawDrift,
+            0,
+            0.02,
+            defaults.settings.weaponRecoilProfiles.sniper.recoilYawDrift,
+          ),
+          moveSpreadBase: readClampedNumber(
+            sniperRecoilProfile.moveSpreadBase,
+            0,
+            1,
+            defaults.settings.weaponRecoilProfiles.sniper.moveSpreadBase,
+          ),
+          moveSpreadSprint: readClampedNumber(
+            sniperRecoilProfile.moveSpreadSprint,
+            0,
+            1,
+            defaults.settings.weaponRecoilProfiles.sniper.moveSpreadSprint,
+          ),
+        },
+      } as WeaponRecoilProfiles,
     },
     hudPanels: {
       practice: readBoolean(hudPanels.practice, defaults.hudPanels.practice),

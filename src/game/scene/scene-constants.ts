@@ -73,15 +73,94 @@ export const CHARACTER_TEXTURE_MAP: Record<string, { base: string; normal: strin
 
 export const ANIM_CLIPS: { name: string; url: string }[] = [
   { name: "idle", url: "/assets/animations/walking/Idle.fbx" },
-  { name: "walk", url: "/assets/animations/walking/Walk Forward.fbx" },
-  { name: "walkBack", url: "/assets/animations/walking/Walk Backward.fbx" },
-  { name: "walkLeft", url: "/assets/animations/walking/Walk Left.fbx" },
-  { name: "walkRight", url: "/assets/animations/walking/Walk Right.fbx" },
-  { name: "rifleIdle", url: "/assets/animations/walking with gun/Rifle Aim Idle.fbx" },
-  { name: "rifleWalk", url: "/assets/animations/walking with gun/Rifle Aim Walk Forward Loop.fbx" },
-  { name: "rifleWalkBack", url: "/assets/animations/walking with gun/Rifle Aim Walk Backward Loop.fbx" },
-  { name: "rifleWalkLeft", url: "/assets/animations/walking with gun/Rifle Aim Walk Left Loop.fbx" },
-  { name: "rifleWalkRight", url: "/assets/animations/walking with gun/Rifle Aim Walk Right Loop.fbx" },
+  { name: "walk", url: "/assets/animations/walk/Walk Forward Animation.fbx" },
+  { name: "walkBack", url: "/assets/animations/walk/Walk Backward Animation.fbx" },
+  { name: "walkLeft", url: "/assets/animations/walk/Walk Left Animation.fbx" },
+  { name: "walkRight", url: "/assets/animations/walk/Walk Right Animation.fbx" },
+  { name: "walkStart", url: "/assets/animations/walk/Walk Start.fbx" },
+  { name: "walkStop", url: "/assets/animations/walk/Walk Stop.fbx" },
+  {
+    name: "walkForwardLeft",
+    url: "/assets/animations/walk/Walk Forward Left Animation.fbx",
+  },
+  {
+    name: "walkForwardRight",
+    url: "/assets/animations/walk/Walk Forward Right Animation.fbx",
+  },
+  {
+    name: "walkBackwardLeft",
+    url: "/assets/animations/walk/Walk Backward Left.fbx",
+  },
+  {
+    name: "walkBackwardRight",
+    url: "/assets/animations/walk/Walk Backward Right.fbx",
+  },
+  { name: "rifleAimHold", url: "/assets/animations/walking with gun/Rifle Aim Idle.fbx" },
+  { name: "rifleIdle", url: "/assets/animations/rifle-hold/Rifle Hold Idle Animation.fbx" },
+  { name: "rifleWalk", url: "/assets/animations/rifle-hold/Rifle Hold Walk Forward Loop.fbx" },
+  { name: "rifleWalkBack", url: "/assets/animations/rifle-hold/Rifle Hold Walk Backward Loop.fbx" },
+  { name: "rifleWalkLeft", url: "/assets/animations/rifle-hold/Rifle Hold Walk Left Loop.fbx" },
+  { name: "rifleWalkRight", url: "/assets/animations/rifle-hold/Rifle Hold Walk Right Loop.fbx" },
+  {
+    name: "rifleWalkForwardLeft",
+    url: "/assets/animations/rifle-hold/Rifle Hold Walk Forward Left Loop.fbx",
+  },
+  {
+    name: "rifleWalkForwardRight",
+    url: "/assets/animations/rifle-hold/Rifle Hold Walk Forward Right Loop.fbx",
+  },
+  {
+    name: "rifleWalkBackwardLeft",
+    url: "/assets/animations/rifle-hold/Rifle Hold Walk Backward Left Loop.fbx",
+  },
+  {
+    name: "rifleWalkBackwardRight",
+    url: "/assets/animations/rifle-hold/Rifle Hold Walk Backward Right Loop.fbx",
+  },
+  {
+    name: "rifleJog",
+    url: "/assets/animations/rifle-hold-jog/Rifle Hold Jog Forward Loop.fbx",
+  },
+  {
+    name: "rifleJogBack",
+    url: "/assets/animations/rifle-hold-jog/Rifle Hold Jog Backward Loop.fbx",
+  },
+  {
+    name: "rifleJogLeft",
+    url: "/assets/animations/rifle-hold-jog/Rifle Hold Jog Left Loop.fbx",
+  },
+  {
+    name: "rifleJogRight",
+    url: "/assets/animations/rifle-hold-jog/Rifle Hold Jog Right Loop.fbx",
+  },
+  {
+    name: "rifleJogForwardLeft",
+    url: "/assets/animations/rifle-hold-jog/Rifle Hold Jog Forward Left Loop.fbx",
+  },
+  {
+    name: "rifleJogForwardRight",
+    url: "/assets/animations/rifle-hold-jog/Rifle Hold Jog Forward Right Loop.fbx",
+  },
+  {
+    name: "rifleJogBackwardLeft",
+    url: "/assets/animations/rifle-hold-jog/Rifle Hold Jog Backward Left Loop.fbx",
+  },
+  {
+    name: "rifleJogBackwardRight",
+    url: "/assets/animations/rifle-hold-jog/Rifle Hold Jog Backward Right Loop.fbx",
+  },
+  {
+    name: "rifleRun",
+    url: "/assets/animations/rifle-hold-run/Rifle Hold Run Loop.fbx",
+  },
+  {
+    name: "rifleRunStart",
+    url: "/assets/animations/rifle-hold-run/Rifle Hold Run Start Animation.fbx",
+  },
+  {
+    name: "rifleRunStop",
+    url: "/assets/animations/rifle-hold-run/Rifle Hold Run Stop Animation.fbx",
+  },
 ];
 
 export const WEAPON_MODEL_URLS: Record<WeaponKind, string> = {
@@ -127,19 +206,57 @@ export const WEAPON_MODEL_TRANSFORMS: {
 
 export const WALK_ANIM_TIME_SCALE = 1.18;
 export const SPRINT_ANIM_TIME_SCALE = 1.9;
+export const RIFLE_HOLD_WALK_TIME_SCALE = 0.58;
+export const RIFLE_HOLD_JOG_TIME_SCALE = 0.96;
+export const RIFLE_HOLD_RUN_TIME_SCALE = 1.6;
+export const RIFLE_HOLD_RUN_START_TIME_SCALE = 1.2;
+export const RIFLE_HOLD_RUN_STOP_TIME_SCALE = 1.2;
 export const BASE_FOOTSTEP_INTERVAL_SECONDS = 0.566;
+export const RIFLE_HOLD_WALK_SPEED_SCALE = 0.56;
+export const RIFLE_HOLD_JOG_SPEED_SCALE = 0.82;
+export const RIFLE_HOLD_RUN_SPEED_SCALE = 1.42;
+export const RIFLE_HOLD_FIRE_PREP_SPEED_SCALE = 0.38;
+
+export const RIFLE_FIRE_AIM_PREP_MS = 140;
+export const RIFLE_RUN_STAMINA_MAX_MS = 2600;
+export const RIFLE_RUN_STAMINA_DRAIN_PER_SEC = 1;
+export const RIFLE_RUN_STAMINA_REGEN_PER_SEC = 0.55;
+export const RIFLE_RUN_START_MS = 220;
+export const RIFLE_RUN_STOP_MS = 220;
 
 export type CharacterAnimState =
   | "idle"
   | "walk"
+  | "walkStart"
+  | "walkStop"
   | "walkBack"
   | "walkLeft"
   | "walkRight"
+  | "walkForwardLeft"
+  | "walkForwardRight"
+  | "walkBackwardLeft"
+  | "walkBackwardRight"
   | "rifleIdle"
   | "rifleWalk"
   | "rifleWalkBack"
   | "rifleWalkLeft"
   | "rifleWalkRight"
+  | "rifleWalkForwardLeft"
+  | "rifleWalkForwardRight"
+  | "rifleWalkBackwardLeft"
+  | "rifleWalkBackwardRight"
+  | "rifleAimHold"
+  | "rifleJog"
+  | "rifleJogBack"
+  | "rifleJogLeft"
+  | "rifleJogRight"
+  | "rifleJogForwardLeft"
+  | "rifleJogForwardRight"
+  | "rifleJogBackwardLeft"
+  | "rifleJogBackwardRight"
+  | "rifleRun"
+  | "rifleRunStart"
+  | "rifleRunStop"
   | "sprint";
 
 export type BulletImpactMark = {
