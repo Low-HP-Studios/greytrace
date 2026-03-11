@@ -1669,6 +1669,9 @@ export const GameplayRuntime = forwardRef<
       controller.setRunFacing(runFacingPhase, rifleRunHeadingYawRef.current);
     }
 
+    const useUnarmedWalkLocomotion = !weaponEquipped &&
+      movementTier !== "run";
+
     let nextAnimState: CharacterAnimState = weaponEquipped
       ? "rifleIdle"
       : "idle";
@@ -1717,7 +1720,8 @@ export const GameplayRuntime = forwardRef<
         } else {
           nextAnimState = stabilizeLateralTransition(
             resolveWalkState(animMoveX, animMoveY, {
-              useForwardDiagonalClip: movementTier === "walk",
+              useForwardDiagonalClip: useUnarmedWalkLocomotion ||
+                movementTier === "walk",
             }),
             lastCharacterAnimStateRef.current,
             moveX,
@@ -1783,13 +1787,19 @@ export const GameplayRuntime = forwardRef<
       ? 1
       : 0;
     const crouchAimCompositePose = crouchAimCompositeActive ? crouchPose : 0;
-    const standingWalkScale = firePrepIntent
+    const standingWalkScale = !weaponEquipped
+      ? 1
+      : firePrepIntent
       ? rifleFirePrepSpeedScale
       : rifleWalkSpeedScale;
-    const standingJogScale = firePrepIntent
+    const standingJogScale = !weaponEquipped
+      ? 1
+      : firePrepIntent
       ? rifleFirePrepSpeedScale
       : rifleJogSpeedScale;
-    const standingRunScale = firePrepIntent
+    const standingRunScale = !weaponEquipped
+      ? 1
+      : firePrepIntent
       ? rifleFirePrepSpeedScale
       : rifleRunSpeedScale;
     const movementProfileWalkScale = THREE.MathUtils.lerp(
@@ -1828,7 +1838,7 @@ export const GameplayRuntime = forwardRef<
     const targetTierSpeed = runVisualState
       ? PLAYER_SPRINT_SPEED * movementProfileRunScale
       : PLAYER_WALK_SPEED * (
-        movementTier === "walk"
+        useUnarmedWalkLocomotion || movementTier === "walk"
           ? movementProfileWalkScale
           : movementProfileJogScale
       );
