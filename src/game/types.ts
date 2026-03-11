@@ -170,11 +170,6 @@ export type MovementProfileSettings = {
   rifleRunSpeedScale: number;
   rifleFirePrepSpeedScale: number;
   crouchSpeedScale: number;
-  rifleRunStaminaMaxMs: number;
-  rifleRunStaminaDrainPerSec: number;
-  rifleRunStaminaRegenPerSec: number;
-  rifleRunStartMs: number;
-  rifleRunStopMs: number;
   rifleRunForwardThreshold: number;
   rifleRunLateralThreshold: number;
 };
@@ -248,11 +243,6 @@ export const DEFAULT_MOVEMENT_SETTINGS: MovementProfileSettings = {
   rifleRunSpeedScale: 1.13,
   rifleFirePrepSpeedScale: 0.37,
   crouchSpeedScale: 0.52,
-  rifleRunStaminaMaxMs: 10000,
-  rifleRunStaminaDrainPerSec: 5,
-  rifleRunStaminaRegenPerSec: 5,
-  rifleRunStartMs: 800,
-  rifleRunStopMs: 800,
   rifleRunForwardThreshold: 1,
   rifleRunLateralThreshold: 1,
 };

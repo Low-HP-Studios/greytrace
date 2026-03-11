@@ -12,7 +12,6 @@ import {
   CHARACTER_TEXTURE_BASE,
   CHARACTER_TEXTURE_MAP,
   CROUCH_ANIM_TIME_SCALE,
-  RIFLE_CROUCH_ANIM_TIME_SCALE,
   RIFLE_HOLD_JOG_TIME_SCALE,
   RIFLE_HOLD_RUN_START_TIME_SCALE,
   RIFLE_HOLD_RUN_STOP_TIME_SCALE,
@@ -35,10 +34,14 @@ export type CharacterModelResult = {
 
 export type CharacterAnimPlaybackOptions = {
   locomotionScale?: number;
+  seekNormalizedTime?: number;
+  desiredDurationSeconds?: number;
+  fadeDurationSeconds?: number;
 };
 
 function isRifleLocomotionState(state: CharacterAnimState): boolean {
   return state.startsWith("rifleWalk") ||
+    state.startsWith("rifleAimWalk") ||
     state.startsWith("rifleJog") ||
     state === "rifleRun" ||
     state === "rifleRunStart" ||
@@ -60,23 +63,28 @@ function resolveCharacterAnimTimeScale(
   } else if (
     state === "idle" ||
     state === "rifleIdle" ||
-    state === "rifleAimHold" ||
+    state === "rifleAimHold"
+  ) {
+    baseScale = 1;
+  } else if (
     state === "crouchEnter" ||
     state === "crouchExit" ||
     state === "rifleCrouchEnter" ||
     state === "rifleCrouchExit"
   ) {
-    baseScale = 1;
+    baseScale = CROUCH_ANIM_TIME_SCALE;
   } else if (
     state === "crouchIdle" ||
     state === "crouchForward" ||
     state === "crouchBack" ||
     state === "crouchLeft" ||
-    state === "crouchRight"
+    state === "crouchRight" ||
+    state === "rifleCrouchIdle" ||
+    state === "rifleCrouchWalk"
   ) {
     baseScale = CROUCH_ANIM_TIME_SCALE;
-  } else if (state === "rifleCrouchIdle" || state === "rifleCrouchWalk") {
-    baseScale = RIFLE_CROUCH_ANIM_TIME_SCALE;
+  } else if (state.startsWith("rifleAimWalk")) {
+    baseScale = RIFLE_HOLD_WALK_TIME_SCALE;
   } else if (state.startsWith("rifleWalk")) {
     baseScale = RIFLE_HOLD_WALK_TIME_SCALE;
   } else if (state.startsWith("rifleJog")) {
@@ -121,13 +129,19 @@ export function resolveFootstepPlaybackRate(
     state === "rifleCrouchWalk"
   ) {
     baseRate = 0.84;
-  } else if (state === "walkBack" || state === "rifleWalkBack") {
+  } else if (
+    state === "walkBack" ||
+    state === "rifleWalkBack" ||
+    state === "rifleAimWalkBack"
+  ) {
     baseRate = 0.92;
   } else if (
     state === "walkLeft" ||
     state === "walkRight" ||
     state === "walkForwardLeft" ||
     state === "walkForwardRight" ||
+    state === "rifleAimWalkLeft" ||
+    state === "rifleAimWalkRight" ||
     state === "rifleWalkLeft" ||
     state === "rifleWalkRight" ||
     state === "rifleWalkForwardLeft" ||
@@ -147,6 +161,8 @@ export function resolveFootstepPlaybackRate(
     state === "rifleJogBackwardRight"
   ) {
     baseRate = 0.98;
+  } else if (state === "rifleAimWalk") {
+    baseRate = 1;
   } else if (
     state === "rifleJog" ||
     state === "rifleJogBack" ||
@@ -443,29 +459,42 @@ export function useCharacterModel(): CharacterModelResult {
     state: CharacterAnimState,
     options?: CharacterAnimPlaybackOptions,
   ) => {
-    const targetName = state === "sprint" ? "walk" : state;
-    const targetSpeed = resolveCharacterAnimTimeScale(state, options);
+    const fadeDuration = Math.max(0, options?.fadeDurationSeconds ?? 0.25);
+    const seekNormalizedTime = options?.seekNormalizedTime == null
+      ? null
+      : THREE.MathUtils.clamp(options.seekNormalizedTime, 0, 0.999);
     const stateKey = state;
 
     const actions = actionsRef.current;
-    const target = actions.get(targetName);
+    const target = actions.get(state);
     if (!target) return;
+    const desiredDurationSeconds = options?.desiredDurationSeconds;
+    const targetSpeed = desiredDurationSeconds && desiredDurationSeconds > 0
+      ? target.getClip().duration / desiredDurationSeconds
+      : resolveCharacterAnimTimeScale(state, options);
 
     const prevKey = currentAnimRef.current;
-    const prevName = prevKey === "sprint" ? "walk" : prevKey;
-    const prev = actions.get(prevName);
+    const prev = actions.get(prevKey);
     if (currentAnimRef.current === stateKey && prev === target) {
       target.timeScale = targetSpeed;
+      if (seekNormalizedTime !== null) {
+        target.time = target.getClip().duration * seekNormalizedTime;
+        target.play();
+      }
       return;
     }
 
     if (prev && prev !== target) {
-      prev.fadeOut(0.25);
+      prev.fadeOut(fadeDuration);
     }
 
     target.timeScale = targetSpeed;
     if (prev !== target) {
-      target.reset().fadeIn(0.25).play();
+      target.reset();
+      if (seekNormalizedTime !== null) {
+        target.time = target.getClip().duration * seekNormalizedTime;
+      }
+      target.fadeIn(fadeDuration).play();
     } else {
       target.timeScale = targetSpeed;
     }

@@ -1718,7 +1718,7 @@ export function GameRoot({
 
                           <MenuSection
                             title="Rifle Movement Tuning"
-                            blurb="Change walk/jog/run feel live. This controls speed scales, run stamina, and forward-biased slide gating."
+                            blurb="Change walk/jog/run feel live. This controls speed scales and slide gating for forward-biased sprinting."
                           >
                             <RangeField
                               label="Rifle Walk Speed Scale"
@@ -1792,86 +1792,6 @@ export function GameRoot({
                                   movement: {
                                     ...prev.movement,
                                     crouchSpeedScale: value,
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Rifle Run Start Delay"
-                              value={settings.movement.rifleRunStartMs}
-                              min={0}
-                              max={800}
-                              step={10}
-                              suffix=" ms"
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  movement: {
-                                    ...prev.movement,
-                                    rifleRunStartMs: value,
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Rifle Run Stop Delay"
-                              value={settings.movement.rifleRunStopMs}
-                              min={0}
-                              max={800}
-                              step={10}
-                              suffix=" ms"
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  movement: {
-                                    ...prev.movement,
-                                    rifleRunStopMs: value,
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Rifle Run Stamina Max"
-                              value={settings.movement.rifleRunStaminaMaxMs}
-                              min={300}
-                              max={10000}
-                              step={50}
-                              suffix=" ms"
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  movement: {
-                                    ...prev.movement,
-                                    rifleRunStaminaMaxMs: value,
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Rifle Run Stamina Drain"
-                              value={settings.movement.rifleRunStaminaDrainPerSec}
-                              min={0}
-                              max={5}
-                              step={0.05}
-                              suffix=" /s"
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  movement: {
-                                    ...prev.movement,
-                                    rifleRunStaminaDrainPerSec: value,
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Rifle Run Stamina Regen"
-                              value={settings.movement.rifleRunStaminaRegenPerSec}
-                              min={0}
-                              max={5}
-                              step={0.05}
-                              suffix=" /s"
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  movement: {
-                                    ...prev.movement,
-                                    rifleRunStaminaRegenPerSec: value,
                                   },
                                 }))}
                             />

@@ -13,6 +13,11 @@ import type {
   WorldBounds,
 } from "./types";
 import {
+  AIR_STEER_TURN_RATE,
+  isSprintInputEligible,
+  rotatePlanarVelocityTowards,
+} from "./movement";
+import {
   PLAYER_SPAWN_PITCH,
   PLAYER_SPAWN_POSITION,
 } from "./scene/scene-constants";
@@ -111,6 +116,9 @@ const RIFLE_ADS_FOV = 58;
 const SNIPER_ADS_FOV = 26;
 const VIEW_MODE_TRANSITION_SPEED = 10;
 const CROUCH_TRANSITION_SPEED = 14;
+const TPP_CROUCH_CAMERA_TRANSITION_SPEED = 12;
+const TPP_CROUCH_CAMERA_ACTIVATION_THRESHOLD = 0.98;
+const CROUCH_SPRINT_LOCK_THRESHOLD = 0.35;
 const BODY_YAW_DAMP = 14;
 const RUN_BODY_YAW_DAMP = 24;
 const RUN_TRANSITION_BODY_YAW_DAMP = 16;
@@ -168,6 +176,7 @@ export function usePlayerController({
   const movementTierRef = useRef<MovementTier>("jog");
   const groundedRef = useRef(true);
   const verticalVelocityRef = useRef(0);
+  const airborneMomentumSpeedRef = useRef(0);
   const jumpQueuedRef = useRef(false);
   const yawRef = useRef(0);
   const bodyYawRef = useRef(0);
@@ -186,6 +195,7 @@ export function usePlayerController({
   const adsRef = useRef(false);
   const adsLerpRef = useRef(0);
   const crouchLerpRef = useRef(0);
+  const crouchCameraLerpRef = useRef(0);
   const viewModeLerpRef = useRef(0);
   const crouchModeRef = useRef<CrouchMode>(crouchMode);
   const crouchHoldLatchRef = useRef(false);
@@ -511,23 +521,27 @@ export function usePlayerController({
 
     const movementProfile = movementProfileRef.current;
     const hasDirectionalInput = moveInputRef.current.lengthSq() > 0.001;
+    const crouchSprintLocked =
+      crouchedRef.current || crouchLerpRef.current >= CROUCH_SPRINT_LOCK_THRESHOLD;
     const sprintPressed = controlsEnabled &&
       isBindingDown(keys, bindings.sprint) &&
-      !crouchedRef.current &&
+      !crouchSprintLocked &&
       !adsRef.current;
     const walkPressed = controlsEnabled &&
       isBindingDown(keys, bindings.walkModifier) &&
-      !crouchedRef.current &&
+      !crouchSprintLocked &&
       !sprintPressed;
     sprintPressedRef.current = sprintPressed;
     walkPressedRef.current = walkPressed;
 
+    const sprintEligible = hasDirectionalInput &&
+      isSprintInputEligible(moveInputRef.current.x, moveInputRef.current.y);
     const sprinting =
       controlsEnabled &&
       movementProfile.allowSprint &&
       sprintPressed &&
       groundedRef.current &&
-      hasDirectionalInput;
+      sprintEligible;
     const movementTier: MovementTier = sprinting
       ? "run"
       : walkPressed ? "walk" : "jog";
@@ -548,11 +562,27 @@ export function usePlayerController({
     const desiredX = localX * cosYaw - localZ * sinYaw;
     const desiredZ = -localX * sinYaw - localZ * cosYaw;
 
-    if (controlsEnabled) {
-      velocityRef.current.x = desiredX * moveSpeed;
-      velocityRef.current.y = desiredZ * moveSpeed;
-    } else {
+    if (groundedRef.current) {
+      if (controlsEnabled) {
+        velocityRef.current.x = desiredX * moveSpeed;
+        velocityRef.current.y = desiredZ * moveSpeed;
+      } else {
+        velocityRef.current.set(0, 0);
+      }
+    } else if (!controlsEnabled) {
       velocityRef.current.set(0, 0);
+      airborneMomentumSpeedRef.current = 0;
+    } else if (hasDirectionalInput) {
+      const desiredHeadingYaw = Math.atan2(-desiredX, -desiredZ);
+      rotatePlanarVelocityTowards(
+        velocityRef.current,
+        desiredHeadingYaw,
+        AIR_STEER_TURN_RATE * delta,
+      );
+      const airborneSpeed = airborneMomentumSpeedRef.current;
+      if (airborneSpeed > 0.0001) {
+        velocityRef.current.setLength(airborneSpeed);
+      }
     }
     planarSpeedRef.current = Math.hypot(
       velocityRef.current.x,
@@ -663,6 +693,7 @@ export function usePlayerController({
 
     if (controlsEnabled && jumpQueuedRef.current && groundedRef.current) {
       jumpQueuedRef.current = false;
+      airborneMomentumSpeedRef.current = planarSpeedRef.current;
       groundedRef.current = false;
       verticalVelocityRef.current = JUMP_SPEED;
     } else {
@@ -682,10 +713,12 @@ export function usePlayerController({
         positionRef.current.y = GROUND_Y;
         verticalVelocityRef.current = 0;
         groundedRef.current = true;
+        airborneMomentumSpeedRef.current = 0;
       }
     } else {
       groundedRef.current = true;
       positionRef.current.y = GROUND_Y;
+      airborneMomentumSpeedRef.current = 0;
     }
 
     recoilPitchRef.current = THREE.MathUtils.damp(recoilPitchRef.current, 0, 8, delta);
@@ -703,7 +736,18 @@ export function usePlayerController({
       delta,
     );
     const crouchT = crouchLerpRef.current;
-    const crouchLookHeightOffset = TPP_CROUCH_LOOK_HEIGHT_OFFSET * crouchT;
+    const crouchCameraTarget = crouchedRef.current &&
+        crouchT >= TPP_CROUCH_CAMERA_ACTIVATION_THRESHOLD
+      ? 1
+      : 0;
+    crouchCameraLerpRef.current = THREE.MathUtils.damp(
+      crouchCameraLerpRef.current,
+      crouchCameraTarget,
+      TPP_CROUCH_CAMERA_TRANSITION_SPEED,
+      delta,
+    );
+    const crouchLookHeightOffset =
+      TPP_CROUCH_LOOK_HEIGHT_OFFSET * crouchCameraLerpRef.current;
     const viewTarget = firstPersonRef.current || adsRef.current ? 1 : 0;
     viewModeLerpRef.current = THREE.MathUtils.damp(
       viewModeLerpRef.current,
@@ -938,6 +982,7 @@ export function usePlayerController({
       velocityRef.current.set(0, 0);
       moveInputRef.current.set(0, 0);
       verticalVelocityRef.current = 0;
+      airborneMomentumSpeedRef.current = 0;
       groundedRef.current = true;
       jumpQueuedRef.current = false;
       yawRef.current = yawRadians;
@@ -953,6 +998,7 @@ export function usePlayerController({
       adsLerpRef.current = 0;
       crouchedRef.current = false;
       crouchLerpRef.current = 0;
+      crouchCameraLerpRef.current = 0;
       crouchHoldLatchRef.current = false;
       firstPersonRef.current = false;
       viewModeLerpRef.current = 0;
