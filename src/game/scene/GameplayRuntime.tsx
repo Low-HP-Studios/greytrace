@@ -135,9 +135,14 @@ const TRANSITION_BACK_HEIGHT = 1.97;
 const TRANSITION_SHOULDER = 0.5;
 const TRANSITION_LOOK_DISTANCE = 14;
 const HEAD_YAW_AXIS = new THREE.Vector3(0, 1, 0);
+const X_AXIS = new THREE.Vector3(1, 0, 0);
 const HEAD_YAW_QUAT = new THREE.Quaternion();
+const HEAD_PITCH_QUAT = new THREE.Quaternion();
 const UPPER_TORSO_LEAN_QUAT = new THREE.Quaternion();
+const UPPER_TORSO_PITCH_QUAT = new THREE.Quaternion();
 const UPPER_TORSO_LEAN_ANGLE = THREE.MathUtils.degToRad(18);
+const CROUCH_AIM_HEAD_LIFT_ANGLE = THREE.MathUtils.degToRad(12);
+const CROUCH_AIM_UPPER_TORSO_LIFT_ANGLE = THREE.MathUtils.degToRad(16);
 
 function resolveShotDamage(
   shot: WeaponShotEvent,
@@ -1500,6 +1505,10 @@ export const GameplayRuntime = forwardRef<
       !crouched &&
       rifleFireIntentRef.current;
     const firePrepVisual = firePrepIntent && !movementActive;
+    const crouchAimCompositeActive = isRifleEquipped &&
+      rifleFireIntentRef.current &&
+      !adsActive &&
+      (crouched || crouchTransitionState !== "idle");
     const movementHeadingYaw = resolveMovementHeadingYaw(
       controller.getAimYaw(),
       moveX,
@@ -1639,17 +1648,35 @@ export const GameplayRuntime = forwardRef<
     let nextAnimState: CharacterAnimState = weaponEquipped
       ? "rifleIdle"
       : "idle";
+    let lowerBodyOverlayState: CharacterAnimState | null = null;
     if (crouchTransitionState === "enter") {
-      nextAnimState = crouchTransitionUseRifle
+      nextAnimState = crouchAimCompositeActive
+        ? "rifleAimHold"
+        : crouchTransitionUseRifle
         ? "rifleCrouchEnter"
         : "crouchEnter";
+      lowerBodyOverlayState = crouchAimCompositeActive ? "crouchEnter" : null;
     } else if (crouchTransitionState === "exit") {
-      nextAnimState = crouchTransitionUseRifle
+      nextAnimState = crouchAimCompositeActive
+        ? "rifleAimHold"
+        : crouchTransitionUseRifle
         ? "rifleCrouchExit"
         : "crouchExit";
+      lowerBodyOverlayState = crouchAimCompositeActive ? "crouchExit" : null;
     } else if (crouched) {
       if (weaponEquipped) {
-        nextAnimState = movementActive ? "rifleCrouchWalk" : "rifleCrouchIdle";
+        nextAnimState = crouchAimCompositeActive
+          ? (
+            movementActive
+              ? resolveRifleAimWalkState(animMoveX, animMoveY)
+              : "rifleAimHold"
+          )
+          : (movementActive ? "rifleCrouchWalk" : "rifleCrouchIdle");
+        lowerBodyOverlayState = crouchAimCompositeActive
+          ? (movementActive
+            ? resolveCrouchState(animMoveX, animMoveY)
+            : "crouchIdle")
+          : null;
       } else {
         nextAnimState = movementActive
           ? resolveCrouchState(moveX, moveY)
@@ -1731,6 +1758,7 @@ export const GameplayRuntime = forwardRef<
       : crouched
       ? 1
       : 0;
+    const crouchAimCompositePose = crouchAimCompositeActive ? crouchPose : 0;
     const standingWalkScale = firePrepIntent
       ? rifleFirePrepSpeedScale
       : rifleWalkSpeedScale;
@@ -1787,6 +1815,19 @@ export const GameplayRuntime = forwardRef<
         RIFLE_LOCOMOTION_SCALE_MAX,
       )
       : 1;
+    const lowerBodyOverlayLocomotionScale = lowerBodyOverlayState &&
+        (
+          lowerBodyOverlayState.startsWith("crouch") ||
+          lowerBodyOverlayState.startsWith("rifleCrouch")
+        )
+      ? THREE.MathUtils.clamp(
+        controller.getPlanarSpeed() /
+          Math.max(0.01, PLAYER_WALK_SPEED * movementProfileWalkScale),
+        RIFLE_LOCOMOTION_SCALE_MIN,
+        RIFLE_LOCOMOTION_SCALE_MAX,
+      )
+      : 1;
+    const audioAnimState = lowerBodyOverlayState ?? nextAnimState;
 
     setCharacterAnim(nextAnimState, {
       locomotionScale: rifleLocomotionScale,
@@ -1799,16 +1840,35 @@ export const GameplayRuntime = forwardRef<
         nextAnimState === "crouchEnter" || nextAnimState === "rifleCrouchEnter"
           ? CROUCH_ENTER_BLEND_SECONDS
           : undefined,
+      lowerBodyState: lowerBodyOverlayState,
+      lowerBodyLocomotionScale: lowerBodyOverlayLocomotionScale,
+      lowerBodySeekNormalizedTime: crouchTransitionSeekNormalized,
+      lowerBodyDesiredDurationSeconds:
+        lowerBodyOverlayState === "crouchEnter"
+          ? CROUCH_ENTER_TRANSITION_MS / 1000
+          : undefined,
+      lowerBodyFadeDurationSeconds:
+        lowerBodyOverlayState === "crouchEnter"
+          ? CROUCH_ENTER_BLEND_SECONDS
+          : 0.12,
     });
     lastCharacterAnimStateRef.current = nextAnimState;
     const audioOpts = audioUpdateOptionsRef.current;
     audioOpts.stepIntervalSeconds = resolveFootstepIntervalSeconds(
-      nextAnimState,
-      { locomotionScale: rifleLocomotionScale },
+      audioAnimState,
+      {
+        locomotionScale: lowerBodyOverlayState
+          ? lowerBodyOverlayLocomotionScale
+          : rifleLocomotionScale,
+      },
     );
     audioOpts.filePlaybackRate = resolveFootstepPlaybackRate(
-      nextAnimState,
-      { locomotionScale: rifleLocomotionScale },
+      audioAnimState,
+      {
+        locomotionScale: lowerBodyOverlayState
+          ? lowerBodyOverlayLocomotionScale
+          : rifleLocomotionScale,
+      },
     );
 
     const playerPos = controller.getPosition();
@@ -1875,11 +1935,25 @@ export const GameplayRuntime = forwardRef<
           HEAD_YAW_QUAT.setFromAxisAngle(HEAD_YAW_AXIS, headYawOffset);
           headBone.quaternion.premultiply(HEAD_YAW_QUAT);
         }
+        if (crouchAimCompositePose > 0.001) {
+          HEAD_PITCH_QUAT.setFromAxisAngle(
+            X_AXIS,
+            -CROUCH_AIM_HEAD_LIFT_ANGLE * crouchAimCompositePose,
+          );
+          headBone.quaternion.premultiply(HEAD_PITCH_QUAT);
+        }
       }
     }
 
     const upperTorsoBone = characterUpperTorsoBoneRef.current;
     if (upperTorsoBone && presentation.phase === "playing") {
+      if (crouchAimCompositePose > 0.001) {
+        UPPER_TORSO_PITCH_QUAT.setFromAxisAngle(
+          X_AXIS,
+          -CROUCH_AIM_UPPER_TORSO_LIFT_ANGLE * crouchAimCompositePose,
+        );
+        upperTorsoBone.quaternion.premultiply(UPPER_TORSO_PITCH_QUAT);
+      }
       const leanValue = controller.getLeanValue();
       if (Math.abs(leanValue) > 0.001) {
         UPPER_TORSO_LEAN_QUAT.setFromAxisAngle(
