@@ -981,6 +981,9 @@ export function GameRoot({
     : null;
   const installUpdateInProgress = updaterBusyAction === "install";
   const gameplayHudVisible = phase === "playing";
+  const uiOverlayClassName = gameplayHudVisible
+    ? "ui-overlay ui-overlay--practice"
+    : "ui-overlay";
   const liveFps = Number.isFinite(perfMetrics.fps) ? Math.max(0, perfMetrics.fps) : 0;
 
   return (
@@ -1023,7 +1026,7 @@ export function GameRoot({
         )
         : null}
 
-      <div className="ui-overlay">
+      <div className={uiOverlayClassName}>
         {gameplayHudVisible && hudPanels.practice
           ? (
             <div className="corner-top-left panel tactical-panel practice-panel">
@@ -1133,9 +1136,16 @@ export function GameRoot({
             : null}
           {gameplayHudVisible && rifleScopeActive
             ? (
-              <div className="rifle-ads-overlay" style={rifleAdsStyle}>
-                <div className="rifle-ads-ring" />
-                <div className="rifle-ads-dot" />
+              <div
+                className="rifle-ads-overlay"
+                style={rifleAdsStyle}
+                role="img"
+                aria-label="Red Dot Reticle (2 MOA emitter dot)"
+              >
+                <div className="rifle-scope-housing">
+                  <div className="rifle-scope-glass" />
+                  <div className="rifle-ads-dot" />
+                </div>
               </div>
             )
             : null}
@@ -2832,10 +2842,10 @@ export function GameRoot({
 
                           <MenuSection
                             title="ADS Basics"
-                            blurb="Rifle ADS and sniper scope center-dot tuning."
+                            blurb="Red Dot Reticle (2 MOA emitter dot) and sniper scope center-dot tuning."
                           >
                             <RangeField
-                              label="Rifle Dot Size"
+                              label="Red Dot Reticle Size"
                               value={settings.crosshair.ads.rifleDotSize}
                               min={1}
                               max={16}
@@ -2854,9 +2864,9 @@ export function GameRoot({
                             />
                             <div className="field-row">
                               <div>
-                                <div className="field-label">Rifle Dot Color</div>
+                                <div className="field-label">Red Dot Reticle Color</div>
                                 <div className="field-hint">
-                                  ADS center indicator
+                                  2 MOA emitter dot tint
                                 </div>
                               </div>
                               <div className="color-chip-row">

@@ -61,7 +61,7 @@ const CROUCH_MODES: CrouchMode[] = ["hold", "toggle"];
 export const DEFAULT_GAME_SETTINGS: GameSettings = {
   shadows: false,
   pixelRatioScale: 1,
-  showR3fPerf: true,
+  showR3fPerf: false,
   sensitivity: { ...DEFAULT_AIM_SENSITIVITY_SETTINGS },
   keybinds: { ...DEFAULT_CONTROL_BINDINGS },
   crouchMode: DEFAULT_CROUCH_MODE,

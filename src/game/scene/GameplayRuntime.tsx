@@ -798,6 +798,8 @@ export const GameplayRuntime = forwardRef<
   const characterWeaponAttachBoneRef = useRef<THREE.Bone | null>(null);
   const characterHeadBoneRef = useRef<THREE.Bone | null>(null);
   const characterUpperTorsoBoneRef = useRef<THREE.Bone | null>(null);
+  const characterHeadBaseQuatRef = useRef<THREE.Quaternion | null>(null);
+  const characterUpperTorsoBaseQuatRef = useRef<THREE.Quaternion | null>(null);
   const tempCharacterWeaponAnchorWorldRef = useRef(new THREE.Vector3());
   const tempBoneWorldQuatRef = useRef(new THREE.Quaternion());
   const characterWeaponAnchorRef = useRef<
@@ -870,6 +872,8 @@ export const GameplayRuntime = forwardRef<
       characterWeaponAttachBoneRef.current = null;
       characterHeadBoneRef.current = null;
       characterUpperTorsoBoneRef.current = null;
+      characterHeadBaseQuatRef.current = null;
+      characterUpperTorsoBaseQuatRef.current = null;
       return;
     }
 
@@ -921,10 +925,25 @@ export const GameplayRuntime = forwardRef<
       }
     });
 
-    characterWeaponAttachBoneRef.current = rightHandBone;
-    characterHeadBoneRef.current = headBone;
-    characterUpperTorsoBoneRef.current = upperTorsoBone;
-    if (!rightHandBone) {
+    const resolvedRightHandBone = rightHandBone as THREE.Bone | null;
+    const resolvedHeadBone = headBone as THREE.Bone | null;
+    const resolvedUpperTorsoBone = upperTorsoBone as THREE.Bone | null;
+
+    characterWeaponAttachBoneRef.current = resolvedRightHandBone;
+    characterHeadBoneRef.current = resolvedHeadBone;
+    characterUpperTorsoBoneRef.current = resolvedUpperTorsoBone;
+    if (resolvedHeadBone) {
+      characterHeadBaseQuatRef.current = resolvedHeadBone.quaternion.clone();
+    } else {
+      characterHeadBaseQuatRef.current = null;
+    }
+    if (resolvedUpperTorsoBone) {
+      characterUpperTorsoBaseQuatRef.current =
+        resolvedUpperTorsoBone.quaternion.clone();
+    } else {
+      characterUpperTorsoBaseQuatRef.current = null;
+    }
+    if (!resolvedRightHandBone) {
       console.warn(
         "[Character] Could not find right-hand bone for weapon attach",
       );
@@ -1145,6 +1164,10 @@ export const GameplayRuntime = forwardRef<
     audioRef.current.ensureStarted();
   }, []);
 
+  const handleGetWeaponEquipped = useCallback(() => {
+    return weaponRef.current.isEquipped();
+  }, []);
+
   const handleGetActiveWeapon = useCallback(() => {
     return weaponRef.current.getActiveWeapon();
   }, []);
@@ -1178,6 +1201,7 @@ export const GameplayRuntime = forwardRef<
     onPlayerSnapshot: handlePlayerSnapshot,
     onTriggerChange: handleTriggerChange,
     onUserGesture: handleUserGesture,
+    getWeaponEquipped: handleGetWeaponEquipped,
     getActiveWeapon: handleGetActiveWeapon,
   });
 
@@ -1916,11 +1940,35 @@ export const GameplayRuntime = forwardRef<
     }
 
     if (characterModel) {
+      const headBone = characterHeadBoneRef.current;
+      const headBaseQuat = characterHeadBaseQuatRef.current;
+      if (headBone && headBaseQuat) {
+        headBone.quaternion.copy(headBaseQuat);
+      }
+      const upperTorsoBone = characterUpperTorsoBoneRef.current;
+      const upperTorsoBaseQuat = characterUpperTorsoBaseQuatRef.current;
+      if (upperTorsoBone && upperTorsoBaseQuat) {
+        upperTorsoBone.quaternion.copy(upperTorsoBaseQuat);
+      }
       const mixer = characterModel.userData.__mixer as
         | THREE.AnimationMixer
         | undefined;
       if (mixer) {
         mixer.update(clampedDelta);
+      }
+      if (headBone) {
+        if (!characterHeadBaseQuatRef.current) {
+          characterHeadBaseQuatRef.current = headBone.quaternion.clone();
+        } else {
+          characterHeadBaseQuatRef.current.copy(headBone.quaternion);
+        }
+      }
+      if (upperTorsoBone) {
+        if (!characterUpperTorsoBaseQuatRef.current) {
+          characterUpperTorsoBaseQuatRef.current = upperTorsoBone.quaternion.clone();
+        } else {
+          characterUpperTorsoBaseQuatRef.current.copy(upperTorsoBone.quaternion);
+        }
       }
     }
 

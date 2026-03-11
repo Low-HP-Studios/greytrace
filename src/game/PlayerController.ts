@@ -45,6 +45,7 @@ type UsePlayerControllerOptions = {
   onPlayerSnapshot: (snapshot: PlayerSnapshot) => void;
   onTriggerChange: (firing: boolean) => void;
   onUserGesture: () => void;
+  getWeaponEquipped: () => boolean;
   getActiveWeapon: () => WeaponKind;
 };
 
@@ -97,23 +98,23 @@ const PEAK_VELOCITY_THRESHOLD = 1.4;
 const JUMP_SPEED = 10.4;
 
 const CAMERA_ARM_LENGTH = 2.25;
-const CAMERA_ARM_LENGTH_ADS = 1.55;
+const CAMERA_ARM_LENGTH_ADS = 0.0;
 const CAMERA_ARM_LENGTH_SNIPER_ADS = 0.78;
 const CAMERA_DEFAULT_ELEVATION = 0.23;
 const CAMERA_MIN_ELEVATION = 0.05;
 const CAMERA_MAX_ELEVATION = 1.2;
 const LOOK_AT_HEIGHT = 1.2;
 const SHOULDER_OFFSET = 0.5;
-const SHOULDER_OFFSET_ADS = 0.3;
+const SHOULDER_OFFSET_ADS = 0.0;
 const SHOULDER_OFFSET_SNIPER_ADS = 0.16;
 const AIM_LOOK_DISTANCE = 120;
 const FIRST_PERSON_CAMERA_HEIGHT = 1.55;
 const FIRST_PERSON_CAMERA_HEIGHT_CROUCH = 0.9;
 const TPP_CROUCH_LOOK_HEIGHT_OFFSET = -0.3;
 const FIRST_PERSON_CAMERA_FORWARD_OFFSET = 0.06;
-const RIFLE_ADS_FOV = 58;
+const RIFLE_ADS_FOV = 52;
 const SNIPER_ADS_FOV = 26;
-const VIEW_MODE_TRANSITION_SPEED = 10;
+const VIEW_MODE_TRANSITION_SPEED = 13;
 const CROUCH_TRANSITION_SPEED = 14;
 const TPP_CROUCH_CAMERA_TRANSITION_SPEED = 12;
 const TPP_CROUCH_CAMERA_ACTIVATION_THRESHOLD = 0.98;
@@ -148,6 +149,7 @@ export function usePlayerController({
   onPlayerSnapshot,
   onTriggerChange,
   onUserGesture,
+  getWeaponEquipped,
   getActiveWeapon,
 }: UsePlayerControllerOptions): PlayerControllerApi {
   const camera = useThree((state) => state.camera);
@@ -224,6 +226,7 @@ export function usePlayerController({
   const triggerCallbackRef = useRef(onTriggerChange);
   const snapshotCallbackRef = useRef(onPlayerSnapshot);
   const userGestureCallbackRef = useRef(onUserGesture);
+  const weaponEquippedGetterRef = useRef(getWeaponEquipped);
   const activeWeaponGetterRef = useRef(getActiveWeapon);
   const sensitivityRef = useRef(sensitivity);
   const keybindsRef = useRef(keybinds);
@@ -247,6 +250,10 @@ export function usePlayerController({
   useEffect(() => {
     userGestureCallbackRef.current = onUserGesture;
   }, [onUserGesture]);
+
+  useEffect(() => {
+    weaponEquippedGetterRef.current = getWeaponEquipped;
+  }, [getWeaponEquipped]);
 
   useEffect(() => {
     activeWeaponGetterRef.current = getActiveWeapon;
@@ -387,9 +394,8 @@ export function usePlayerController({
         return;
       }
       if (event.button === 2) {
-        if (pointerLockedRef.current) {
-          adsRef.current = true;
-        }
+        adsRef.current = pointerLockedRef.current &&
+          weaponEquippedGetterRef.current();
         return;
       }
 
@@ -490,7 +496,11 @@ export function usePlayerController({
     const nowMs = performance.now();
     const keys = keyStateRef.current;
     const controlsEnabled = pointerLockedRef.current && inputEnabledRef.current;
+    const weaponEquipped = weaponEquippedGetterRef.current();
     const activeWeapon = activeWeaponGetterRef.current();
+    if (!weaponEquipped && adsRef.current) {
+      adsRef.current = false;
+    }
     const lookSensitivity = resolveLookSensitivity(
       sensitivityRef.current,
       activeWeapon,
@@ -773,7 +783,7 @@ export function usePlayerController({
     adsLerpRef.current = THREE.MathUtils.damp(
       adsLerpRef.current,
       adsTarget,
-      12,
+      15,
       delta,
     );
     const adsT = adsLerpRef.current;
@@ -854,6 +864,12 @@ export function usePlayerController({
       fppCameraPos.x += cosCurrentYaw * 0.045 * sniperADS;
       fppCameraPos.y -= 0.02 * sniperADS;
       fppCameraPos.z += -sinCurrentYaw * 0.045 * sniperADS;
+    }
+    const rifleADS = activeWeapon === 'rifle' ? adsT : 0;
+    if (rifleADS > 0) {
+      fppCameraPos.x += cosCurrentYaw * 0.03 * rifleADS;
+      fppCameraPos.y -= 0.01 * rifleADS;
+      fppCameraPos.z += -sinCurrentYaw * 0.03 * rifleADS;
     }
 
     const elevationAngle = clamp(
