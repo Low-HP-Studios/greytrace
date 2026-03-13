@@ -1,11 +1,7 @@
 export type PixelRatioScale = 0.5 | 0.75 | 1;
 export type StressModeCount = 0 | 50 | 100 | 200;
 
-export type ExperiencePhase =
-  | "menu"
-  | "entering"
-  | "playing"
-  | "returning";
+export type ExperiencePhase = 'menu' | 'entering' | 'playing' | 'returning';
 
 export type AimSensitivitySettings = {
   look: number;
@@ -41,22 +37,22 @@ export type ControlBindings = {
 };
 
 export const DEFAULT_CONTROL_BINDINGS: ControlBindings = {
-  moveForward: "KeyW",
-  moveBackward: "KeyS",
-  moveLeft: "KeyA",
-  moveRight: "KeyD",
-  sprint: "ShiftLeft",
-  walkModifier: "ControlLeft",
-  crouch: "KeyC",
-  jump: "Space",
-  pickup: "KeyF",
-  drop: "KeyG",
-  reset: "KeyR",
-  equipRifle: "Digit1",
-  equipSniper: "Digit2",
-  toggleView: "KeyV",
-  peekLeft: "KeyQ",
-  peekRight: "KeyE",
+  moveForward: 'KeyW',
+  moveBackward: 'KeyS',
+  moveLeft: 'KeyA',
+  moveRight: 'KeyD',
+  sprint: 'ShiftLeft',
+  walkModifier: 'ControlLeft',
+  crouch: 'KeyC',
+  jump: 'Space',
+  pickup: 'KeyF',
+  drop: 'KeyG',
+  reset: 'KeyR',
+  equipRifle: 'Digit1',
+  equipSniper: 'Digit2',
+  toggleView: 'KeyV',
+  peekLeft: 'KeyQ',
+  peekRight: 'KeyE',
 };
 
 export type HudOverlayToggles = {
@@ -83,21 +79,21 @@ export type WeaponAlignmentOffset = {
 };
 
 export const DEFAULT_WEAPON_ALIGNMENT: WeaponAlignmentOffset = {
-  posX: 0.150,
-  posY: 0.240,
-  posZ: 0.040,
+  posX: 0.15,
+  posY: 0.24,
+  posZ: 0.04,
   rotX: -2.96,
-  rotY: 0.13,
+  rotY: 0.91,
   rotZ: -1.23,
 };
 
 export type CrosshairColor =
-  | "white"
-  | "green"
-  | "red"
-  | "yellow"
-  | "cyan"
-  | "magenta";
+  | 'white'
+  | 'green'
+  | 'red'
+  | 'yellow'
+  | 'cyan'
+  | 'magenta';
 
 export type CrosshairCenterDotSettings = {
   enabled: boolean;
@@ -175,7 +171,7 @@ export type MovementProfileSettings = {
 };
 
 export const DEFAULT_CROSSHAIR_SETTINGS: CrosshairSettings = {
-  color: "white",
+  color: 'white',
   centerDot: {
     enabled: true,
     size: 3.5,
@@ -212,9 +208,9 @@ export const DEFAULT_CROSSHAIR_SETTINGS: CrosshairSettings = {
   },
   ads: {
     rifleDotSize: 5,
-    rifleDotColor: "red",
+    rifleDotColor: 'red',
     sniperDotSize: 6,
-    sniperDotColor: "red",
+    sniperDotColor: 'red',
   },
 };
 
@@ -247,9 +243,9 @@ export const DEFAULT_MOVEMENT_SETTINGS: MovementProfileSettings = {
   rifleRunLateralThreshold: 1,
 };
 
-export type EnemyOutlineColor = "red" | "yellow" | "cyan" | "magenta";
-export type CrouchMode = "hold" | "toggle";
-export const DEFAULT_CROUCH_MODE: CrouchMode = "toggle";
+export type EnemyOutlineColor = 'red' | 'yellow' | 'cyan' | 'magenta';
+export type CrouchMode = 'hold' | 'toggle';
+export const DEFAULT_CROUCH_MODE: CrouchMode = 'toggle';
 
 export type EnemyOutlineSettings = {
   enabled: boolean;
@@ -260,7 +256,7 @@ export type EnemyOutlineSettings = {
 
 export const DEFAULT_ENEMY_OUTLINE_SETTINGS: EnemyOutlineSettings = {
   enabled: true,
-  color: "red",
+  color: 'red',
   thickness: 8,
   opacity: 1,
 };
@@ -289,7 +285,7 @@ export type PerfMetrics = {
   textures: number;
 };
 
-export type MovementTier = "walk" | "jog" | "run";
+export type MovementTier = 'walk' | 'jog' | 'run';
 
 export const DEFAULT_PERF_METRICS: PerfMetrics = {
   fps: 0,
@@ -320,7 +316,7 @@ export const DEFAULT_PLAYER_SNAPSHOT: PlayerSnapshot = {
   z: 6,
   speed: 0,
   sprinting: false,
-  movementTier: "jog",
+  movementTier: 'jog',
   crouched: false,
   moving: false,
   grounded: true,

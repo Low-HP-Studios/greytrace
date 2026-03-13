@@ -143,6 +143,17 @@ const UPPER_TORSO_LEAN_ANGLE = THREE.MathUtils.degToRad(18);
 const CROUCH_AIM_HEAD_LIFT_ANGLE = THREE.MathUtils.degToRad(12);
 const CROUCH_AIM_UPPER_TORSO_LIFT_ANGLE = THREE.MathUtils.degToRad(16);
 
+// Aim follow: distribute camera pitch/yaw across spine and head for natural look
+const AIM_PITCH_TORSO_FRACTION = 0.55;
+const AIM_PITCH_HEAD_FRACTION = 0.35;
+const AIM_YAW_TORSO_FRACTION = 0.6;
+const AIM_PITCH_TORSO_QUAT = new THREE.Quaternion();
+const AIM_PITCH_HEAD_QUAT = new THREE.Quaternion();
+const AIM_YAW_TORSO_QUAT = new THREE.Quaternion();
+const RIFLE_READY_YAW_OFFSET = THREE.MathUtils.degToRad(-9); // shift arms/weapon right in ready pose
+const RIFLE_READY_YAW_QUAT = new THREE.Quaternion();
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
 function resolveShotDamage(
   shot: WeaponShotEvent,
   targetHit: TargetRaycastHit,
@@ -1857,6 +1868,31 @@ export const GameplayRuntime = forwardRef<
       nextAnimState = weaponEquipped ? "rifleAimHold" : "idle";
     }
 
+    // Rifle ready-pose: blend rifleAimHold upper body during standing rifle locomotion
+    // so the weapon is raised to a ready position (like PUBG/Apex).
+    let rifleReadyPoseActive = false;
+    // Excludes: running (weapon lowered), fire prep (already aiming),
+    //           crouch (has own overlay), aim-walk (already raised).
+    if (
+      isRifleEquipped &&
+      !firePrepVisual &&
+      !crouched &&
+      crouchTransitionState === "idle" &&
+      upperBodyOverlayState === null
+    ) {
+      const isRunState =
+        nextAnimState === "rifleRun" ||
+        nextAnimState === "rifleRunStart" ||
+        nextAnimState === "rifleRunStop";
+      const isAimState =
+        nextAnimState === "rifleAimHold" ||
+        (nextAnimState as string).startsWith("rifleAimWalk");
+      if (!isRunState && !isAimState) {
+        upperBodyOverlayState = "rifleAimHold";
+        rifleReadyPoseActive = true;
+      }
+    }
+
     weapon.setTriggerHeld(rifleFireIntentRef.current);
 
     const crouchPose = crouchTransitionState !== "idle"
@@ -2062,6 +2098,15 @@ export const GameplayRuntime = forwardRef<
           );
           headBone.quaternion.premultiply(HEAD_PITCH_QUAT);
         }
+        // Aim pitch follow: tilt head to follow camera pitch when weapon equipped
+        if (weaponEquipped && !sprinting) {
+          const aimPitch = controller.getPitch();
+          const headPitchContrib = -aimPitch * AIM_PITCH_HEAD_FRACTION;
+          if (Math.abs(headPitchContrib) > 0.001) {
+            AIM_PITCH_HEAD_QUAT.setFromAxisAngle(X_AXIS, headPitchContrib);
+            headBone.quaternion.premultiply(AIM_PITCH_HEAD_QUAT);
+          }
+        }
       }
     }
 
@@ -2073,6 +2118,29 @@ export const GameplayRuntime = forwardRef<
           -CROUCH_AIM_UPPER_TORSO_LIFT_ANGLE * crouchAimCompositePose,
         );
         upperTorsoBone.quaternion.premultiply(UPPER_TORSO_PITCH_QUAT);
+      }
+      // Shift torso slightly right during rifle ready-pose for better weapon alignment
+      if (rifleReadyPoseActive && !firstPerson) {
+        RIFLE_READY_YAW_QUAT.setFromAxisAngle(Y_AXIS, RIFLE_READY_YAW_OFFSET);
+        upperTorsoBone.quaternion.premultiply(RIFLE_READY_YAW_QUAT);
+      }
+      // Aim follow: rotate upper torso to follow camera pitch and yaw when weapon equipped
+      if (weaponEquipped && !sprinting && !firstPerson) {
+        const aimPitch = controller.getPitch();
+        const torsoPitchContrib = -aimPitch * AIM_PITCH_TORSO_FRACTION;
+        if (Math.abs(torsoPitchContrib) > 0.001) {
+          AIM_PITCH_TORSO_QUAT.setFromAxisAngle(X_AXIS, torsoPitchContrib);
+          upperTorsoBone.quaternion.premultiply(AIM_PITCH_TORSO_QUAT);
+        }
+        // Yaw: rotate torso towards aim direction (offset from body facing)
+        const aimBodyYawOffset = normalizeAngle(
+          controller.getYaw() - controller.getBodyYaw(),
+        );
+        const torsoYawContrib = aimBodyYawOffset * AIM_YAW_TORSO_FRACTION;
+        if (Math.abs(torsoYawContrib) > 0.001) {
+          AIM_YAW_TORSO_QUAT.setFromAxisAngle(Y_AXIS, torsoYawContrib);
+          upperTorsoBone.quaternion.premultiply(AIM_YAW_TORSO_QUAT);
+        }
       }
       const leanValue = controller.getLeanValue();
       if (Math.abs(leanValue) > 0.001) {
