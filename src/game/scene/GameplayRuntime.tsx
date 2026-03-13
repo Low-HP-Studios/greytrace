@@ -1920,7 +1920,7 @@ export const GameplayRuntime = forwardRef<
       movementTier !== "run";
 
     let nextAnimState: CharacterAnimState = weaponEquipped
-      ? "rifleIdle"
+      ? "rifleAimHold"
       : "idle";
     let lowerBodyOverlayState: CharacterAnimState | null = null;
     let upperBodyOverlayState: CharacterAnimState | null = null;
