@@ -1,8 +1,10 @@
 import type {
   ControlBindings,
+  FpsCap,
   HudOverlayToggles,
   PixelRatioScale,
   StressModeCount,
+  WindowMode,
 } from "../types";
 
 export type PauseMenuTab =
@@ -34,6 +36,21 @@ export const PIXEL_RATIO_OPTIONS: Array<{ value: PixelRatioScale; label: string 
   { value: 0.5, label: "Low" },
   { value: 0.75, label: "Normal" },
   { value: 1, label: "High" },
+];
+
+export const FPS_CAP_OPTIONS: Array<{ value: FpsCap; label: string }> = [
+  { value: 0, label: "Uncapped" },
+  { value: 30, label: "30" },
+  { value: 60, label: "60" },
+  { value: 120, label: "120" },
+  { value: 144, label: "144" },
+  { value: 240, label: "240" },
+];
+
+export const WINDOW_MODE_OPTIONS: Array<{ value: WindowMode; label: string }> = [
+  { value: "windowed", label: "Windowed" },
+  { value: "fullscreen", label: "Fullscreen" },
+  { value: "borderless", label: "Borderless" },
 ];
 
 export const MENU_TABS: MenuTabOption[] = [

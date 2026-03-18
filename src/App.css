@@ -3449,7 +3449,44 @@ code {
   line-height: 1.6;
   color: rgba(232, 237, 233, 0.55);
   margin: 0;
-  flex: 1;
+}
+
+.lobby-map-selector-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lobby-map-selector-header-v2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lobby-map-selector-label-v2 {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(147, 220, 192, 0.65);
+}
+
+.lobby-map-selector-value-v2 {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(232, 237, 233, 0.9);
+}
+
+.lobby-map-selector-note-v2 {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(232, 237, 233, 0.58);
+}
+
+.lobby-map-selector-note-v2.warning {
+  color: rgba(239, 199, 165, 0.85);
 }
 
 .lobby-card-actions-v2 {

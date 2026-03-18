@@ -13,7 +13,7 @@ Stack:
 
 - First-person camera + pointer lock
 - WASD movement + sprint
-- Small walkable map with cover and an enterable building (door opening)
+- Selectable practice maps: procedural `Range` and traversal-only `TDM`
 - Simple collision blocking (custom AABB/circle collision, no physics engine)
 - Pickup/drop rifle (`F` / `G`)
 - Automatic fire with recoil climb + horizontal drift (spray feel)
@@ -81,9 +81,14 @@ pnpm build:electron
 
 ## Assets
 
-Current build uses placeholder geometry and synthesized fallback audio by default.
+Current build ships with:
+
+- A procedural `Range` practice map
+- A bundled `TDM` GLB at `/public/assets/map/TDM.glb`
+- Synthesized fallback audio unless sound files are added
 
 Asset pipeline is ready for free assets:
+- Practice maps: `/public/assets/map/*.glb`
 - Models: `/public/assets/models/*.glb`
 - Audio: `/public/assets/audio/*`
 
@@ -93,5 +98,5 @@ If you add downloadable assets, document source/license in:
 ## Notes / Trade-offs
 
 - Collision is custom and lightweight (good for prototype speed, less robust than a real character controller/physics stack).
-- Hitscan currently ray-tests targets directly (cheap and stable, but not full world occlusion/penetration logic).
+- The TDM map is currently traversal-only with coarse blockers and tighter bounds: enough to keep you on the blockout, not enough to call it finished level collision.
 - Audio defaults to synth placeholders if files are missing (great for iteration, less realistic than sampled assets).

@@ -4,6 +4,8 @@ import {
   CHARACTER_REGISTRY,
   getCharacterById,
 } from "./characters";
+import { PRACTICE_MAP_OPTIONS, getPracticeMapById } from "./scene/practice-maps";
+import type { MapId } from "./types";
 import { CharacterPreviewCanvas } from "../screens/LobbyCharacter";
 
 type ExperienceMenuOverlayProps = {
@@ -15,6 +17,9 @@ type ExperienceMenuOverlayProps = {
   onInstallUpdate: () => void;
   selectedCharacterId: string;
   onCharacterSelect: (characterId: string) => void;
+  selectedMapId: MapId;
+  onMapSelect: (mapId: MapId) => void;
+  mapFallbackActive: boolean;
   updaterStatus: UpdaterStatusPayload;
   updaterBusyAction: "check" | "install" | "repair" | null;
   updaterAvailable: boolean;
@@ -179,6 +184,9 @@ export function ExperienceMenuOverlay({
   onInstallUpdate,
   selectedCharacterId,
   onCharacterSelect,
+  selectedMapId,
+  onMapSelect,
+  mapFallbackActive,
   updaterStatus,
   updaterBusyAction,
   updaterAvailable,
@@ -220,12 +228,13 @@ export function ExperienceMenuOverlay({
   const showOnlineToast = useCallback(() => {
     toast.warning("Online Deployment is in alpha", {
       description:
-        "This lane is still under development. Practice Range is the only live module in the current build.",
+        "This lane is still under development. Practice is the only live module in the current build.",
       duration: 4200,
     });
   }, []);
 
   const selectedCharacterDef = getCharacterById(selectedCharacterId);
+  const selectedMap = getPracticeMapById(selectedMapId);
 
   const isDownloading = updaterStatus.phase === "downloading";
   const progress = typeof updaterStatus.progress === "number" ? updaterStatus.progress : null;
@@ -298,9 +307,35 @@ export function ExperienceMenuOverlay({
                 <span className="lobby-card-badge-v2 ready">Ready</span>
               </div>
               <p className="lobby-card-desc-v2">
-                Enter the firing range to test weapon mechanics, spray
-                patterns, and advanced techniques in a controlled environment.
+                Choose a practice map, then test weapon mechanics, spray
+                patterns, and advanced techniques in a controlled sandbox.
               </p>
+              <div className="lobby-map-selector-v2">
+                <div className="lobby-map-selector-header-v2">
+                  <span className="lobby-map-selector-label-v2">Map</span>
+                  <span className="lobby-map-selector-value-v2">{selectedMap.label}</span>
+                </div>
+                <div className="segmented-row">
+                  {PRACTICE_MAP_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={`chip-btn ${selectedMapId === option.id ? "active" : ""}`}
+                      onClick={() => onMapSelect(option.id)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="lobby-map-selector-note-v2">
+                  {selectedMap.description}
+                </p>
+                {mapFallbackActive ? (
+                  <p className="lobby-map-selector-note-v2 warning">
+                    This GLB map is unavailable in this session, so practice will fall back to Range.
+                  </p>
+                ) : null}
+              </div>
               <div className="lobby-card-actions-v2">
                 <button type="button" className="lobby-play-btn-v2" onClick={onEnterPractice}>
                   <span>Enter Practice</span>

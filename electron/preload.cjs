@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   quitApp: () => ipcRenderer.invoke("app:quit"),
   setGameplayActive: (active) =>
     ipcRenderer.send("app:set-gameplay-active", Boolean(active)),
+  setWindowMode: (mode) => ipcRenderer.invoke("app:set-window-mode", mode),
   updater: {
     check: () => ipcRenderer.invoke("updater:check"),
     installNow: () => ipcRenderer.invoke("updater:install-now"),

@@ -15,7 +15,6 @@ import type { AudioVolumeSettings } from "../Audio";
 import { markBootEvent } from "../boot-trace";
 import {
   Targets,
-  createDefaultTargets,
   resetTargets,
   RESPAWN_DELAY_MS,
 } from "../Targets";
@@ -39,13 +38,16 @@ import {
   type ShotFiredState,
 } from "./GameplayRuntime";
 import type { CharacterModelOverride } from "./CharacterModel";
-import { MapEnvironment, StressBoxes } from "./MapEnvironment";
+import { PracticeMapEnvironment, StressBoxes } from "./MapEnvironment";
+import {
+  clonePracticeMapTargets,
+  RANGE_PRACTICE_MAP,
+  type PracticeMapDefinition,
+} from "./practice-maps";
 import {
   CANVAS_CAMERA,
   CANVAS_GL,
-  STATIC_COLLIDERS,
   TARGET_FLASH_MS,
-  WORLD_BOUNDS,
 } from "./scene-constants";
 
 export type { HitMarkerKind, AimingState, ShotFiredState };
@@ -83,6 +85,7 @@ type SceneProps = {
   settings: GameSettings;
   audioVolumes: AudioVolumeSettings;
   stressCount: StressModeCount;
+  practiceMap: PracticeMapDefinition;
   booting: boolean;
   deferredAssetsEnabled: boolean;
   presentation: ScenePresentation;
@@ -168,18 +171,24 @@ function SceneBootCompiler({
 
 function SceneFramePacer({
   lobbyCapEnabled,
+  gameplayCapEnabled,
+  gameplayIntervalMs,
 }: {
   lobbyCapEnabled: boolean;
+  gameplayCapEnabled: boolean;
+  gameplayIntervalMs: number;
 }) {
   const advance = useThree((state) => state.advance);
 
   useEffect(() => {
-    if (!lobbyCapEnabled) return;
+    const capEnabled = lobbyCapEnabled || gameplayCapEnabled;
+    if (!capEnabled) return;
+    const intervalMs = lobbyCapEnabled ? LOBBY_FRAME_INTERVAL_MS : gameplayIntervalMs;
     let rafId: number;
     let lastTime = 0;
     const loop = (time: number) => {
-      if (time - lastTime >= LOBBY_FRAME_INTERVAL_MS) {
-        lastTime = time - ((time - lastTime) % LOBBY_FRAME_INTERVAL_MS);
+      if (time - lastTime >= intervalMs) {
+        lastTime = time - ((time - lastTime) % intervalMs);
         advance(time);
       }
       rafId = window.requestAnimationFrame(loop);
@@ -189,7 +198,7 @@ function SceneFramePacer({
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [advance, lobbyCapEnabled]);
+  }, [advance, lobbyCapEnabled, gameplayCapEnabled, gameplayIntervalMs]);
 
   return null;
 }
@@ -227,6 +236,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
   settings,
   audioVolumes,
   stressCount,
+  practiceMap,
   booting,
   deferredAssetsEnabled,
   presentation,
@@ -243,7 +253,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
 }: SceneProps, ref) {
   const [canvasEpoch, setCanvasEpoch] = useState(0);
   const [targets, setTargets] = useState<TargetState[]>(() =>
-    createDefaultTargets()
+    clonePracticeMapTargets(practiceMap.targets),
   );
   const sceneTargetsRef = useRef(targets);
   const runtimeRef = useRef<GameplayRuntimeHandle | null>(null);
@@ -253,8 +263,13 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
   const resetTimeoutsRef = useRef<Map<string, number>>(new Map());
   const compileReady = booting && runtimeAssetsReady;
   const lobbyFrameCapEnabled = presentation.phase !== "playing";
+  const renderedPracticeMap = !booting && presentation.phase === "playing"
+    ? practiceMap
+    : RANGE_PRACTICE_MAP;
   // Don't advance frames during menu — scene is hidden; only pace during returning transition
   const paceEnabled = lobbyFrameCapEnabled && presentation.phase !== "menu";
+  const gameplayCapEnabled = presentation.phase === "playing" && settings.fpsCap > 0;
+  const gameplayCapIntervalMs = settings.fpsCap > 0 ? 1000 / settings.fpsCap : 0;
 
   const dpr = useMemo(() => {
     const devicePixelRatio =
@@ -340,6 +355,16 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
     });
   }, []);
 
+  useEffect(() => {
+    for (const timeoutId of resetTimeoutsRef.current.values()) {
+      window.clearTimeout(timeoutId);
+    }
+    resetTimeoutsRef.current.clear();
+    startTransition(() => {
+      setTargets(clonePracticeMapTargets(practiceMap.targets));
+    });
+  }, [practiceMap]);
+
   const handleSceneContextLost = useCallback(() => {
     if (recoveringContextRef.current) {
       return;
@@ -400,10 +425,14 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
       dpr={dpr}
       camera={CANVAS_CAMERA}
       gl={CANVAS_GL}
-      frameloop={lobbyFrameCapEnabled ? "never" : "always"}
+      frameloop={(lobbyFrameCapEnabled || gameplayCapEnabled) ? "never" : "always"}
     >
       <SceneContextRecoveryWatcher onContextLost={handleSceneContextLost} />
-      <SceneFramePacer lobbyCapEnabled={paceEnabled} />
+      <SceneFramePacer
+        lobbyCapEnabled={paceEnabled}
+        gameplayCapEnabled={gameplayCapEnabled}
+        gameplayIntervalMs={gameplayCapIntervalMs}
+      />
       <color attach="background" args={[backgroundColor]} />
       <fog attach="fog" args={[fogColor, 60, 420]} />
       <hemisphereLight
@@ -436,7 +465,8 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
         decay={1.7}
         color={MENU_KEY_LIGHT}
       />
-      <MapEnvironment
+      <PracticeMapEnvironment
+        practiceMap={renderedPracticeMap}
         shadows={settings.shadows}
         theme={worldTheme}
         floorGridOpacity={floorGridOpacity}
@@ -448,11 +478,13 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
         outline={settings.enemyOutline}
         loadCharacterAsset={deferredAssetsEnabled}
       />
-      <StressBoxes count={stressCount} shadows={settings.shadows} />
+      <StressBoxes
+        count={practiceMap.supportsStressMode ? stressCount : 0}
+        shadows={settings.shadows}
+      />
       <GameplayRuntime
         ref={runtimeRef}
-        collisionRects={STATIC_COLLIDERS}
-        worldBounds={WORLD_BOUNDS}
+        practiceMap={practiceMap}
         audioVolumes={audioVolumes}
         presentation={presentation}
                 sensitivity={settings.sensitivity}

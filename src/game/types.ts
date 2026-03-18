@@ -1,5 +1,10 @@
 export type PixelRatioScale = 0.5 | 0.75 | 1;
 export type StressModeCount = 0 | 50 | 100 | 200;
+export type FpsCap = 0 | 30 | 60 | 120 | 144 | 240; // 0 = uncapped
+export type WindowMode = "windowed" | "fullscreen" | "borderless";
+export type MapId = "range" | "tdm";
+export const DEFAULT_PRACTICE_MAP_ID: MapId = "range";
+export const PRACTICE_MAP_IDS: readonly MapId[] = ["range", "tdm"];
 
 export type ExperiencePhase = 'menu' | 'entering' | 'playing' | 'returning';
 
@@ -281,6 +286,8 @@ export type GameSettings = {
   enemyOutline: EnemyOutlineSettings;
   movement: MovementProfileSettings;
   weaponRecoilProfiles: WeaponRecoilProfiles;
+  fpsCap: FpsCap;
+  windowMode: WindowMode;
 };
 
 export type PerfMetrics = {

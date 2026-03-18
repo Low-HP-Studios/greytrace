@@ -1,5 +1,6 @@
 import { type AudioVolumeSettings, DEFAULT_AUDIO_VOLUMES } from "../Audio";
 import {
+  DEFAULT_PRACTICE_MAP_ID,
   DEFAULT_AIM_SENSITIVITY_SETTINGS,
   DEFAULT_CROUCH_MODE,
   DEFAULT_CONTROL_BINDINGS,
@@ -10,17 +11,21 @@ import {
   DEFAULT_WEAPON_ALIGNMENT,
   DEFAULT_MOVEMENT_SETTINGS,
   DEFAULT_WEAPON_RECOIL_PROFILES,
+  PRACTICE_MAP_IDS,
   type CrouchMode,
   type CrosshairColor,
   type EnemyOutlineColor,
+  type FpsCap,
   type InventoryOpenMode,
+  type MapId,
   type WeaponRecoilProfiles,
+  type WindowMode,
   type GameSettings,
   type HudOverlayToggles,
   type PixelRatioScale,
   type StressModeCount,
 } from "../types";
-import { PIXEL_RATIO_OPTIONS, STRESS_STEPS } from "./settings-constants";
+import { FPS_CAP_OPTIONS, PIXEL_RATIO_OPTIONS, STRESS_STEPS, WINDOW_MODE_OPTIONS } from "./settings-constants";
 
 const LEGACY_SETTINGS_STORAGE_KEY = "zerohour.settings.v1";
 const PRE_RESET_SETTINGS_STORAGE_KEYS = [
@@ -82,6 +87,8 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
     rifle: { ...DEFAULT_WEAPON_RECOIL_PROFILES.rifle },
     sniper: { ...DEFAULT_WEAPON_RECOIL_PROFILES.sniper },
   },
+  fpsCap: 60,
+  windowMode: "fullscreen",
 };
 
 export type PersistedSettings = {
@@ -90,6 +97,7 @@ export type PersistedSettings = {
   stressCount: StressModeCount;
   audioVolumes: AudioVolumeSettings;
   selectedCharacterId: string;
+  selectedMapId: MapId;
 };
 
 export function createDefaultPersistedSettings(): PersistedSettings {
@@ -111,6 +119,7 @@ export function createDefaultPersistedSettings(): PersistedSettings {
     stressCount: 0,
     audioVolumes: { ...DEFAULT_AUDIO_VOLUMES },
     selectedCharacterId: "trooper",
+    selectedMapId: DEFAULT_PRACTICE_MAP_ID,
   };
 }
 
@@ -124,6 +133,12 @@ function readBoolean(value: unknown, fallback: boolean): boolean {
 
 function readString(value: unknown, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function readMapId(value: unknown, fallback: MapId): MapId {
+  return PRACTICE_MAP_IDS.includes(value as MapId)
+    ? (value as MapId)
+    : fallback;
 }
 
 function readClampedNumber(
@@ -199,6 +214,19 @@ function readInventoryOpenMode(
 ): InventoryOpenMode {
   return INVENTORY_OPEN_MODES.includes(value as InventoryOpenMode)
     ? (value as InventoryOpenMode)
+    : fallback;
+}
+
+const FPS_CAP_VALUES: FpsCap[] = FPS_CAP_OPTIONS.map((o) => o.value);
+const WINDOW_MODE_VALUES: WindowMode[] = WINDOW_MODE_OPTIONS.map((o) => o.value);
+
+function readFpsCap(value: unknown, fallback: FpsCap): FpsCap {
+  return FPS_CAP_VALUES.includes(value as FpsCap) ? (value as FpsCap) : fallback;
+}
+
+function readWindowMode(value: unknown, fallback: WindowMode): WindowMode {
+  return WINDOW_MODE_VALUES.includes(value as WindowMode)
+    ? (value as WindowMode)
     : fallback;
 }
 
@@ -707,6 +735,8 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
           ),
         },
       } as WeaponRecoilProfiles,
+      fpsCap: readFpsCap(settings.fpsCap, defaults.settings.fpsCap),
+      windowMode: readWindowMode(settings.windowMode, defaults.settings.windowMode),
     },
     hudPanels: {
       practice: readBoolean(hudPanels.practice, defaults.hudPanels.practice),
@@ -722,6 +752,7 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
       value.selectedCharacterId,
       defaults.selectedCharacterId,
     ),
+    selectedMapId: readMapId(value.selectedMapId, defaults.selectedMapId),
     audioVolumes: {
       master: readClampedNumber(
         audioVolumes.master,

@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import { loadGlbAsset } from "../AssetLoader";
+import type { PracticeMapDefinition } from "./practice-maps";
+import { RANGE_PRACTICE_MAP } from "./practice-maps";
 import { createNightSkyTexture } from "./Textures";
 import type { StressModeCount } from "../types";
 import {
   OCEAN_LEVEL_Y,
   OCEAN_SIZE,
-  WALKABLE_CENTER_X,
-  WALKABLE_CENTER_Z,
-  WALKABLE_SIZE_X,
-  WALKABLE_SIZE_Z,
 } from "./scene-constants";
 import {
   createGrassTexture,
@@ -40,12 +39,14 @@ export type MapEnvironmentProps = {
   shadows: boolean;
   theme: number;
   floorGridOpacity: number;
+  worldBounds?: PracticeMapDefinition["worldBounds"];
 };
 
 export function MapEnvironment({
   shadows,
   theme,
   floorGridOpacity,
+  worldBounds = RANGE_PRACTICE_MAP.worldBounds,
 }: MapEnvironmentProps) {
   const grassTexture = useMemo(() => createGrassTexture(), []);
   const skyTexture = useMemo(() => createSkyTexture(), []);
@@ -62,6 +63,10 @@ export function MapEnvironment({
   const textureReveal = clamp01((liveTheme - 0.52) / 0.48);
   const allowTextures = textureReveal > 0.001;
   const shadowEnabled = shadows && liveTheme > 0.6;
+  const walkableCenterX = (worldBounds.minX + worldBounds.maxX) / 2;
+  const walkableCenterZ = (worldBounds.minZ + worldBounds.maxZ) / 2;
+  const walkableSizeX = worldBounds.maxX - worldBounds.minX;
+  const walkableSizeZ = worldBounds.maxZ - worldBounds.minZ;
 
   useEffect(() => {
     const helper = floorGridRef.current;
@@ -106,7 +111,7 @@ export function MapEnvironment({
 
       {/* Sand strip beyond walkable area */}
       <mesh
-        position={[WALKABLE_CENTER_X, -0.12, WALKABLE_CENTER_Z]}
+        position={[walkableCenterX, -0.12, walkableCenterZ]}
         rotation={[-Math.PI / 2, 0, 0]}
         userData={{ bulletHittable: true }}
       >
@@ -120,7 +125,7 @@ export function MapEnvironment({
 
       {/* Water plane */}
       <mesh
-        position={[WALKABLE_CENTER_X, OCEAN_LEVEL_Y, WALKABLE_CENTER_Z]}
+        position={[walkableCenterX, OCEAN_LEVEL_Y, walkableCenterZ]}
         rotation={[-Math.PI / 2, 0, 0]}
       >
         <planeGeometry args={[OCEAN_SIZE, OCEAN_SIZE]} />
@@ -133,12 +138,12 @@ export function MapEnvironment({
 
       {/* Walkable grassy floor */}
       <mesh
-        position={[WALKABLE_CENTER_X, 0, WALKABLE_CENTER_Z]}
+        position={[walkableCenterX, 0, walkableCenterZ]}
         rotation={[-Math.PI / 2, 0, 0]}
         receiveShadow={shadowEnabled}
         userData={{ bulletHittable: true }}
       >
-        <planeGeometry args={[WALKABLE_SIZE_X, WALKABLE_SIZE_Z]} />
+        <planeGeometry args={[walkableSizeX, walkableSizeZ]} />
         <meshStandardMaterial
           color={blendColor(VOID_WALKABLE, LIVE_WALKABLE, liveTheme)}
           map={allowTextures ? grassTexture ?? undefined : undefined}
@@ -151,12 +156,12 @@ export function MapEnvironment({
         <gridHelper
           ref={floorGridRef}
           args={[
-            WALKABLE_SIZE_X,
+            walkableSizeX,
             FLOOR_GRID_DIVISIONS,
             GRID_MAJOR_COLOR,
             GRID_MINOR_COLOR,
           ]}
-          position={[WALKABLE_CENTER_X, 0.05, WALKABLE_CENTER_Z]}
+          position={[walkableCenterX, 0.05, walkableCenterZ]}
           renderOrder={5}
         />
       ) : null}
@@ -168,4 +173,141 @@ export function StressBoxes({ count, shadows }: { count: StressModeCount; shadow
   void count;
   void shadows;
   return null;
+}
+
+function InvisibleWorldOccluders({
+  practiceMap,
+}: {
+  practiceMap: PracticeMapDefinition;
+}) {
+  return (
+    <group>
+      <mesh
+        position={[
+          (practiceMap.worldBounds.minX + practiceMap.worldBounds.maxX) / 2,
+          0,
+          (practiceMap.worldBounds.minZ + practiceMap.worldBounds.maxZ) / 2,
+        ]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        userData={{ bulletHittable: true }}
+      >
+        <planeGeometry
+          args={[
+            practiceMap.worldBounds.maxX - practiceMap.worldBounds.minX,
+            practiceMap.worldBounds.maxZ - practiceMap.worldBounds.minZ,
+          ]}
+        />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
+      </mesh>
+
+      {practiceMap.occluderVolumes.map((occluder, index) => (
+        <mesh
+          key={`${practiceMap.id}-occluder-${index}`}
+          position={occluder.center}
+          userData={{ bulletHittable: true }}
+        >
+          <boxGeometry args={occluder.size} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+export function GlbMapEnvironment({
+  practiceMap,
+}: {
+  practiceMap: PracticeMapDefinition;
+}) {
+  const [mapSource, setMapSource] = useState<THREE.Group | null>(null);
+  const modelUrl = practiceMap.environment.kind === "glb-scene"
+    ? practiceMap.environment.modelUrl
+    : null;
+
+  useEffect(() => {
+    if (!modelUrl) {
+      setMapSource(null);
+      return;
+    }
+
+    let cancelled = false;
+    void loadGlbAsset(modelUrl).then((asset) => {
+      if (!cancelled) {
+        setMapSource(asset);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modelUrl]);
+
+  const mapInstance = useMemo(() => {
+    if (!mapSource) {
+      return null;
+    }
+
+    return mapSource.clone(true);
+  }, [mapSource]);
+
+  useEffect(() => {
+    if (!mapInstance) {
+      return;
+    }
+
+    mapInstance.traverse((child) => {
+      if (!(child as THREE.Mesh).isMesh) {
+        return;
+      }
+
+      const mesh = child as THREE.Mesh;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      mesh.userData.bulletHittable = false;
+    });
+  }, [mapInstance]);
+
+  if (practiceMap.environment.kind !== "glb-scene") {
+    return null;
+  }
+
+  return (
+    <group>
+      <InvisibleWorldOccluders practiceMap={practiceMap} />
+      {mapInstance ? (
+        <group
+          position={practiceMap.environment.transform.position}
+          rotation={[0, practiceMap.environment.transform.rotationY, 0]}
+          scale={practiceMap.environment.transform.scale}
+        >
+          <primitive object={mapInstance} />
+        </group>
+      ) : null}
+    </group>
+  );
+}
+
+export function PracticeMapEnvironment({
+  practiceMap,
+  shadows,
+  theme,
+  floorGridOpacity,
+}: {
+  practiceMap: PracticeMapDefinition;
+  shadows: boolean;
+  theme: number;
+  floorGridOpacity: number;
+}) {
+  if (practiceMap.environment.kind === "glb-scene") {
+    return <GlbMapEnvironment practiceMap={practiceMap} />;
+  }
+
+  return (
+    <MapEnvironment
+      shadows={shadows}
+      theme={theme}
+      floorGridOpacity={floorGridOpacity}
+      worldBounds={practiceMap.worldBounds}
+    />
+  );
 }

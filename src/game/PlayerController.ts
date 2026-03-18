@@ -19,10 +19,6 @@ import {
   isSprintInputEligible,
   rotatePlanarVelocityTowards,
 } from './movement';
-import {
-  PLAYER_SPAWN_PITCH,
-  PLAYER_SPAWN_POSITION,
-} from './scene/scene-constants';
 
 type PlayerAction =
   | 'pickup'
@@ -43,6 +39,9 @@ type UsePlayerControllerOptions = {
   collisionRects: CollisionRect[];
   collisionCircles: CollisionCircle[];
   worldBounds: WorldBounds;
+  spawnPosition: [number, number, number];
+  spawnYaw: number;
+  spawnPitch: number;
   sensitivity: AimSensitivitySettings;
   keybinds: ControlBindings;
   crouchMode: CrouchMode;
@@ -160,6 +159,9 @@ export function usePlayerController({
   collisionRects,
   collisionCircles,
   worldBounds,
+  spawnPosition,
+  spawnYaw,
+  spawnPitch,
   sensitivity,
   keybinds,
   crouchMode,
@@ -178,14 +180,16 @@ export function usePlayerController({
   const gl = useThree((state) => state.gl);
 
   const keyStateRef = useRef<KeyState>({});
-  const positionRef = useRef(PLAYER_SPAWN_POSITION.clone());
+  const positionRef = useRef(
+    new THREE.Vector3(spawnPosition[0], spawnPosition[1], spawnPosition[2]),
+  );
   const velocityRef = useRef(new THREE.Vector2(0, 0));
   const moveInputRef = useRef(new THREE.Vector2(0, 0));
   const sprintPressedRef = useRef(false);
   const walkPressedRef = useRef(false);
   const crouchedRef = useRef(false);
   const resolvedXZRef = useRef(
-    new THREE.Vector2(positionRef.current.x, positionRef.current.z),
+    new THREE.Vector2(spawnPosition[0], spawnPosition[2]),
   );
   const pointerLockedRef = useRef(false);
   const triggerHeldRef = useRef(false);
@@ -205,14 +209,14 @@ export function usePlayerController({
   const jumpQueuedRef = useRef(false);
   const lastLandedAtRef = useRef(0);
   const consecutiveJumpsRef = useRef(0);
-  const yawRef = useRef(0);
-  const bodyYawRef = useRef(0);
-  const pitchRef = useRef(0);
-  const targetYawRef = useRef(0);
-  const targetBodyYawRef = useRef(0);
+  const yawRef = useRef(spawnYaw);
+  const bodyYawRef = useRef(spawnYaw);
+  const pitchRef = useRef(spawnPitch);
+  const targetYawRef = useRef(spawnYaw);
+  const targetBodyYawRef = useRef(spawnYaw);
   const shootAlignUntilRef = useRef(0);
   const runFacingPhaseRef = useRef<RunFacingPhase>('off');
-  const runFacingYawRef = useRef(0);
+  const runFacingYawRef = useRef(spawnYaw);
   const headYawOffsetRef = useRef(0);
   const targetPitchRef = useRef(0);
   const pendingMouseRef = useRef(new THREE.Vector2(0, 0));
@@ -1235,7 +1239,7 @@ export function usePlayerController({
         document.exitPointerLock();
       }
     },
-    setPose: (position, yawRadians, pitchRadians = PLAYER_SPAWN_PITCH) => {
+    setPose: (position, yawRadians, pitchRadians = spawnPitch) => {
       positionRef.current.copy(position);
       resolvedXZRef.current.set(position.x, position.z);
       velocityRef.current.set(0, 0);
