@@ -246,7 +246,7 @@ export function GameRoot({
     setTdmMapFailedThisSession(true);
     if (!tdmMapFailureToastShownRef.current) {
       tdmMapFailureToastShownRef.current = true;
-      toast.warning("TDM map is unavailable in this session.", {
+      toast.warning("School map is unavailable in this session.", {
         description: "Falling back to Range until the asset loads cleanly again.",
       });
     }
@@ -1587,7 +1587,7 @@ export function GameRoot({
                             ) : null}
                             {mapFallbackActive ? (
                               <p className="muted compact-note">
-                                TDM is unavailable in this session, so practice falls back to Range.
+                                School is unavailable in this session, so practice falls back to Range.
                               </p>
                             ) : null}
                           </MenuSection>
@@ -1621,7 +1621,7 @@ export function GameRoot({
                           ) : (
                             <MenuSection
                               title="Traversal"
-                              blurb="TDM is a clean movement sandbox while you block out the map."
+                              blurb="School is a clean movement sandbox while you block out the map."
                             >
                               <p className="muted compact-note">
                                 No bots, no weapon spawns, and no stress boxes. This lane is movement-only for now.

@@ -4,8 +4,8 @@
 
 - **Character model**: Trooper FBX (`public/assets/models/character/Trooper/tactical guy.fbx`) with manual texture loading from `.fbm` folder
 - **Animations**: Mixamo FBX files grouped by movement mode and rifle stance
-- **Practice maps**: selectable procedural `Range` plus bundled `TDM` GLB (`public/assets/map/TDM.glb`)
-- **TDM gameplay**: traversal-only blockout for now, with no targets, no loot spawns, and a coarse authored collision/bounds pass
+- **Practice maps**: selectable procedural `Range` plus bundled `School` GLB (`public/assets/map/school.glb`)
+- **School gameplay**: traversal-only blockout for now, with no targets, no loot spawns, and a coarse authored collision/bounds pass
 - Placeholder geometry still used for weapon pickups and target dummies
 - Audio uses WebAudio synth fallback unless files are added
 
@@ -30,9 +30,9 @@
 ### Practice Maps
 
 - `Range` remains procedural and keeps the existing stress-box test path
-- `TDM` loads from `public/assets/map/TDM.glb` through `loadGlbAsset()`
-- `TDM` currently uses authored world bounds, a grounded spawn point, and coarse blocker rectangles in `src/game/scene/practice-maps.ts`
-- `TDM` is still scenery-first and movement-focused; the current blocker pass is intentionally rough until the layout settles
+- `School` loads from `public/assets/map/school.glb` through `loadGlbAsset()`
+- `School` currently uses authored world bounds, a grounded spawn point, and coarse blocker rectangles in `src/game/scene/practice-maps.ts`
+- `School` is still scenery-first and movement-focused; the current blocker pass is intentionally rough until the layout settles
 - Stress mode stays range-only for now, because one performance fire at a time is enough
 
 ### Character Model (FBX)

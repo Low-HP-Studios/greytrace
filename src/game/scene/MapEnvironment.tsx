@@ -175,6 +175,63 @@ export function StressBoxes({ count, shadows }: { count: StressModeCount; shadow
   return null;
 }
 
+function normalizeGlbMapMaterial(material: THREE.Material): THREE.Material {
+  const clone = material.clone();
+
+  if ((clone as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+    const standard = clone as THREE.MeshStandardMaterial;
+    if (standard.map) {
+      standard.map.colorSpace = THREE.SRGBColorSpace;
+    }
+    if (standard.emissiveMap) {
+      standard.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+    }
+    standard.roughness = Math.min(1, Math.max(standard.roughness, 0.72));
+    standard.metalness *= 0.65;
+    standard.toneMapped = true;
+    standard.needsUpdate = true;
+    return standard;
+  }
+
+  if ((clone as THREE.MeshPhongMaterial).isMeshPhongMaterial) {
+    const phong = clone as THREE.MeshPhongMaterial;
+    if (phong.map) {
+      phong.map.colorSpace = THREE.SRGBColorSpace;
+    }
+    phong.emissive.addScalar(0.08);
+    phong.needsUpdate = true;
+    return phong;
+  }
+
+  return clone;
+}
+
+function GlbMapLighting({
+  practiceMap,
+}: {
+  practiceMap: PracticeMapDefinition;
+}) {
+  const centerX = (practiceMap.worldBounds.minX + practiceMap.worldBounds.maxX) / 2;
+  const centerZ = (practiceMap.worldBounds.minZ + practiceMap.worldBounds.maxZ) / 2;
+
+  return (
+    <>
+      <ambientLight intensity={0.38} color="#fff1e0" />
+      <hemisphereLight args={["#dcecff", "#6d5438", 0.52]} />
+      <directionalLight
+        position={[centerX + 18, 24, centerZ + 14]}
+        intensity={0.62}
+        color="#ffe4bf"
+      />
+      <directionalLight
+        position={[centerX - 22, 14, centerZ - 18]}
+        intensity={0.34}
+        color="#8dcfff"
+      />
+    </>
+  );
+}
+
 function InvisibleWorldOccluders({
   practiceMap,
 }: {
@@ -264,6 +321,13 @@ export function GlbMapEnvironment({
       mesh.castShadow = false;
       mesh.receiveShadow = false;
       mesh.userData.bulletHittable = false;
+      if (Array.isArray(mesh.material)) {
+        mesh.material = mesh.material.map((material) =>
+          normalizeGlbMapMaterial(material),
+        );
+      } else {
+        mesh.material = normalizeGlbMapMaterial(mesh.material);
+      }
     });
   }, [mapInstance]);
 
@@ -273,6 +337,7 @@ export function GlbMapEnvironment({
 
   return (
     <group>
+      <GlbMapLighting practiceMap={practiceMap} />
       <InvisibleWorldOccluders practiceMap={practiceMap} />
       {mapInstance ? (
         <group

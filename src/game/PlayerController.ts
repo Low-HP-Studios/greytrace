@@ -97,7 +97,6 @@ export type PlayerControllerApi = {
 type KeyState = Record<string, boolean>;
 
 const PLAYER_RADIUS = 0.35;
-const GROUND_Y = 0;
 const WALK_SPEED = 5.3;
 const SPRINT_SPEED = 8.2;
 const LOOK_SENSITIVITY = 0.0022;
@@ -178,6 +177,7 @@ export function usePlayerController({
 }: UsePlayerControllerOptions): PlayerControllerApi {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
+  const groundY = spawnPosition[1];
 
   const keyStateRef = useRef<KeyState>({});
   const positionRef = useRef(
@@ -899,8 +899,8 @@ export function usePlayerController({
       verticalVelocityRef.current += gravity * delta;
       positionRef.current.y += verticalVelocityRef.current * delta;
 
-      if (positionRef.current.y <= GROUND_Y) {
-        positionRef.current.y = GROUND_Y;
+      if (positionRef.current.y <= groundY) {
+        positionRef.current.y = groundY;
         verticalVelocityRef.current = 0;
         groundedRef.current = true;
         airborneMomentumSpeedRef.current = 0;
@@ -908,7 +908,7 @@ export function usePlayerController({
       }
     } else {
       groundedRef.current = true;
-      positionRef.current.y = GROUND_Y;
+      positionRef.current.y = groundY;
       airborneMomentumSpeedRef.current = 0;
     }
 

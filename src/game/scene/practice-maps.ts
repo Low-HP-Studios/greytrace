@@ -60,7 +60,7 @@ const RANGE_GROUND_SPAWNS: readonly StaticGroundSpawn[] = [
   { itemId: "ammo_sniper", quantity: 30, position: [2.35, 0.14, 3.85] },
 ];
 
-export const TDM_MAP_MODEL_URL = "/assets/map/TDM.glb";
+export const TDM_MAP_MODEL_URL = "/assets/map/school.glb";
 
 const TDM_WORLD_BOUNDS: WorldBounds = {
   minX: -8,
@@ -101,7 +101,7 @@ const TDM_OCCLUDERS: readonly OccluderVolume[] = [
 ];
 
 const TDM_PLAYER_SPAWN = {
-  position: [6, 0, 8] as [number, number, number],
+  position: [6, 8.15, 8] as [number, number, number],
   yaw: -Math.PI / 2,
   pitch: DEFAULT_PLAYER_PITCH,
 };
@@ -128,8 +128,8 @@ export const RANGE_PRACTICE_MAP: PracticeMapDefinition = {
 
 export const TDM_PRACTICE_MAP: PracticeMapDefinition = {
   id: "tdm",
-  label: "TDM",
-  description: "Traversal-only TDM blockout with coarse blockers, bounds, and no loot clutter.",
+  label: "School",
+  description: "Traversal-only school blockout with coarse blockers, bounds, and no loot clutter.",
   supportsStressMode: false,
   worldBounds: TDM_WORLD_BOUNDS,
   collisionRects: TDM_COLLIDERS,

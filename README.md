@@ -13,7 +13,7 @@ Stack:
 
 - First-person camera + pointer lock
 - WASD movement + sprint
-- Selectable practice maps: procedural `Range` and traversal-only `TDM`
+- Selectable practice maps: procedural `Range` and traversal-only `School`
 - Simple collision blocking (custom AABB/circle collision, no physics engine)
 - Pickup/drop rifle (`F` / `G`)
 - Automatic fire with recoil climb + horizontal drift (spray feel)
@@ -84,7 +84,7 @@ pnpm build:electron
 Current build ships with:
 
 - A procedural `Range` practice map
-- A bundled `TDM` GLB at `/public/assets/map/TDM.glb`
+- A bundled `School` GLB at `/public/assets/map/school.glb`
 - Synthesized fallback audio unless sound files are added
 
 Asset pipeline is ready for free assets:
@@ -98,5 +98,5 @@ If you add downloadable assets, document source/license in:
 ## Notes / Trade-offs
 
 - Collision is custom and lightweight (good for prototype speed, less robust than a real character controller/physics stack).
-- The TDM map is currently traversal-only with coarse blockers and tighter bounds: enough to keep you on the blockout, not enough to call it finished level collision.
+- The School map is currently traversal-only with coarse blockers and tighter bounds: enough to keep you on the blockout, not enough to call it finished level collision.
 - Audio defaults to synth placeholders if files are missing (great for iteration, less realistic than sampled assets).

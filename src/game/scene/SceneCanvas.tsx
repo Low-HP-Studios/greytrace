@@ -178,7 +178,10 @@ function SceneFramePacer({
   gameplayCapEnabled: boolean;
   gameplayIntervalMs: number;
 }) {
-  const advance = useThree((state) => state.advance);
+  // Use invalidate (demand rendering) instead of advance so r3f's clock keeps
+  // running normally — getDelta() returns real elapsed seconds, preventing the
+  // delta unit mismatch that advance(rafTimestamp) causes in "never" mode.
+  const invalidate = useThree((state) => state.invalidate);
 
   useEffect(() => {
     const capEnabled = lobbyCapEnabled || gameplayCapEnabled;
@@ -189,7 +192,7 @@ function SceneFramePacer({
     const loop = (time: number) => {
       if (time - lastTime >= intervalMs) {
         lastTime = time - ((time - lastTime) % intervalMs);
-        advance(time);
+        invalidate();
       }
       rafId = window.requestAnimationFrame(loop);
     };
@@ -198,7 +201,7 @@ function SceneFramePacer({
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [advance, lobbyCapEnabled, gameplayCapEnabled, gameplayIntervalMs]);
+  }, [invalidate, lobbyCapEnabled, gameplayCapEnabled, gameplayIntervalMs]);
 
   return null;
 }
@@ -425,7 +428,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
       dpr={dpr}
       camera={CANVAS_CAMERA}
       gl={CANVAS_GL}
-      frameloop={(lobbyFrameCapEnabled || gameplayCapEnabled) ? "never" : "always"}
+      frameloop={(lobbyFrameCapEnabled || gameplayCapEnabled) ? "demand" : "always"}
     >
       <SceneContextRecoveryWatcher onContextLost={handleSceneContextLost} />
       <SceneFramePacer

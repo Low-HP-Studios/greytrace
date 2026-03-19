@@ -37,7 +37,7 @@ Originally started as an FPS prototype, converted to TPS for visible character f
   - Chooses the active practice-map environment and resets targets per map
 - `src/game/scene/MapEnvironment.tsx`
   - Procedural range environment plus generic GLB-map environment
-  - TDM currently renders as traversal scenery with coarse blocker volumes and tighter world bounds
+  - School currently renders as traversal scenery with coarse blocker volumes and tighter world bounds
 - `src/game/PlayerController.ts`
   - Mouse look, WASD/sprint/jump, lightweight collision resolution
   - Over-the-shoulder TPS camera (PUBG-style shoulder offset)
