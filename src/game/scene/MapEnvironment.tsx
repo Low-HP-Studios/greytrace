@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { loadGlbAsset } from "../AssetLoader";
+import {
+  getWalkableSurfaceThickness,
+  type BlockingVolume,
+  type WalkableSurface,
+} from "../map-layout";
+import type { StressModeCount } from "../types";
 import type { PracticeMapDefinition } from "./practice-maps";
 import { RANGE_PRACTICE_MAP } from "./practice-maps";
-import { createNightSkyTexture } from "./Textures";
-import type { StressModeCount } from "../types";
-import {
-  OCEAN_LEVEL_Y,
-  OCEAN_SIZE,
-} from "./scene-constants";
+import { OCEAN_LEVEL_Y, OCEAN_SIZE } from "./scene-constants";
 import {
   createGrassTexture,
+  createNightSkyTexture,
   createSkyTexture,
 } from "./Textures";
 
@@ -24,8 +25,18 @@ const SAND_COLOR_VOID = new THREE.Color("#1e1a10");
 const SAND_COLOR_LIVE = new THREE.Color("#c4a96a");
 const WATER_COLOR_VOID = new THREE.Color("#0a1520");
 const WATER_COLOR_LIVE = new THREE.Color("#1e4a61");
+const SCHOOL_BASE_VOID = new THREE.Color("#191919");
+const SCHOOL_BASE_LIVE = new THREE.Color("#64615b");
 const FLOOR_GRID_DIVISIONS = 16;
 const SAND_STRIP_SIZE = 320;
+
+const POOL_MIN_X = 34;
+const POOL_MAX_X = 40;
+const POOL_MIN_Z = 16;
+const POOL_MAX_Z = 34;
+const POOL_WATER_Y = -1.1;
+const POOL_FLOOR_Y = -1.75;
+const POOL_WALL_HEIGHT = 1.6;
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
@@ -33,6 +44,94 @@ function clamp01(value: number) {
 
 function blendColor(from: THREE.Color, to: THREE.Color, amount: number) {
   return new THREE.Color().copy(from).lerp(to, clamp01(amount));
+}
+
+type SurfacePalette = {
+  color: string;
+  roughness: number;
+  metalness: number;
+};
+
+const SURFACE_PALETTE: Record<
+  NonNullable<WalkableSurface["material"]>,
+  SurfacePalette
+> = {
+  yard: { color: "#6d675d", roughness: 1, metalness: 0.02 },
+  interior: { color: "#a49a88", roughness: 0.96, metalness: 0.01 },
+  upper: { color: "#c2b8a4", roughness: 0.94, metalness: 0.01 },
+  poolDeck: { color: "#d0c7b0", roughness: 0.9, metalness: 0.02 },
+  stair: { color: "#968e81", roughness: 0.96, metalness: 0.02 },
+};
+
+const BLOCKING_PALETTE: Record<
+  NonNullable<BlockingVolume["material"]>,
+  SurfacePalette
+> = {
+  wall: { color: "#7f7567", roughness: 0.95, metalness: 0.02 },
+  railing: { color: "#4f555c", roughness: 0.7, metalness: 0.12 },
+  cover: { color: "#6a4f39", roughness: 0.92, metalness: 0.02 },
+};
+
+function WorldBackdrop({
+  theme,
+  worldBounds,
+}: {
+  theme: number;
+  worldBounds: PracticeMapDefinition["worldBounds"];
+}) {
+  const skyTexture = useMemo(() => createSkyTexture(), []);
+  const nightSkyTexture = useMemo(() => createNightSkyTexture(), []);
+  const liveTheme = clamp01(theme);
+  const textureReveal = clamp01((liveTheme - 0.52) / 0.48);
+  const allowTextures = textureReveal > 0.001;
+  const walkableCenterX = (worldBounds.minX + worldBounds.maxX) / 2;
+  const walkableCenterZ = (worldBounds.minZ + worldBounds.maxZ) / 2;
+
+  useEffect(() => {
+    return () => {
+      skyTexture?.dispose();
+      nightSkyTexture?.dispose();
+    };
+  }, [nightSkyTexture, skyTexture]);
+
+  return (
+    <group>
+      <mesh>
+        <sphereGeometry args={[560, 48, 32]} />
+        <meshBasicMaterial
+          color={blendColor(VOID_SKY, LIVE_SKY, textureReveal)}
+          map={allowTextures ? skyTexture ?? undefined : nightSkyTexture ?? undefined}
+          side={THREE.BackSide}
+          depthWrite={false}
+          fog={false}
+        />
+      </mesh>
+
+      <mesh
+        position={[walkableCenterX, -0.12, walkableCenterZ]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <planeGeometry args={[SAND_STRIP_SIZE, SAND_STRIP_SIZE]} />
+        <meshStandardMaterial
+          color={blendColor(SAND_COLOR_VOID, SAND_COLOR_LIVE, liveTheme)}
+          roughness={1}
+          metalness={0}
+        />
+      </mesh>
+
+      <mesh
+        position={[walkableCenterX, OCEAN_LEVEL_Y, walkableCenterZ]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <planeGeometry args={[OCEAN_SIZE, OCEAN_SIZE]} />
+        <meshStandardMaterial
+          color={blendColor(WATER_COLOR_VOID, WATER_COLOR_LIVE, liveTheme)}
+          roughness={1}
+          metalness={0}
+        />
+      </mesh>
+    </group>
+  );
 }
 
 export type MapEnvironmentProps = {
@@ -49,16 +148,7 @@ export function MapEnvironment({
   worldBounds = RANGE_PRACTICE_MAP.worldBounds,
 }: MapEnvironmentProps) {
   const grassTexture = useMemo(() => createGrassTexture(), []);
-  const skyTexture = useMemo(() => createSkyTexture(), []);
   const floorGridRef = useRef<THREE.GridHelper>(null);
-
-  useEffect(() => {
-    return () => {
-      skyTexture?.dispose();
-      grassTexture?.dispose();
-    };
-  }, [grassTexture, skyTexture]);
-
   const liveTheme = clamp01(theme);
   const textureReveal = clamp01((liveTheme - 0.52) / 0.48);
   const allowTextures = textureReveal > 0.001;
@@ -67,6 +157,12 @@ export function MapEnvironment({
   const walkableCenterZ = (worldBounds.minZ + worldBounds.maxZ) / 2;
   const walkableSizeX = worldBounds.maxX - worldBounds.minX;
   const walkableSizeZ = worldBounds.maxZ - worldBounds.minZ;
+
+  useEffect(() => {
+    return () => {
+      grassTexture?.dispose();
+    };
+  }, [grassTexture]);
 
   useEffect(() => {
     const helper = floorGridRef.current;
@@ -87,56 +183,10 @@ export function MapEnvironment({
     }
   }, [floorGridOpacity]);
 
-  const nightSkyTexture = useMemo(() => createNightSkyTexture(), []);
-
-  useEffect(() => {
-    return () => {
-      nightSkyTexture?.dispose();
-    };
-  }, [nightSkyTexture]);
-
   return (
     <group>
-      {/* Sky sphere */}
-      <mesh>
-        <sphereGeometry args={[560, 48, 32]} />
-        <meshBasicMaterial
-          color={blendColor(VOID_SKY, LIVE_SKY, textureReveal)}
-          map={allowTextures ? skyTexture ?? undefined : (nightSkyTexture ?? undefined)}
-          side={THREE.BackSide}
-          depthWrite={false}
-          fog={false}
-        />
-      </mesh>
+      <WorldBackdrop theme={theme} worldBounds={worldBounds} />
 
-      {/* Sand strip beyond walkable area */}
-      <mesh
-        position={[walkableCenterX, -0.12, walkableCenterZ]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        userData={{ bulletHittable: true }}
-      >
-        <planeGeometry args={[SAND_STRIP_SIZE, SAND_STRIP_SIZE]} />
-        <meshStandardMaterial
-          color={blendColor(SAND_COLOR_VOID, SAND_COLOR_LIVE, liveTheme)}
-          roughness={1}
-          metalness={0}
-        />
-      </mesh>
-
-      {/* Water plane */}
-      <mesh
-        position={[walkableCenterX, OCEAN_LEVEL_Y, walkableCenterZ]}
-        rotation={[-Math.PI / 2, 0, 0]}
-      >
-        <planeGeometry args={[OCEAN_SIZE, OCEAN_SIZE]} />
-        <meshStandardMaterial
-          color={blendColor(WATER_COLOR_VOID, WATER_COLOR_LIVE, liveTheme)}
-          roughness={1}
-          metalness={0}
-        />
-      </mesh>
-
-      {/* Walkable grassy floor */}
       <mesh
         position={[walkableCenterX, 0, walkableCenterZ]}
         rotation={[-Math.PI / 2, 0, 0]}
@@ -169,187 +219,208 @@ export function MapEnvironment({
   );
 }
 
+function SchoolSurface({
+  surface,
+  shadows,
+}: {
+  surface: WalkableSurface;
+  shadows: boolean;
+}) {
+  const thickness = getWalkableSurfaceThickness(surface);
+  const palette = SURFACE_PALETTE[surface.material ?? "interior"];
+
+  if (surface.kind === "slab") {
+    return (
+      <mesh
+        position={[
+          (surface.minX + surface.maxX) / 2,
+          surface.y - thickness / 2,
+          (surface.minZ + surface.maxZ) / 2,
+        ]}
+        receiveShadow={shadows}
+        userData={{ bulletHittable: true }}
+      >
+        <boxGeometry
+          args={[
+            surface.maxX - surface.minX,
+            thickness,
+            surface.maxZ - surface.minZ,
+          ]}
+        />
+        <meshStandardMaterial {...palette} />
+      </mesh>
+    );
+  }
+
+  const run = surface.axis === "x"
+    ? surface.maxX - surface.minX
+    : surface.maxZ - surface.minZ;
+  const rise = surface.endY - surface.startY;
+  const angle = Math.atan2(rise, run);
+  const length = Math.hypot(run, rise);
+  const centerY = (surface.startY + surface.endY) / 2 -
+    (thickness / 2) * Math.cos(angle);
+  const centerX = (surface.minX + surface.maxX) / 2;
+  const centerZ = (surface.minZ + surface.maxZ) / 2;
+
+  return (
+    <mesh
+      position={[centerX, centerY, centerZ]}
+      rotation={surface.axis === "x" ? [0, 0, angle] : [-angle, 0, 0]}
+      receiveShadow={shadows}
+      userData={{ bulletHittable: true }}
+    >
+      <boxGeometry
+        args={surface.axis === "x"
+          ? [length, thickness, surface.maxZ - surface.minZ]
+          : [surface.maxX - surface.minX, thickness, length]}
+      />
+      <meshStandardMaterial {...palette} />
+    </mesh>
+  );
+}
+
+function SchoolBlocker({
+  blocker,
+  shadows,
+}: {
+  blocker: BlockingVolume;
+  shadows: boolean;
+}) {
+  const palette = BLOCKING_PALETTE[blocker.material ?? "wall"];
+
+  return (
+    <mesh
+      position={blocker.center}
+      castShadow={shadows}
+      receiveShadow={shadows}
+      userData={{ bulletHittable: true }}
+    >
+      <boxGeometry args={blocker.size} />
+      <meshStandardMaterial {...palette} />
+    </mesh>
+  );
+}
+
+function PoolDetails({ shadows }: { shadows: boolean }) {
+  const centerX = (POOL_MIN_X + POOL_MAX_X) / 2;
+  const centerZ = (POOL_MIN_Z + POOL_MAX_Z) / 2;
+  const width = POOL_MAX_X - POOL_MIN_X;
+  const depth = POOL_MAX_Z - POOL_MIN_Z;
+
+  return (
+    <group>
+      <mesh position={[centerX, POOL_FLOOR_Y, centerZ]} receiveShadow={shadows}>
+        <boxGeometry args={[width, 0.25, depth]} />
+        <meshStandardMaterial color="#325365" roughness={0.95} metalness={0.04} />
+      </mesh>
+
+      <mesh position={[centerX, POOL_WATER_Y, centerZ]}>
+        <boxGeometry args={[width - 0.2, 0.12, depth - 0.2]} />
+        <meshStandardMaterial
+          color="#2f7ea1"
+          roughness={0.2}
+          metalness={0.08}
+          transparent
+          opacity={0.86}
+        />
+      </mesh>
+
+      <mesh position={[centerX, POOL_WATER_Y - POOL_WALL_HEIGHT / 2, POOL_MIN_Z]}>
+        <boxGeometry args={[width, POOL_WALL_HEIGHT, 0.35]} />
+        <meshStandardMaterial color="#9ba7aa" roughness={0.9} metalness={0.04} />
+      </mesh>
+      <mesh position={[centerX, POOL_WATER_Y - POOL_WALL_HEIGHT / 2, POOL_MAX_Z]}>
+        <boxGeometry args={[width, POOL_WALL_HEIGHT, 0.35]} />
+        <meshStandardMaterial color="#9ba7aa" roughness={0.9} metalness={0.04} />
+      </mesh>
+      <mesh position={[POOL_MIN_X, POOL_WATER_Y - POOL_WALL_HEIGHT / 2, centerZ]}>
+        <boxGeometry args={[0.35, POOL_WALL_HEIGHT, depth]} />
+        <meshStandardMaterial color="#9ba7aa" roughness={0.9} metalness={0.04} />
+      </mesh>
+      <mesh position={[POOL_MAX_X, POOL_WATER_Y - POOL_WALL_HEIGHT / 2, centerZ]}>
+        <boxGeometry args={[0.35, POOL_WALL_HEIGHT, depth]} />
+        <meshStandardMaterial color="#9ba7aa" roughness={0.9} metalness={0.04} />
+      </mesh>
+    </group>
+  );
+}
+
+function SchoolBlockoutEnvironment({
+  practiceMap,
+  shadows,
+  theme,
+}: {
+  practiceMap: PracticeMapDefinition;
+  shadows: boolean;
+  theme: number;
+}) {
+  const worldBounds = practiceMap.worldBounds;
+  const surfaces = practiceMap.walkableSurfaces ?? [];
+  const blockers = practiceMap.blockingVolumes ?? [];
+  const centerX = (worldBounds.minX + worldBounds.maxX) / 2;
+  const centerZ = (worldBounds.minZ + worldBounds.maxZ) / 2;
+  const sizeX = worldBounds.maxX - worldBounds.minX;
+  const sizeZ = worldBounds.maxZ - worldBounds.minZ;
+  const liveTheme = clamp01(theme);
+
+  return (
+    <group>
+      <WorldBackdrop theme={theme} worldBounds={worldBounds} />
+
+      <mesh
+        position={[centerX, -0.18, centerZ]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <planeGeometry args={[sizeX + 28, sizeZ + 28]} />
+        <meshStandardMaterial
+          color={blendColor(SCHOOL_BASE_VOID, SCHOOL_BASE_LIVE, liveTheme)}
+          roughness={1}
+          metalness={0.01}
+          polygonOffset
+          polygonOffsetFactor={1}
+          polygonOffsetUnits={1}
+        />
+      </mesh>
+
+      <ambientLight intensity={0.46} color="#fff2de" />
+      <hemisphereLight args={["#dcecff", "#6b5438", 0.58]} />
+      <directionalLight
+        position={[centerX + 20, 28, centerZ + 12]}
+        intensity={0.74}
+        color="#ffe0b8"
+      />
+      <directionalLight
+        position={[centerX - 16, 14, centerZ - 18]}
+        intensity={0.28}
+        color="#9fcbff"
+      />
+
+      {surfaces.map((surface, index) => (
+        <SchoolSurface
+          key={`${practiceMap.id}-surface-${index}`}
+          surface={surface}
+          shadows={shadows}
+        />
+      ))}
+
+      {blockers.map((blocker, index) => (
+        <SchoolBlocker
+          key={`${practiceMap.id}-blocker-${index}`}
+          blocker={blocker}
+          shadows={shadows}
+        />
+      ))}
+
+      <PoolDetails shadows={shadows} />
+    </group>
+  );
+}
+
 export function StressBoxes({ count, shadows }: { count: StressModeCount; shadows: boolean }) {
   void count;
   void shadows;
   return null;
-}
-
-function normalizeGlbMapMaterial(material: THREE.Material): THREE.Material {
-  const clone = material.clone();
-
-  if ((clone as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
-    const standard = clone as THREE.MeshStandardMaterial;
-    if (standard.map) {
-      standard.map.colorSpace = THREE.SRGBColorSpace;
-    }
-    if (standard.emissiveMap) {
-      standard.emissiveMap.colorSpace = THREE.SRGBColorSpace;
-    }
-    standard.roughness = Math.min(1, Math.max(standard.roughness, 0.72));
-    standard.metalness *= 0.65;
-    standard.toneMapped = true;
-    standard.needsUpdate = true;
-    return standard;
-  }
-
-  if ((clone as THREE.MeshPhongMaterial).isMeshPhongMaterial) {
-    const phong = clone as THREE.MeshPhongMaterial;
-    if (phong.map) {
-      phong.map.colorSpace = THREE.SRGBColorSpace;
-    }
-    phong.emissive.addScalar(0.08);
-    phong.needsUpdate = true;
-    return phong;
-  }
-
-  return clone;
-}
-
-function GlbMapLighting({
-  practiceMap,
-}: {
-  practiceMap: PracticeMapDefinition;
-}) {
-  const centerX = (practiceMap.worldBounds.minX + practiceMap.worldBounds.maxX) / 2;
-  const centerZ = (practiceMap.worldBounds.minZ + practiceMap.worldBounds.maxZ) / 2;
-
-  return (
-    <>
-      <ambientLight intensity={0.38} color="#fff1e0" />
-      <hemisphereLight args={["#dcecff", "#6d5438", 0.52]} />
-      <directionalLight
-        position={[centerX + 18, 24, centerZ + 14]}
-        intensity={0.62}
-        color="#ffe4bf"
-      />
-      <directionalLight
-        position={[centerX - 22, 14, centerZ - 18]}
-        intensity={0.34}
-        color="#8dcfff"
-      />
-    </>
-  );
-}
-
-function InvisibleWorldOccluders({
-  practiceMap,
-}: {
-  practiceMap: PracticeMapDefinition;
-}) {
-  return (
-    <group>
-      <mesh
-        position={[
-          (practiceMap.worldBounds.minX + practiceMap.worldBounds.maxX) / 2,
-          0,
-          (practiceMap.worldBounds.minZ + practiceMap.worldBounds.maxZ) / 2,
-        ]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        userData={{ bulletHittable: true }}
-      >
-        <planeGeometry
-          args={[
-            practiceMap.worldBounds.maxX - practiceMap.worldBounds.minX,
-            practiceMap.worldBounds.maxZ - practiceMap.worldBounds.minZ,
-          ]}
-        />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
-      </mesh>
-
-      {practiceMap.occluderVolumes.map((occluder, index) => (
-        <mesh
-          key={`${practiceMap.id}-occluder-${index}`}
-          position={occluder.center}
-          userData={{ bulletHittable: true }}
-        >
-          <boxGeometry args={occluder.size} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-export function GlbMapEnvironment({
-  practiceMap,
-}: {
-  practiceMap: PracticeMapDefinition;
-}) {
-  const [mapSource, setMapSource] = useState<THREE.Group | null>(null);
-  const modelUrl = practiceMap.environment.kind === "glb-scene"
-    ? practiceMap.environment.modelUrl
-    : null;
-
-  useEffect(() => {
-    if (!modelUrl) {
-      setMapSource(null);
-      return;
-    }
-
-    let cancelled = false;
-    void loadGlbAsset(modelUrl).then((asset) => {
-      if (!cancelled) {
-        setMapSource(asset);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [modelUrl]);
-
-  const mapInstance = useMemo(() => {
-    if (!mapSource) {
-      return null;
-    }
-
-    return mapSource.clone(true);
-  }, [mapSource]);
-
-  useEffect(() => {
-    if (!mapInstance) {
-      return;
-    }
-
-    mapInstance.traverse((child) => {
-      if (!(child as THREE.Mesh).isMesh) {
-        return;
-      }
-
-      const mesh = child as THREE.Mesh;
-      mesh.castShadow = false;
-      mesh.receiveShadow = false;
-      mesh.userData.bulletHittable = false;
-      if (Array.isArray(mesh.material)) {
-        mesh.material = mesh.material.map((material) =>
-          normalizeGlbMapMaterial(material),
-        );
-      } else {
-        mesh.material = normalizeGlbMapMaterial(mesh.material);
-      }
-    });
-  }, [mapInstance]);
-
-  if (practiceMap.environment.kind !== "glb-scene") {
-    return null;
-  }
-
-  return (
-    <group>
-      <GlbMapLighting practiceMap={practiceMap} />
-      <InvisibleWorldOccluders practiceMap={practiceMap} />
-      {mapInstance ? (
-        <group
-          position={practiceMap.environment.transform.position}
-          rotation={[0, practiceMap.environment.transform.rotationY, 0]}
-          scale={practiceMap.environment.transform.scale}
-        >
-          <primitive object={mapInstance} />
-        </group>
-      ) : null}
-    </group>
-  );
 }
 
 export function PracticeMapEnvironment({
@@ -363,8 +434,14 @@ export function PracticeMapEnvironment({
   theme: number;
   floorGridOpacity: number;
 }) {
-  if (practiceMap.environment.kind === "glb-scene") {
-    return <GlbMapEnvironment practiceMap={practiceMap} />;
+  if (practiceMap.environment.kind === "school-blockout") {
+    return (
+      <SchoolBlockoutEnvironment
+        practiceMap={practiceMap}
+        shadows={shadows}
+        theme={theme}
+      />
+    );
   }
 
   return (

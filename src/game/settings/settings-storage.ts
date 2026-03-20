@@ -25,7 +25,7 @@ import {
   type PixelRatioScale,
   type StressModeCount,
 } from "../types";
-import { FPS_CAP_OPTIONS, PIXEL_RATIO_OPTIONS, STRESS_STEPS, WINDOW_MODE_OPTIONS } from "./settings-constants";
+import { PIXEL_RATIO_OPTIONS, STRESS_STEPS } from "./settings-constants";
 
 const LEGACY_SETTINGS_STORAGE_KEY = "zerohour.settings.v1";
 const PRE_RESET_SETTINGS_STORAGE_KEYS = [
@@ -217,8 +217,8 @@ function readInventoryOpenMode(
     : fallback;
 }
 
-const FPS_CAP_VALUES: FpsCap[] = FPS_CAP_OPTIONS.map((o) => o.value);
-const WINDOW_MODE_VALUES: WindowMode[] = WINDOW_MODE_OPTIONS.map((o) => o.value);
+const FPS_CAP_VALUES: FpsCap[] = [0, 30, 60, 120, 144, 240];
+const WINDOW_MODE_VALUES: WindowMode[] = ["windowed", "fullscreen", "borderless"];
 
 function readFpsCap(value: unknown, fallback: FpsCap): FpsCap {
   return FPS_CAP_VALUES.includes(value as FpsCap) ? (value as FpsCap) : fallback;

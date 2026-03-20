@@ -9,7 +9,6 @@ import {
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { type AudioVolumeSettings } from "./Audio";
-import { loadGlbAsset } from "./AssetLoader";
 import { getCharacterById } from "./characters";
 import { ExperienceMenuOverlay } from "./ExperienceMenuOverlay";
 import { PerfHUD } from "./PerfHUD";
@@ -33,7 +32,6 @@ import { PubgHud } from "./hud/PubgHud";
 import { PubgInventoryOverlay } from "./inventory/PubgInventoryOverlay";
 import type { SniperRechamberState, WeaponKind } from "./Weapon";
 import {
-  DEFAULT_PRACTICE_MAP_ID,
   DEFAULT_MOVEMENT_SETTINGS,
   DEFAULT_PERF_METRICS,
   DEFAULT_PLAYER_SNAPSHOT,
@@ -54,7 +52,6 @@ import {
   type StressModeCount,
 } from "./types";
 import {
-  TDM_MAP_MODEL_URL,
   getPracticeMapById,
   PRACTICE_MAP_OPTIONS,
 } from "./scene/practice-maps";
@@ -63,8 +60,6 @@ import {
   type PauseMenuTab,
   STRESS_STEPS,
   PIXEL_RATIO_OPTIONS,
-  FPS_CAP_OPTIONS,
-  WINDOW_MODE_OPTIONS,
   MENU_TABS,
   BINDING_ROWS,
   OVERLAY_ROWS,
@@ -229,28 +224,10 @@ export function GameRoot({
   const [selectedMapId, setSelectedMapId] = useState<MapId>(
     persistedSettings.selectedMapId,
   );
-  const [tdmMapFailedThisSession, setTdmMapFailedThisSession] = useState(false);
-  const tdmMapFailureToastShownRef = useRef(false);
   const selectedMap = useMemo(
     () => getPracticeMapById(selectedMapId),
     [selectedMapId],
   );
-  const effectiveMapId = selectedMapId === "tdm" && tdmMapFailedThisSession
-    ? DEFAULT_PRACTICE_MAP_ID
-    : selectedMapId;
-  const effectivePracticeMap = useMemo(
-    () => getPracticeMapById(effectiveMapId),
-    [effectiveMapId],
-  );
-  const markTdmMapFailed = useCallback(() => {
-    setTdmMapFailedThisSession(true);
-    if (!tdmMapFailureToastShownRef.current) {
-      tdmMapFailureToastShownRef.current = true;
-      toast.warning("School map is unavailable in this session.", {
-        description: "Falling back to Range until the asset loads cleanly again.",
-      });
-    }
-  }, []);
   const characterOverride = useMemo(() => {
     const def = getCharacterById(selectedCharacterId);
     return {
@@ -259,24 +236,6 @@ export function GameRoot({
       textures: def.textures,
     };
   }, [selectedCharacterId]);
-  useEffect(() => {
-    if (selectedMapId !== "tdm" || tdmMapFailedThisSession) {
-      return;
-    }
-
-    let cancelled = false;
-    void loadGlbAsset(TDM_MAP_MODEL_URL).then((result) => {
-      if (cancelled || result) {
-        return;
-      }
-
-      markTdmMapFailed();
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [markTdmMapFailed, selectedMapId, tdmMapFailedThisSession]);
   const [perfMetrics, setPerfMetrics] = useState<PerfMetrics>(
     DEFAULT_PERF_METRICS,
   );
@@ -395,10 +354,6 @@ export function GameRoot({
     window.electronAPI?.setGameplayActive(phase === "playing");
   }, [phase]);
 
-  useEffect(() => {
-    window.electronAPI?.setWindowMode(settings.windowMode);
-  }, [settings.windowMode]);
-
   // Auto-lock the pointer once we enter playing state.
   // Browser requires a user gesture for requestPointerLock, so we add a
   // one-time click handler. In Electron/Tauri the synthetic click usually
@@ -512,30 +467,18 @@ export function GameRoot({
   }, [showSettingsModal]);
 
   const handleEnterPractice = useCallback(() => {
-    void (async () => {
-      if (selectedMapId === "tdm" && !tdmMapFailedThisSession) {
-        const tdmAsset = await loadGlbAsset(TDM_MAP_MODEL_URL);
-        if (!tdmAsset) {
-          flushSync(() => {
-            markTdmMapFailed();
-          });
-        }
-      }
-
-      // Commit the phase swap once the selected map is resolved for this session.
-      flushSync(() => {
-        setMenuSettingsOpen(false);
-        setPauseMenuOpen(false);
-        setBindingCapture(null);
-        setHitMarker({ until: 0, kind: "body" });
-        enteredPlayingAtRef.current = performance.now();
-        setPhase("playing");
-      });
-      window.focus();
-      sceneRef.current?.requestPointerLock();
-      setNeedsPointerLock(true);
-    })();
-  }, [markTdmMapFailed, selectedMapId, tdmMapFailedThisSession]);
+    flushSync(() => {
+      setMenuSettingsOpen(false);
+      setPauseMenuOpen(false);
+      setBindingCapture(null);
+      setHitMarker({ until: 0, kind: "body" });
+      enteredPlayingAtRef.current = performance.now();
+      setPhase("playing");
+    });
+    window.focus();
+    sceneRef.current?.requestPointerLock();
+    setNeedsPointerLock(true);
+  }, []);
 
   const handleReturnToLobby = useCallback(() => {
     setBindingCapture(null);
@@ -1110,7 +1053,6 @@ export function GameRoot({
   const sceneStressCount = selectedMap.supportsStressMode ? stressCount : 0;
   const stressLabel = stressCount === 0 ? "Off" : `${stressCount} boxes`;
   const practiceMapLocked = phase !== "menu";
-  const mapFallbackActive = selectedMapId === "tdm" && effectiveMapId !== "tdm";
   const lockLabel = player.pointerLocked
     ? "Live look mode"
     : inventoryOpen
@@ -1217,7 +1159,7 @@ export function GameRoot({
         settings={settings}
         audioVolumes={audioVolumes}
         stressCount={sceneStressCount}
-        practiceMap={effectivePracticeMap}
+        practiceMap={selectedMap}
         booting={booting}
         deferredAssetsEnabled={deferredAssetsEnabled}
         presentation={renderedPresentation}
@@ -1246,7 +1188,6 @@ export function GameRoot({
             onCharacterSelect={setSelectedCharacterId}
             selectedMapId={selectedMapId}
             onMapSelect={setSelectedMapId}
-            mapFallbackActive={mapFallbackActive}
             updaterStatus={updaterStatus}
             updaterBusyAction={updaterBusyAction}
             updaterAvailable={updaterAvailable}
@@ -1583,11 +1524,6 @@ export function GameRoot({
                             {practiceMapLocked ? (
                               <p className="muted compact-note">
                                 Map changes are locked during a run. Return to the lobby to switch.
-                              </p>
-                            ) : null}
-                            {mapFallbackActive ? (
-                              <p className="muted compact-note">
-                                School is unavailable in this session, so practice falls back to Range.
                               </p>
                             ) : null}
                           </MenuSection>
@@ -2564,71 +2500,6 @@ export function GameRoot({
                     {menuTab === "graphics"
                       ? (
                         <div className="menu-sections">
-                          <MenuSection
-                            title="Performance"
-                            blurb="Cap the frame rate to reduce CPU/GPU load and prevent thermal throttling."
-                          >
-                            <div className="field-row">
-                              <div>
-                                <div className="field-label">FPS Cap</div>
-                                <div className="field-hint">
-                                  Max frames per second (0 = uncapped)
-                                </div>
-                              </div>
-                              <div className="segmented-row compact">
-                                {FPS_CAP_OPTIONS.map((option) => (
-                                  <button
-                                    key={option.value}
-                                    type="button"
-                                    className={`chip-btn ${
-                                      settings.fpsCap === option.value
-                                        ? "active"
-                                        : ""
-                                    }`}
-                                    onClick={() =>
-                                      setSettings((prev) => ({
-                                        ...prev,
-                                        fpsCap: option.value,
-                                      }))}
-                                  >
-                                    {option.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                            {window.electronAPI
-                              ? (
-                                <div className="field-row">
-                                  <div>
-                                    <div className="field-label">Window Mode</div>
-                                    <div className="field-hint">
-                                      Display mode for the application window
-                                    </div>
-                                  </div>
-                                  <div className="segmented-row compact">
-                                    {WINDOW_MODE_OPTIONS.map((option) => (
-                                      <button
-                                        key={option.value}
-                                        type="button"
-                                        className={`chip-btn ${
-                                          settings.windowMode === option.value
-                                            ? "active"
-                                            : ""
-                                        }`}
-                                        onClick={() =>
-                                          setSettings((prev) => ({
-                                            ...prev,
-                                            windowMode: option.value,
-                                          }))}
-                                      >
-                                        {option.label}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              )
-                              : null}
-                          </MenuSection>
                           <MenuSection
                             title="Render Quality"
                             blurb="Enough knobs to tune performance without pretending this is a benchmark suite."

@@ -19,7 +19,6 @@ type ExperienceMenuOverlayProps = {
   onCharacterSelect: (characterId: string) => void;
   selectedMapId: MapId;
   onMapSelect: (mapId: MapId) => void;
-  mapFallbackActive: boolean;
   updaterStatus: UpdaterStatusPayload;
   updaterBusyAction: "check" | "install" | "repair" | null;
   updaterAvailable: boolean;
@@ -186,7 +185,6 @@ export function ExperienceMenuOverlay({
   onCharacterSelect,
   selectedMapId,
   onMapSelect,
-  mapFallbackActive,
   updaterStatus,
   updaterBusyAction,
   updaterAvailable,
@@ -330,11 +328,6 @@ export function ExperienceMenuOverlay({
                 <p className="lobby-map-selector-note-v2">
                   {selectedMap.description}
                 </p>
-                {mapFallbackActive ? (
-                  <p className="lobby-map-selector-note-v2 warning">
-                    This GLB map is unavailable in this session, so practice will fall back to Range.
-                  </p>
-                ) : null}
               </div>
               <div className="lobby-card-actions-v2">
                 <button type="button" className="lobby-play-btn-v2" onClick={onEnterPractice}>

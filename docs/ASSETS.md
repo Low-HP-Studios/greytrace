@@ -4,8 +4,8 @@
 
 - **Character model**: Trooper FBX (`public/assets/models/character/Trooper/tactical guy.fbx`) with manual texture loading from `.fbm` folder
 - **Animations**: Mixamo FBX files grouped by movement mode and rifle stance
-- **Practice maps**: selectable procedural `Range` plus bundled `School` GLB (`public/assets/map/school.glb`)
-- **School gameplay**: traversal-only blockout for now, with no targets, no loot spawns, and a coarse authored collision/bounds pass
+- **Practice maps**: selectable procedural `Range` plus a code-built `School` blockout
+- **School gameplay**: traversal-only blockout for now, with no targets, no loot spawns, and authored floor/blocker data for multi-level movement
 - Placeholder geometry still used for weapon pickups and target dummies
 - Audio uses WebAudio synth fallback unless files are added
 
@@ -30,9 +30,10 @@
 ### Practice Maps
 
 - `Range` remains procedural and keeps the existing stress-box test path
-- `School` loads from `public/assets/map/school.glb` through `loadGlbAsset()`
-- `School` currently uses authored world bounds, a grounded spawn point, and coarse blocker rectangles in `src/game/scene/practice-maps.ts`
-- `School` is still scenery-first and movement-focused; the current blocker pass is intentionally rough until the layout settles
+- `School` is authored directly in `src/game/scene/practice-maps.ts` and rendered procedurally in `src/game/scene/MapEnvironment.tsx`
+- `School` uses authored walkable surfaces, ramps, and blocking volumes instead of imported GLB mesh probing
+- Export an editable GLB for Blender with `pnpm export:school-map` (default output: `build/school-blockout/school-blockout-v1.glb`)
+- Imported `.glb` practice maps are still pipeline-ready, but the current runtime does not depend on them
 - Stress mode stays range-only for now, because one performance fire at a time is enough
 
 ### Character Model (FBX)
@@ -74,5 +75,5 @@
 
 ## Trade-off
 
-Bundled scenery gives faster visual payoff, but a traversal-only map is still just staging until collision and gameplay layers exist.
-That is acceptable for layout validation, and a lot less dishonest than pretending an unfinished combat map is already playable.
+Code-built blockouts are easier to make playable than arbitrary scene imports, but they are still blockouts.
+That buys faster iteration on movement and layout, while the art pass gets to wait its turn like everyone else.

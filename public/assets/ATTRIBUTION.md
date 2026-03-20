@@ -1,12 +1,14 @@
 # Asset Attribution
 
-This build bundles a third-party practice map alongside generated placeholder geometry and synthesized audio fallbacks.
+The current runtime uses authored procedural geometry for practice maps and synthesized audio fallbacks.
 
-Bundled third-party assets:
+Bundled third-party runtime assets:
 
-"Tdm" (https://skfb.ly/oJyEp) by afnanklndr is licensed under Creative Commons Attribution (http://creativecommons.org/licenses/by/4.0/).
+- None in the active practice-map pipeline
 
-Planned asset locations (pipeline-ready):
+Pipeline-ready asset locations:
 - `/public/assets/map/*.glb`
 - `/public/assets/models/*.glb`
 - `/public/assets/audio/*.{wav,mp3,ogg}`
+
+If you add or reactivate downloadable third-party assets, record the source and license here before pretending legal review is a future-you problem.

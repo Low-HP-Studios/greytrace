@@ -1762,8 +1762,11 @@ export const GameplayRuntime = forwardRef<
   const controller = usePlayerController({
     collisionRects: [...practiceMap.collisionRects],
     collisionCircles: targetCollisionCircles,
+    blockingVolumes: practiceMap.blockingVolumes,
     worldBounds: practiceMap.worldBounds,
     spawnPosition,
+    groundLevelY: spawnPosition[1],
+    walkableSurfaces: practiceMap.walkableSurfaces,
     spawnYaw,
     spawnPitch,
     sensitivity,

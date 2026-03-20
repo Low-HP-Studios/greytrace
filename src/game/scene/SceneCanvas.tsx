@@ -171,28 +171,19 @@ function SceneBootCompiler({
 
 function SceneFramePacer({
   lobbyCapEnabled,
-  gameplayCapEnabled,
-  gameplayIntervalMs,
 }: {
   lobbyCapEnabled: boolean;
-  gameplayCapEnabled: boolean;
-  gameplayIntervalMs: number;
 }) {
-  // Use invalidate (demand rendering) instead of advance so r3f's clock keeps
-  // running normally — getDelta() returns real elapsed seconds, preventing the
-  // delta unit mismatch that advance(rafTimestamp) causes in "never" mode.
-  const invalidate = useThree((state) => state.invalidate);
+  const advance = useThree((state) => state.advance);
 
   useEffect(() => {
-    const capEnabled = lobbyCapEnabled || gameplayCapEnabled;
-    if (!capEnabled) return;
-    const intervalMs = lobbyCapEnabled ? LOBBY_FRAME_INTERVAL_MS : gameplayIntervalMs;
+    if (!lobbyCapEnabled) return;
     let rafId: number;
     let lastTime = 0;
     const loop = (time: number) => {
-      if (time - lastTime >= intervalMs) {
-        lastTime = time - ((time - lastTime) % intervalMs);
-        invalidate();
+      if (time - lastTime >= LOBBY_FRAME_INTERVAL_MS) {
+        lastTime = time - ((time - lastTime) % LOBBY_FRAME_INTERVAL_MS);
+        advance(time);
       }
       rafId = window.requestAnimationFrame(loop);
     };
@@ -201,7 +192,7 @@ function SceneFramePacer({
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [invalidate, lobbyCapEnabled, gameplayCapEnabled, gameplayIntervalMs]);
+  }, [advance, lobbyCapEnabled]);
 
   return null;
 }
@@ -271,8 +262,6 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
     : RANGE_PRACTICE_MAP;
   // Don't advance frames during menu — scene is hidden; only pace during returning transition
   const paceEnabled = lobbyFrameCapEnabled && presentation.phase !== "menu";
-  const gameplayCapEnabled = presentation.phase === "playing" && settings.fpsCap > 0;
-  const gameplayCapIntervalMs = settings.fpsCap > 0 ? 1000 / settings.fpsCap : 0;
 
   const dpr = useMemo(() => {
     const devicePixelRatio =
@@ -428,14 +417,10 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
       dpr={dpr}
       camera={CANVAS_CAMERA}
       gl={CANVAS_GL}
-      frameloop={(lobbyFrameCapEnabled || gameplayCapEnabled) ? "demand" : "always"}
+      frameloop={lobbyFrameCapEnabled ? "never" : "always"}
     >
       <SceneContextRecoveryWatcher onContextLost={handleSceneContextLost} />
-      <SceneFramePacer
-        lobbyCapEnabled={paceEnabled}
-        gameplayCapEnabled={gameplayCapEnabled}
-        gameplayIntervalMs={gameplayCapIntervalMs}
-      />
+      <SceneFramePacer lobbyCapEnabled={paceEnabled} />
       <color attach="background" args={[backgroundColor]} />
       <fog attach="fog" args={[fogColor, 60, 420]} />
       <hemisphereLight

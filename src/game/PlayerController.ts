@@ -1,6 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import {
+  sampleWalkableSurfaceHeight,
+  type BlockingVolume,
+  type WalkableSurface,
+} from './map-layout';
 import type { WeaponKind } from './Weapon';
 import {
   type AimSensitivitySettings,
@@ -38,8 +43,11 @@ type MovementProfile = {
 type UsePlayerControllerOptions = {
   collisionRects: CollisionRect[];
   collisionCircles: CollisionCircle[];
+  blockingVolumes?: readonly BlockingVolume[];
   worldBounds: WorldBounds;
   spawnPosition: [number, number, number];
+  groundLevelY?: number;
+  walkableSurfaces?: readonly WalkableSurface[];
   spawnYaw: number;
   spawnPitch: number;
   sensitivity: AimSensitivitySettings;
@@ -110,9 +118,13 @@ const JUMP_SPEED = 7.8;
 const JUMP_PENALTY_PER_CONSECUTIVE = 0.12;
 const MAX_CONSECUTIVE_JUMP_PENALTY = 0.4;
 const CONSECUTIVE_JUMP_RESET_MS = 800;
+const PLAYER_STAND_HEIGHT = 1.78;
+const PLAYER_CROUCH_HEIGHT = 1.16;
 const GROUND_ACCEL_RATE = 18;
 const GROUND_DECEL_RATE = 22;
 const DIRECTION_REVERSAL_DECEL_RATE = 30;
+const GROUND_STEP_UP_HEIGHT = 0.9;
+const GROUND_STEP_DOWN_HEIGHT = 1.8;
 
 const CAMERA_ARM_LENGTH = 2.25;
 const CAMERA_ARM_LENGTH_ADS = 0.0;
@@ -157,8 +169,11 @@ const FPP_EXIT_VISUAL_THRESHOLD = 0.75;
 export function usePlayerController({
   collisionRects,
   collisionCircles,
+  blockingVolumes,
   worldBounds,
   spawnPosition,
+  groundLevelY,
+  walkableSurfaces,
   spawnYaw,
   spawnPitch,
   sensitivity,
@@ -177,7 +192,7 @@ export function usePlayerController({
 }: UsePlayerControllerOptions): PlayerControllerApi {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
-  const groundY = spawnPosition[1];
+  const initialGroundY = groundLevelY ?? spawnPosition[1];
 
   const keyStateRef = useRef<KeyState>({});
   const positionRef = useRef(
@@ -255,6 +270,9 @@ export function usePlayerController({
   const fovRef = useRef(fov);
   const inputEnabledRef = useRef(inputEnabled);
   const cameraEnabledRef = useRef(cameraEnabled);
+  const groundLevelYRef = useRef(initialGroundY);
+  const walkableSurfacesRef = useRef(walkableSurfaces ?? []);
+  const blockingVolumesRef = useRef(blockingVolumes ?? []);
 
   useEffect(() => {
     actionCallbackRef.current = onAction;
@@ -340,6 +358,18 @@ export function usePlayerController({
   useEffect(() => {
     cameraEnabledRef.current = cameraEnabled;
   }, [cameraEnabled]);
+
+  useEffect(() => {
+    groundLevelYRef.current = groundLevelY ?? spawnPosition[1];
+  }, [groundLevelY, spawnPosition]);
+
+  useEffect(() => {
+    walkableSurfacesRef.current = walkableSurfaces ?? [];
+  }, [walkableSurfaces]);
+
+  useEffect(() => {
+    blockingVolumesRef.current = blockingVolumes ?? [];
+  }, [blockingVolumes]);
 
   useEffect(() => {
     const element = gl.domElement;
@@ -843,6 +873,13 @@ export function usePlayerController({
       PLAYER_RADIUS,
       collisionCircles,
     );
+    resolveBlockingVolumeCollisions(
+      resolvedXZRef.current,
+      PLAYER_RADIUS,
+      positionRef.current.y,
+      crouchedRef.current ? PLAYER_CROUCH_HEIGHT : PLAYER_STAND_HEIGHT,
+      blockingVolumesRef.current,
+    );
 
     resolvedXZRef.current.y += velocityRef.current.y * delta;
     resolvedXZRef.current.y = clamp(
@@ -856,12 +893,34 @@ export function usePlayerController({
       PLAYER_RADIUS,
       collisionCircles,
     );
+    resolveBlockingVolumeCollisions(
+      resolvedXZRef.current,
+      PLAYER_RADIUS,
+      positionRef.current.y,
+      crouchedRef.current ? PLAYER_CROUCH_HEIGHT : PLAYER_STAND_HEIGHT,
+      blockingVolumesRef.current,
+    );
 
     positionRef.current.set(
       resolvedXZRef.current.x,
       positionRef.current.y,
       resolvedXZRef.current.y,
     );
+
+    const readGroundSample = () => {
+      const surfaces = walkableSurfacesRef.current;
+      if (surfaces.length === 0) {
+        return undefined;
+      }
+
+      return sampleWalkableSurfaceHeight(
+        surfaces,
+        positionRef.current.x,
+        positionRef.current.z,
+        positionRef.current.y,
+        GROUND_STEP_UP_HEIGHT,
+      );
+    };
 
     const nowJumpMs = performance.now();
     if (
@@ -898,18 +957,50 @@ export function usePlayerController({
             : GRAVITY_DOWN;
       verticalVelocityRef.current += gravity * delta;
       positionRef.current.y += verticalVelocityRef.current * delta;
+      const groundSample = readGroundSample();
 
-      if (positionRef.current.y <= groundY) {
-        positionRef.current.y = groundY;
+      if (
+        typeof groundSample === 'number' &&
+        verticalVelocityRef.current <= 0 &&
+        positionRef.current.y <= groundSample
+      ) {
+        positionRef.current.y = groundSample;
+        verticalVelocityRef.current = 0;
+        groundedRef.current = true;
+        airborneMomentumSpeedRef.current = 0;
+        lastLandedAtRef.current = nowJumpMs;
+      } else if (
+        walkableSurfacesRef.current.length === 0 &&
+        positionRef.current.y <= groundLevelYRef.current
+      ) {
+        positionRef.current.y = groundLevelYRef.current;
         verticalVelocityRef.current = 0;
         groundedRef.current = true;
         airborneMomentumSpeedRef.current = 0;
         lastLandedAtRef.current = nowJumpMs;
       }
     } else {
-      groundedRef.current = true;
-      positionRef.current.y = groundY;
-      airborneMomentumSpeedRef.current = 0;
+      const groundSample = readGroundSample();
+
+      if (typeof groundSample === 'number') {
+        const deltaToGround = groundSample - positionRef.current.y;
+        if (
+          deltaToGround <= GROUND_STEP_UP_HEIGHT &&
+          deltaToGround >= -GROUND_STEP_DOWN_HEIGHT
+        ) {
+          groundedRef.current = true;
+          positionRef.current.y = groundSample;
+          airborneMomentumSpeedRef.current = 0;
+        } else if (deltaToGround < -GROUND_STEP_DOWN_HEIGHT) {
+          groundedRef.current = false;
+        }
+      } else if (walkableSurfacesRef.current.length > 0) {
+        groundedRef.current = false;
+      } else {
+        groundedRef.current = true;
+        positionRef.current.y = groundLevelYRef.current;
+        airborneMomentumSpeedRef.current = 0;
+      }
     }
 
     if (
@@ -1324,6 +1415,33 @@ function resolveCircleCollisions(
 ) {
   for (const circle of collisionCircles) {
     resolveCircleCircle(positionXZ, radius, circle);
+  }
+}
+
+function resolveBlockingVolumeCollisions(
+  positionXZ: THREE.Vector2,
+  radius: number,
+  footY: number,
+  height: number,
+  blockingVolumes: readonly BlockingVolume[],
+) {
+  const playerTop = footY + height;
+
+  for (const volume of blockingVolumes) {
+    const halfHeight = volume.size[1] / 2;
+    const minY = volume.center[1] - halfHeight;
+    const maxY = volume.center[1] + halfHeight;
+
+    if (playerTop <= minY || footY >= maxY) {
+      continue;
+    }
+
+    resolveCircleRect(positionXZ, radius, {
+      minX: volume.center[0] - volume.size[0] / 2,
+      maxX: volume.center[0] + volume.size[0] / 2,
+      minZ: volume.center[2] - volume.size[2] / 2,
+      maxZ: volume.center[2] + volume.size[2] / 2,
+    });
   }
 }
 

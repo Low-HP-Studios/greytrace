@@ -30,7 +30,6 @@ declare global {
     platform: string;
     quitApp: () => Promise<void>;
     setGameplayActive: (active: boolean) => void;
-    setWindowMode: (mode: "windowed" | "fullscreen" | "borderless") => Promise<void>;
     updater: UpdaterApi;
   };
 

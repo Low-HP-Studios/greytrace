@@ -84,11 +84,11 @@ pnpm build:electron
 Current build ships with:
 
 - A procedural `Range` practice map
-- A bundled `School` GLB at `/public/assets/map/school.glb`
+- A code-built `School` blockout in the second practice-map slot
 - Synthesized fallback audio unless sound files are added
 
 Asset pipeline is ready for free assets:
-- Practice maps: `/public/assets/map/*.glb`
+- Practice maps: `/public/assets/map/*.glb` for future experiments
 - Models: `/public/assets/models/*.glb`
 - Audio: `/public/assets/audio/*`
 
@@ -98,5 +98,5 @@ If you add downloadable assets, document source/license in:
 ## Notes / Trade-offs
 
 - Collision is custom and lightweight (good for prototype speed, less robust than a real character controller/physics stack).
-- The School map is currently traversal-only with coarse blockers and tighter bounds: enough to keep you on the blockout, not enough to call it finished level collision.
+- The School map is authored as a movement-first blockout with multi-level floors and coarse blocker volumes: playable enough to iterate, still not a full physics-grade level.
 - Audio defaults to synth placeholders if files are missing (great for iteration, less realistic than sampled assets).
