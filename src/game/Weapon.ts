@@ -544,6 +544,19 @@ export class WeaponSystem {
     const activeKind = this.resolveActiveWeaponKind();
     const reloading = this.isReloading(nowMs);
 
+    // Auto-reload when magazine is empty, regardless of trigger state
+    if (
+      !reloading &&
+      !this.isSwitching(nowMs) &&
+      activeSlot.hasWeapon &&
+      activeKind &&
+      activeSlot.magAmmo <= 0 &&
+      activeSlot.reserveAmmo > 0
+    ) {
+      this.beginReload(nowMs);
+      return shotEvents;
+    }
+
     if (
       this.isSwitching(nowMs) ||
       !activeSlot.hasWeapon ||
@@ -551,11 +564,6 @@ export class WeaponSystem {
       !this.triggerHeld ||
       reloading
     ) {
-      return shotEvents;
-    }
-
-    if (activeSlot.magAmmo <= 0) {
-      this.beginReload(nowMs);
       return shotEvents;
     }
 

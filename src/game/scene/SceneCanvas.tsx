@@ -92,7 +92,7 @@ type SceneProps = {
   presentation: ScenePresentation;
   onPlayerSnapshot: (snapshot: PlayerSnapshot) => void;
   onPerfMetrics: (metrics: PerfMetrics) => void;
-  onHitMarker: (kind: HitMarkerKind) => void;
+  onHitMarker: (kind: HitMarkerKind, damage: number, targetId: string) => void;
   onShotFired: (state: ShotFiredState) => void;
   onWeaponEquippedChange: (equipped: boolean) => void;
   onActiveWeaponChange: (weapon: WeaponKind) => void;
@@ -100,6 +100,7 @@ type SceneProps = {
   onAimingStateChange: (state: AimingState) => void;
   onBootReady: () => void;
   characterOverride?: CharacterModelOverride;
+  onPauseMenuToggle?: () => void;
 };
 
 function waitForAnimationFrame() {
@@ -245,6 +246,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
   onAimingStateChange,
   onBootReady,
   characterOverride,
+  onPauseMenuToggle,
 }: SceneProps, ref) {
   const [canvasEpoch, setCanvasEpoch] = useState(0);
   const [targets, setTargets] = useState<TargetState[]>(() =>
@@ -516,6 +518,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
         deferredAssetsEnabled={deferredAssetsEnabled}
         onCriticalAssetsReadyChange={setRuntimeAssetsReady}
         characterOverride={characterOverride}
+        onPauseMenuToggle={onPauseMenuToggle}
       />
       <SceneBootCompiler enabled={compileReady} onReady={onBootReady} />
       {settings.showR3fPerf ? <Perf position="top-left" minimal /> : null}

@@ -25,7 +25,7 @@ import { loadGlbAsset, preloadTextureAsset } from "../AssetLoader";
 const VOID_SKY = new THREE.Color("#0a1628");
 const LIVE_SKY = new THREE.Color("#b8d4e8");
 const VOID_WALKABLE = new THREE.Color("#1c1a14");
-const LIVE_WALKABLE = new THREE.Color("#4d8f44");
+const LIVE_WALKABLE = new THREE.Color("#e8e8e8");
 const GRID_MAJOR_COLOR = new THREE.Color("#8fb3ff");
 const GRID_MINOR_COLOR = new THREE.Color("#ffffff");
 const SAND_COLOR_VOID = new THREE.Color("#1e1a10");
@@ -36,6 +36,8 @@ const SCHOOL_BASE_VOID = new THREE.Color("#191919");
 const SCHOOL_BASE_LIVE = new THREE.Color("#64615b");
 const FLOOR_GRID_DIVISIONS = 16;
 const SAND_STRIP_SIZE = 320;
+const RANGE_FLOOR_TEXTURE_URL = "/assets/range-floor-texture.jpg";
+const RANGE_FLOOR_METERS_PER_TILE = 8;
 
 const POOL_MIN_X = 34;
 const POOL_MAX_X = 40;
@@ -157,6 +159,9 @@ export function MapEnvironment({
   worldBounds = RANGE_PRACTICE_MAP.worldBounds,
 }: MapEnvironmentProps) {
   const grassTexture = useMemo(() => createGrassTexture(), []);
+  const [rangeFloorTexture, setRangeFloorTexture] = useState<
+    THREE.Texture | null
+  >(null);
   const floorGridRef = useRef<THREE.GridHelper>(null);
   const liveTheme = clamp01(theme);
   const textureReveal = clamp01((liveTheme - 0.52) / 0.48);
@@ -166,6 +171,26 @@ export function MapEnvironment({
   const walkableCenterZ = (worldBounds.minZ + worldBounds.maxZ) / 2;
   const walkableSizeX = worldBounds.maxX - worldBounds.minX;
   const walkableSizeZ = worldBounds.maxZ - worldBounds.minZ;
+
+  useEffect(() => {
+    let disposed = false;
+    preloadTextureAsset(RANGE_FLOOR_TEXTURE_URL).then((tex) => {
+      if (disposed || !tex) return;
+      const floor = tex.clone();
+      floor.wrapS = THREE.RepeatWrapping;
+      floor.wrapT = THREE.RepeatWrapping;
+      floor.repeat.set(
+        walkableSizeX / RANGE_FLOOR_METERS_PER_TILE,
+        walkableSizeZ / RANGE_FLOOR_METERS_PER_TILE,
+      );
+      floor.colorSpace = THREE.SRGBColorSpace;
+      floor.needsUpdate = true;
+      setRangeFloorTexture(floor);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, [walkableSizeX, walkableSizeZ]);
 
   useEffect(() => {
     return () => {
@@ -196,6 +221,16 @@ export function MapEnvironment({
     <group>
       <WorldBackdrop theme={theme} worldBounds={worldBounds} />
 
+      <ambientLight
+        intensity={THREE.MathUtils.lerp(0, 0.25, liveTheme)}
+        color="#ffffff"
+      />
+      <directionalLight
+        position={[walkableCenterX + 20, 30, walkableCenterZ + 10]}
+        intensity={THREE.MathUtils.lerp(0, 0.3, liveTheme)}
+        color="#fff8ee"
+      />
+
       <mesh
         position={[walkableCenterX, 0, walkableCenterZ]}
         rotation={[-Math.PI / 2, 0, 0]}
@@ -205,7 +240,9 @@ export function MapEnvironment({
         <planeGeometry args={[walkableSizeX, walkableSizeZ]} />
         <meshStandardMaterial
           color={blendColor(VOID_WALKABLE, LIVE_WALKABLE, liveTheme)}
-          map={allowTextures ? grassTexture ?? undefined : undefined}
+          map={allowTextures
+            ? (rangeFloorTexture ?? grassTexture ?? undefined)
+            : undefined}
           roughness={THREE.MathUtils.lerp(1, 0.85, liveTheme)}
           metalness={THREE.MathUtils.lerp(0, 0.02, liveTheme)}
         />

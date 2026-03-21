@@ -571,15 +571,21 @@ function useTargetCharacterAsset(
   return asset;
 }
 
+const _hpBarParentQuat = new THREE.Quaternion();
+
 const HPBar = memo(
   function HPBar({ hp, maxHp }: { hp: number; maxHp: number }) {
     const camera = useThree((state) => state.camera);
     const groupRef = useRef<THREE.Group>(null);
 
     useFrame(() => {
-      if (groupRef.current) {
-        groupRef.current.quaternion.copy(camera.quaternion);
-      }
+      const group = groupRef.current;
+      if (!group || !group.parent) return;
+      // Compensate for parent rotation so the bar always truly faces the camera
+      // localQuat = inverse(parentWorldQuat) * cameraQuat
+      group.parent.getWorldQuaternion(_hpBarParentQuat);
+      _hpBarParentQuat.invert();
+      group.quaternion.copy(camera.quaternion).premultiply(_hpBarParentQuat);
     });
 
     const ratio = Math.max(0, hp / maxHp);
@@ -712,7 +718,9 @@ const TargetDummy = memo(function TargetDummy({
             />
           </mesh>
         )}
-      {reveal >= 0.55 ? <HPBar hp={target.hp} maxHp={target.maxHp} /> : null}
+      {reveal >= 0.55 && target.hp < target.maxHp
+        ? <HPBar hp={target.hp} maxHp={target.maxHp} />
+        : null}
     </group>
   );
 });

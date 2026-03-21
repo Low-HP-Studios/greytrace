@@ -123,7 +123,7 @@ type GameplayRuntimeProps = {
   onResetTargets: () => void;
   onPlayerSnapshot: (snapshot: PlayerSnapshot) => void;
   onPerfMetrics: (metrics: PerfMetrics) => void;
-  onHitMarker: (kind: HitMarkerKind) => void;
+  onHitMarker: (kind: HitMarkerKind, damage: number, targetId: string) => void;
   onShotFired: (state: ShotFiredState) => void;
   onWeaponEquippedChange: (equipped: boolean) => void;
   onActiveWeaponChange: (weapon: WeaponKind) => void;
@@ -132,6 +132,7 @@ type GameplayRuntimeProps = {
   deferredAssetsEnabled?: boolean;
   onCriticalAssetsReadyChange?: (ready: boolean) => void;
   characterOverride?: CharacterModelOverride;
+  onPauseMenuToggle?: () => void;
 };
 
 const MENU_LOOK_HEIGHT = 1.06;
@@ -978,6 +979,7 @@ export const GameplayRuntime = forwardRef<
   deferredAssetsEnabled = true,
   onCriticalAssetsReadyChange,
   characterOverride,
+  onPauseMenuToggle,
 }: GameplayRuntimeProps, ref) {
   const gl = useThree((state) => state.gl);
   const camera = useThree((state) => state.camera);
@@ -1753,6 +1755,12 @@ export const GameplayRuntime = forwardRef<
     return weaponRef.current.getActiveWeapon();
   }, []);
 
+  const handleGetIsWeaponBusy = useCallback(() => {
+    const nowMs = performance.now();
+    const weapon = weaponRef.current;
+    return weapon.isReloading(nowMs) || weapon.getSniperRechamberState(nowMs).active;
+  }, []);
+
   const targetCollisionCircles = useMemo(
     () =>
       targets
@@ -1791,6 +1799,9 @@ export const GameplayRuntime = forwardRef<
     onUserGesture: handleUserGesture,
     getWeaponEquipped: handleGetWeaponEquipped,
     getActiveWeapon: handleGetActiveWeapon,
+    getIsWeaponBusy: handleGetIsWeaponBusy,
+    onPauseMenuToggle:
+      presentation.phase === "playing" ? onPauseMenuToggle : undefined,
   });
 
   controllerRef.current = controller;
@@ -3303,7 +3314,7 @@ export const GameplayRuntime = forwardRef<
           : hitType === "head"
           ? "head"
           : "body";
-        hitMarkerCallbackRef.current(markerKind);
+        hitMarkerCallbackRef.current(markerKind, resolvedDamage, resolvedTargetHit.id);
         if (killed) {
           audio.playKill();
         }

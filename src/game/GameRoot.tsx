@@ -183,8 +183,6 @@ export function GameRoot({
   const persistedSettings = useMemo(loadPersistedSettings, []);
   const sceneRef = useRef<SceneHandle | null>(null);
   const settingsModalRef = useRef<HTMLDivElement | null>(null);
-  const pointerLockResumeTimerRef = useRef<number | null>(null);
-  const pointerLockResumePendingRef = useRef(false);
   const [settings, setSettings] = useState<GameSettings>(
     persistedSettings.settings,
   );
@@ -193,6 +191,7 @@ export function GameRoot({
   );
   const [menuTab, setMenuTab] = useState<PauseMenuTab>("gameplay");
   const [bindingCapture, setBindingCapture] = useState<BindingKey | null>(null);
+  const bindingCaptureRef = useRef<BindingKey | null>(null);
   const [stressCount, setStressCount] = useState<StressModeCount>(
     persistedSettings.stressCount,
   );
@@ -247,6 +246,7 @@ export function GameRoot({
   const [phaseProgress, setPhaseProgress] = useState(0);
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
   const [pauseMenuOpen, setPauseMenuOpen] = useState(false);
+  const pauseMenuOpenRef = useRef(false);
   const [killPulseToken, setKillPulseToken] = useState(0);
   const [killPulseAmount, setKillPulseAmount] = useState(0);
   const [hitMarker, setHitMarker] = useState<
@@ -255,6 +255,11 @@ export function GameRoot({
     until: 0,
     kind: "body",
   });
+  const [damageNumbers, setDamageNumbers] = useState<
+    Array<{ id: number; targetId: string; damage: number; kind: HitMarkerKind; until: number }>
+  >([]);
+  const damageNumberIdRef = useRef(0);
+  const damageNumberTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const [shotBloom, setShotBloom] = useState(0);
   const shotBloomRef = useRef(0);
   const shotBloomFrameRef = useRef<number | null>(null);
@@ -269,12 +274,24 @@ export function GameRoot({
   const updaterApi = window.electronAPI?.updater;
   const updaterAvailable = Boolean(updaterApi);
   const inventoryOpen = phase === "playing" && player.inventoryPanelOpen;
-  const isPaused = booting || phase !== "playing" ||
-    (!player.pointerLocked && !inventoryOpen);
   const [hasBeenLocked, setHasBeenLocked] = useState(false);
   const returnResetDoneRef = useRef(false);
   const enteredPlayingAtRef = useRef(0);
   const [needsPointerLock, setNeedsPointerLock] = useState(false);
+  const isGameplayPaused =
+    booting ||
+    phase !== "playing" ||
+    pauseMenuOpen ||
+    (phase === "playing" && needsPointerLock && !inventoryOpen);
+
+  useEffect(() => {
+    pauseMenuOpenRef.current = pauseMenuOpen;
+  }, [pauseMenuOpen]);
+
+  useEffect(() => {
+    bindingCaptureRef.current = bindingCapture;
+  }, [bindingCapture]);
+
   const previousUpdaterPhaseRef = useRef<UpdaterPhase | null>(null);
   const lastMenuAutoCheckAtRef = useRef(0);
 
@@ -393,32 +410,35 @@ export function GameRoot({
     return () => window.cancelAnimationFrame(rafId);
   }, [killPulseToken]);
 
-  const showPauseMenu = phase === "playing" && hasBeenLocked && isPaused &&
-    pauseMenuOpen &&
-    (performance.now() - enteredPlayingAtRef.current > 600);
+  const showPauseMenu = phase === "playing" && pauseMenuOpen;
   const inLobbyPhase = phase === "menu" || phase === "entering" ||
     phase === "returning";
   const showSettingsModal = menuSettingsOpen || showPauseMenu;
-
-  const requestGameplayPointerLock = useCallback(() => {
-    pointerLockResumePendingRef.current = true;
-    if (pointerLockResumeTimerRef.current !== null) {
-      window.clearTimeout(pointerLockResumeTimerRef.current);
-    }
-    pointerLockResumeTimerRef.current = window.setTimeout(() => {
-      pointerLockResumePendingRef.current = false;
-      pointerLockResumeTimerRef.current = null;
-    }, 800);
-    sceneRef.current?.requestPointerLock();
-  }, []);
+  const showClickToContinueOverlay =
+    phase === "playing" && needsPointerLock && !showSettingsModal;
 
   const handleCloseMenuAndResume = useCallback(() => {
     setBindingCapture(null);
     setMenuSettingsOpen(false);
     setPauseMenuOpen(false);
     window.focus();
-    requestGameplayPointerLock();
-  }, [requestGameplayPointerLock]);
+    setNeedsPointerLock(true);
+  }, []);
+
+  const handlePauseMenuToggle = useCallback(() => {
+    if (bindingCaptureRef.current) {
+      return;
+    }
+    if (pauseMenuOpenRef.current) {
+      handleCloseMenuAndResume();
+      return;
+    }
+    setNeedsPointerLock(false);
+    setBindingCapture(null);
+    setMenuSettingsOpen(false);
+    setPauseMenuOpen(true);
+    sceneRef.current?.releasePointerLock();
+  }, [handleCloseMenuAndResume]);
 
   const handleCloseSettingsModal = useCallback(() => {
     setBindingCapture(null);
@@ -457,11 +477,11 @@ export function GameRoot({
       setPhase("playing");
     });
     window.focus();
-    sceneRef.current?.requestPointerLock();
     setNeedsPointerLock(true);
   }, []);
 
   const handleReturnToLobby = useCallback(() => {
+    setNeedsPointerLock(false);
     setBindingCapture(null);
     setMenuSettingsOpen(false);
     setPauseMenuOpen(false);
@@ -500,17 +520,45 @@ export function GameRoot({
     return result;
   }, [reportInventoryResult]);
 
-  const handleHitMarker = useCallback((kind: HitMarkerKind) => {
-    setHitMarker({
-      kind,
-      until: performance.now() +
-        (kind === "kill" ? 170 : kind === "head" ? 120 : 90),
-    });
-    if (kind === "kill" && phase === "playing") {
-      setKillPulseAmount(0);
-      setKillPulseToken((previous) => previous + 1);
-    }
-  }, [phase]);
+  const handleHitMarker = useCallback(
+    (kind: HitMarkerKind, damage: number, targetId: string) => {
+      const now = performance.now();
+      setHitMarker({
+        kind,
+        until: now + (kind === "kill" ? 170 : kind === "head" ? 120 : 90),
+      });
+
+      // Clear existing cleanup timer so accumulation isn't cut short
+      const existingTimer = damageNumberTimersRef.current.get(targetId);
+      if (existingTimer !== undefined) clearTimeout(existingTimer);
+
+      setDamageNumbers((prev) => {
+        const cleaned = prev.filter((d) => d.until > now);
+        const existing = cleaned.find((d) => d.targetId === targetId);
+        if (existing) {
+          return cleaned.map((d) =>
+            d.targetId === targetId
+              ? { ...d, damage: d.damage + damage, kind, until: now + 800 }
+              : d
+          );
+        }
+        const id = ++damageNumberIdRef.current;
+        return [...cleaned, { id, targetId, damage, kind, until: now + 800 }];
+      });
+
+      const timer = setTimeout(() => {
+        damageNumberTimersRef.current.delete(targetId);
+        setDamageNumbers((prev) => prev.filter((d) => d.targetId !== targetId));
+      }, 820);
+      damageNumberTimersRef.current.set(targetId, timer);
+
+      if (kind === "kill" && phase === "playing") {
+        setKillPulseAmount(0);
+        setKillPulseToken((previous) => previous + 1);
+      }
+    },
+    [phase],
+  );
 
   const handleShotFired = useCallback((state: ShotFiredState) => {
     if (phase !== "playing") {
@@ -836,10 +884,10 @@ export function GameRoot({
   }, [bindingCapture]);
 
   useEffect(() => {
-    if (!isPaused && bindingCapture) {
+    if (!isGameplayPaused && bindingCapture) {
       setBindingCapture(null);
     }
-  }, [bindingCapture, isPaused]);
+  }, [bindingCapture, isGameplayPaused]);
 
   useEffect(() => {
     if (phase !== "playing" && pauseMenuOpen) {
@@ -848,71 +896,11 @@ export function GameRoot({
   }, [phase, pauseMenuOpen]);
 
   useEffect(() => {
-    if (player.pointerLocked && pointerLockResumePendingRef.current) {
-      pointerLockResumePendingRef.current = false;
-      if (pointerLockResumeTimerRef.current !== null) {
-        window.clearTimeout(pointerLockResumeTimerRef.current);
-        pointerLockResumeTimerRef.current = null;
-      }
-    }
-  }, [player.pointerLocked]);
-
-  useEffect(() => {
-    if (phase !== "playing" || !hasBeenLocked || inventoryOpen) {
+    if (phase === "playing") {
       return;
     }
-    if (player.pointerLocked || pauseMenuOpen || pointerLockResumePendingRef.current) {
-      return;
-    }
-
-    setBindingCapture(null);
-    setMenuSettingsOpen(false);
-    setPauseMenuOpen(true);
-  }, [
-    hasBeenLocked,
-    inventoryOpen,
-    pauseMenuOpen,
-    phase,
-    player.pointerLocked,
-  ]);
-
-  useEffect(() => {
-    if (phase !== "playing" || !hasBeenLocked) return;
-    if (bindingCapture) return;
-
-    const onEscTogglePause = (event: KeyboardEvent) => {
-      if (event.code !== "Escape" || event.repeat) return;
-      event.preventDefault();
-      if (pauseMenuOpen) {
-        handleCloseMenuAndResume();
-        return;
-      }
-
-      setBindingCapture(null);
-      setMenuSettingsOpen(false);
-      setPauseMenuOpen(true);
-      sceneRef.current?.releasePointerLock();
-    };
-
-    window.addEventListener("keydown", onEscTogglePause);
-    return () => {
-      window.removeEventListener("keydown", onEscTogglePause);
-    };
-  }, [
-    handleCloseMenuAndResume,
-    phase,
-    hasBeenLocked,
-    bindingCapture,
-    pauseMenuOpen,
-  ]);
-
-  useEffect(() => {
-    return () => {
-      if (pointerLockResumeTimerRef.current !== null) {
-        window.clearTimeout(pointerLockResumeTimerRef.current);
-      }
-    };
-  }, []);
+    setNeedsPointerLock(false);
+  }, [phase]);
 
   useEffect(() => {
     if (phase !== "playing") {
@@ -937,7 +925,7 @@ export function GameRoot({
   }, [settings.crosshair.dynamic.enabled]);
 
   useEffect(() => {
-    if (phase !== "playing" || isPaused) {
+    if (phase !== "playing" || isGameplayPaused) {
       if (shotBloomFrameRef.current !== null) {
         window.cancelAnimationFrame(shotBloomFrameRef.current);
         shotBloomFrameRef.current = null;
@@ -974,7 +962,7 @@ export function GameRoot({
         shotBloomFrameRef.current = null;
       }
     };
-  }, [isPaused, phase, settings.crosshair.dynamic.enabled, settings.crosshair.dynamic.recoveryPerSecond]);
+  }, [isGameplayPaused, phase, settings.crosshair.dynamic.enabled, settings.crosshair.dynamic.recoveryPerSecond]);
 
   const scenePresentation = useMemo<ScenePresentation>(() => {
     const progress = clamp01(phaseProgress);
@@ -1026,7 +1014,7 @@ export function GameRoot({
   const renderedPresentation = booting ? BOOT_PRESENTATION : scenePresentation;
 
   const hitMarkerVisible = hitMarker.until > performance.now();
-  const isAimingDownSight = aimingState.ads && phase === "playing" && !isPaused;
+  const isAimingDownSight = aimingState.ads && phase === "playing" && !isGameplayPaused;
   const sniperRechamberProgress =
     activeWeapon === "sniper" && sniperRechamber.active
       ? sniperRechamber.progress
@@ -1101,7 +1089,7 @@ export function GameRoot({
   const installUpdateInProgress = updaterBusyAction === "install";
   const gameplayHudVisible = phase === "playing";
   const showInventoryOverlay = gameplayHudVisible && player.inventoryPanelOpen;
-  const showInteractPrompt = gameplayHudVisible && !isPaused &&
+  const showInteractPrompt = gameplayHudVisible && !isGameplayPaused &&
     !showInventoryOverlay &&
     player.canInteract;
   const combatHudVisible = gameplayHudVisible && !showInventoryOverlay;
@@ -1109,7 +1097,7 @@ export function GameRoot({
   return (
     <div
       className={`app-shell ${
-        showInventoryOverlay ? "inventory-open" : isPaused ? "paused" : "playing"
+        showInventoryOverlay ? "inventory-open" : isGameplayPaused ? "paused" : "playing"
       } phase-${phase}`}
     >
       <Scene
@@ -1131,6 +1119,7 @@ export function GameRoot({
         onAimingStateChange={setAimingState}
         onBootReady={onSceneBootReady}
         characterOverride={characterOverride}
+        onPauseMenuToggle={handlePauseMenuToggle}
       />
 
       {phase === "menu"
@@ -1164,7 +1153,7 @@ export function GameRoot({
           : null}
 
         <div className="center-stack">
-          {combatHudVisible && !isPaused && !isAimingDownSight
+          {combatHudVisible && !isGameplayPaused && !isAimingDownSight
             ? (
               <div
                 className={`crosshair ${
@@ -1271,13 +1260,36 @@ export function GameRoot({
               </div>
             )
             : null}
-          {combatHudVisible && !isPaused
+          {combatHudVisible && !isGameplayPaused
             ? (
               <div
                 className={`hit-marker ${
                   hitMarkerVisible ? "visible" : ""
                 } ${hitMarker.kind}`}
               />
+            )
+            : null}
+          {combatHudVisible && !isGameplayPaused && damageNumbers.length > 0
+            ? (
+              <div className="damage-numbers-container">
+                {damageNumbers.map((dn) => {
+                  const fontSize = Math.min(
+                    48,
+                    18 + dn.damage * 0.2,
+                  );
+                  return (
+                    <div
+                      key={dn.id}
+                      className={`damage-number ${dn.kind}`}
+                      style={
+                        { "--dmg-font-size": `${fontSize}px` } as CSSProperties
+                      }
+                    >
+                      {Math.round(dn.damage)}
+                    </div>
+                  );
+                })}
+              </div>
             )
             : null}
           {showInteractPrompt
@@ -3050,6 +3062,16 @@ export function GameRoot({
         </div>
 
       </div>
+      {showClickToContinueOverlay ? (
+        <div
+          className="click-to-continue-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Click to continue"
+        >
+          <p className="click-to-continue-label">Click to continue</p>
+        </div>
+      ) : null}
       <div
         className="kill-pulse-overlay"
         style={{

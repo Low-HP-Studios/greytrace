@@ -63,6 +63,8 @@ type UsePlayerControllerOptions = {
   onUserGesture: () => void;
   getWeaponEquipped: () => boolean;
   getActiveWeapon: () => WeaponKind;
+  getIsWeaponBusy: () => boolean;
+  onPauseMenuToggle?: () => void;
 };
 
 export type RunFacingPhase = 'off' | 'start' | 'running' | 'stop';
@@ -83,6 +85,7 @@ export type PlayerControllerApi = {
   getViewModeLerp: () => number;
   isADS: () => boolean;
   getAdsLerp: () => number;
+  getSniperZoom: () => number;
   isSprinting: () => boolean;
   isSprintPressed: () => boolean;
   isWalkPressed: () => boolean;
@@ -280,6 +283,8 @@ export function usePlayerController({
   onUserGesture,
   getWeaponEquipped,
   getActiveWeapon,
+  getIsWeaponBusy,
+  onPauseMenuToggle,
 }: UsePlayerControllerOptions): PlayerControllerApi {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
@@ -340,6 +345,7 @@ export function usePlayerController({
   const inventoryOpenModeRef = useRef<InventoryOpenMode>(inventoryOpenMode);
   const leanTargetRef = useRef(0);
   const leanLerpRef = useRef(0);
+  const sniperZoomRef = useRef(1); // 1 = default, 2 = 2x zoom
   const tempLookAtRef = useRef(new THREE.Vector3());
   const tempAimDirRef = useRef(new THREE.Vector3());
   const tempFirstPersonCameraPosRef = useRef(new THREE.Vector3());
@@ -356,6 +362,7 @@ export function usePlayerController({
   const userGestureCallbackRef = useRef(onUserGesture);
   const weaponEquippedGetterRef = useRef(getWeaponEquipped);
   const activeWeaponGetterRef = useRef(getActiveWeapon);
+  const weaponBusyGetterRef = useRef(getIsWeaponBusy);
   const sensitivityRef = useRef(sensitivity);
   const keybindsRef = useRef(keybinds);
   const crouchModeSettingRef = useRef(crouchMode);
@@ -366,6 +373,11 @@ export function usePlayerController({
   const groundLevelYRef = useRef(initialGroundY);
   const walkableSurfacesRef = useRef(walkableSurfaces ?? []);
   const blockingVolumesRef = useRef(blockingVolumes ?? []);
+  const onPauseMenuToggleRef = useRef(onPauseMenuToggle);
+
+  useEffect(() => {
+    onPauseMenuToggleRef.current = onPauseMenuToggle;
+  }, [onPauseMenuToggle]);
 
   useEffect(() => {
     actionCallbackRef.current = onAction;
@@ -390,6 +402,10 @@ export function usePlayerController({
   useEffect(() => {
     activeWeaponGetterRef.current = getActiveWeapon;
   }, [getActiveWeapon]);
+
+  useEffect(() => {
+    weaponBusyGetterRef.current = getIsWeaponBusy;
+  }, [getIsWeaponBusy]);
 
   useEffect(() => {
     sensitivityRef.current = sensitivity;
@@ -548,6 +564,11 @@ export function usePlayerController({
         }
       }
 
+      if (event.code === 'Escape' && !event.repeat && onPauseMenuToggleRef.current) {
+        event.preventDefault();
+        onPauseMenuToggleRef.current();
+      }
+
       if (
         event.code === crouchBinding &&
         (pointerLockedRef.current || inventoryPanelOpenRef.current)
@@ -606,7 +627,9 @@ export function usePlayerController({
       }
       if (event.button === 2) {
         adsRef.current =
-          pointerLockedRef.current && weaponEquippedGetterRef.current();
+          pointerLockedRef.current &&
+          weaponEquippedGetterRef.current() &&
+          !weaponBusyGetterRef.current();
         return;
       }
 
@@ -645,6 +668,19 @@ export function usePlayerController({
 
     const onContextMenu = (event: Event) => {
       event.preventDefault();
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      if (!pointerLockedRef.current || !inputEnabledRef.current) return;
+      if (!adsRef.current || activeWeaponGetterRef.current() !== 'sniper') return;
+      event.preventDefault();
+      if (event.deltaY < 0) {
+        // Scroll up → zoom in
+        sniperZoomRef.current = Math.min(2, sniperZoomRef.current + 0.25);
+      } else if (event.deltaY > 0) {
+        // Scroll down → zoom out
+        sniperZoomRef.current = Math.max(1, sniperZoomRef.current - 0.25);
+      }
     };
 
     const onMouseMove = (event: MouseEvent) => {
@@ -691,6 +727,7 @@ export function usePlayerController({
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('mousemove', onMouseMove);
     element.addEventListener('contextmenu', onContextMenu);
+    element.addEventListener('wheel', onWheel, { passive: false });
     document.addEventListener('pointerlockchange', onPointerLockChange);
 
     return () => {
@@ -700,6 +737,7 @@ export function usePlayerController({
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('mousemove', onMouseMove);
       element.removeEventListener('contextmenu', onContextMenu);
+      element.removeEventListener('wheel', onWheel);
       document.removeEventListener('pointerlockchange', onPointerLockChange);
     };
   }, [gl.domElement]);
@@ -715,7 +753,7 @@ export function usePlayerController({
       inputEnabledRef.current && pointerLockedRef.current && !inventoryOpen;
     const weaponEquipped = weaponEquippedGetterRef.current();
     const activeWeapon = activeWeaponGetterRef.current();
-    if (!weaponEquipped && adsRef.current) {
+    if ((!weaponEquipped || weaponBusyGetterRef.current()) && adsRef.current) {
       adsRef.current = false;
     }
     const lookSensitivity = resolveLookSensitivity(
@@ -1295,10 +1333,16 @@ export function usePlayerController({
         camera.position.copy(tppCameraPos).lerp(fppCameraPos, viewT);
       }
 
+      // Reset sniper zoom when not ADS or not sniper
+      if (!adsRef.current || activeWeapon !== 'sniper') {
+        sniperZoomRef.current = 1;
+      }
+
       if ('isPerspectiveCamera' in camera && camera.isPerspectiveCamera) {
         const baseFov = fovRef.current;
+        const sniperAdsFov = SNIPER_ADS_FOV / sniperZoomRef.current;
         const adsFovTarget =
-          activeWeapon === 'sniper' ? SNIPER_ADS_FOV : RIFLE_ADS_FOV;
+          activeWeapon === 'sniper' ? sniperAdsFov : RIFLE_ADS_FOV;
         const targetFov = THREE.MathUtils.lerp(baseFov, adsFovTarget, adsT);
         const perspectiveCamera = camera as THREE.PerspectiveCamera;
         const nextFov = THREE.MathUtils.damp(
@@ -1395,6 +1439,7 @@ export function usePlayerController({
     getViewModeLerp: () => viewModeLerpRef.current,
     isADS: () => adsRef.current,
     getAdsLerp: () => adsLerpRef.current,
+    getSniperZoom: () => sniperZoomRef.current,
     isSprinting: () => sprintingRef.current,
     isSprintPressed: () => sprintPressedRef.current,
     isWalkPressed: () => walkPressedRef.current,
