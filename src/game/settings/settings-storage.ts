@@ -5,7 +5,6 @@ import {
   DEFAULT_CROUCH_MODE,
   DEFAULT_CONTROL_BINDINGS,
   DEFAULT_CROSSHAIR_SETTINGS,
-  DEFAULT_ENEMY_OUTLINE_SETTINGS,
   DEFAULT_HUD_OVERLAY_TOGGLES,
   DEFAULT_INVENTORY_OPEN_MODE,
   DEFAULT_WEAPON_ALIGNMENT,
@@ -14,7 +13,6 @@ import {
   PRACTICE_MAP_IDS,
   type CrouchMode,
   type CrosshairColor,
-  type EnemyOutlineColor,
   type FpsCap,
   type InventoryOpenMode,
   type MapId,
@@ -47,20 +45,9 @@ function cloneDefaultCrosshairSettings() {
   };
 }
 
-function cloneDefaultEnemyOutlineSettings() {
-  return { ...DEFAULT_ENEMY_OUTLINE_SETTINGS };
-}
-
 const CROSSHAIR_COLORS: CrosshairColor[] = [
   "white",
   "green",
-  "red",
-  "yellow",
-  "cyan",
-  "magenta",
-];
-
-const ENEMY_OUTLINE_COLORS: EnemyOutlineColor[] = [
   "red",
   "yellow",
   "cyan",
@@ -81,7 +68,6 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   fov: 50,
   weaponAlignment: { ...DEFAULT_WEAPON_ALIGNMENT },
   crosshair: cloneDefaultCrosshairSettings(),
-  enemyOutline: cloneDefaultEnemyOutlineSettings(),
   movement: { ...DEFAULT_MOVEMENT_SETTINGS },
   weaponRecoilProfiles: {
     rifle: { ...DEFAULT_WEAPON_RECOIL_PROFILES.rifle },
@@ -108,7 +94,6 @@ export function createDefaultPersistedSettings(): PersistedSettings {
       keybinds: { ...DEFAULT_CONTROL_BINDINGS },
       weaponAlignment: { ...DEFAULT_WEAPON_ALIGNMENT },
       crosshair: cloneDefaultCrosshairSettings(),
-      enemyOutline: cloneDefaultEnemyOutlineSettings(),
       movement: { ...DEFAULT_MOVEMENT_SETTINGS },
       weaponRecoilProfiles: {
         rifle: { ...DEFAULT_WEAPON_RECOIL_PROFILES.rifle },
@@ -129,6 +114,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function readHudOverlayToggles(
+  raw: unknown,
+  defaults: HudOverlayToggles,
+): HudOverlayToggles {
+  const hud = isRecord(raw) ? raw : {};
+  if (typeof hud.statsBar === "boolean") {
+    return { statsBar: hud.statsBar };
+  }
+  if (typeof hud.performance === "boolean") {
+    return { statsBar: hud.performance };
+  }
+  return { ...defaults };
 }
 
 function readString(value: unknown, fallback: string): string {
@@ -190,15 +189,6 @@ function readCrosshairColor(
     : fallback;
 }
 
-function readEnemyOutlineColor(
-  value: unknown,
-  fallback: EnemyOutlineColor,
-): EnemyOutlineColor {
-  return ENEMY_OUTLINE_COLORS.includes(value as EnemyOutlineColor)
-    ? (value as EnemyOutlineColor)
-    : fallback;
-}
-
 function readCrouchMode(
   value: unknown,
   fallback: CrouchMode,
@@ -254,9 +244,6 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
     ? crosshair.weaponModifiers
     : {};
   const crosshairAds = isRecord(crosshair.ads) ? crosshair.ads : {};
-  const enemyOutline = isRecord(settings.enemyOutline)
-    ? settings.enemyOutline
-    : {};
   const movement = isRecord(settings.movement) ? settings.movement : {};
   const weaponRecoilProfiles = isRecord(settings.weaponRecoilProfiles)
     ? settings.weaponRecoilProfiles
@@ -267,7 +254,6 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
   const sniperRecoilProfile = isRecord(weaponRecoilProfiles.sniper)
     ? weaponRecoilProfiles.sniper
     : {};
-  const hudPanels = isRecord(value.hudPanels) ? value.hudPanels : {};
   const audioVolumes = isRecord(value.audioVolumes) ? value.audioVolumes : {};
   const hasExplicitReloadBinding = typeof keybinds.reload === "string" &&
     keybinds.reload.length > 0;
@@ -591,28 +577,6 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
           ),
         },
       },
-      enemyOutline: {
-        enabled: readBoolean(
-          enemyOutline.enabled,
-          defaults.settings.enemyOutline.enabled,
-        ),
-        color: readEnemyOutlineColor(
-          enemyOutline.color,
-          defaults.settings.enemyOutline.color,
-        ),
-        thickness: readClampedNumber(
-          enemyOutline.thickness,
-          0,
-          8,
-          defaults.settings.enemyOutline.thickness,
-        ),
-        opacity: readClampedNumber(
-          enemyOutline.opacity,
-          0,
-          1,
-          defaults.settings.enemyOutline.opacity,
-        ),
-      },
       movement: {
         rifleWalkSpeedScale: readClampedNumber(
           movement.rifleWalkSpeedScale,
@@ -738,15 +702,7 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
       fpsCap: readFpsCap(settings.fpsCap, defaults.settings.fpsCap),
       windowMode: readWindowMode(settings.windowMode, defaults.settings.windowMode),
     },
-    hudPanels: {
-      practice: readBoolean(hudPanels.practice, defaults.hudPanels.practice),
-      controls: readBoolean(hudPanels.controls, defaults.hudPanels.controls),
-      settings: readBoolean(hudPanels.settings, defaults.hudPanels.settings),
-      performance: readBoolean(
-        hudPanels.performance,
-        defaults.hudPanels.performance,
-      ),
-    },
+    hudPanels: readHudOverlayToggles(value.hudPanels, defaults.hudPanels),
     stressCount: readStressModeCount(value.stressCount, defaults.stressCount),
     selectedCharacterId: readString(
       value.selectedCharacterId,

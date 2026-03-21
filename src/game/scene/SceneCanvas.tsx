@@ -482,8 +482,8 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
         targets={targets}
         shadows={settings.shadows && worldTheme > 0.6}
         reveal={presentation.targetReveal}
-        outline={settings.enemyOutline}
         loadCharacterAsset={deferredAssetsEnabled}
+        characterOverride={characterOverride}
       />
       <StressBoxes
         count={practiceMap.supportsStressMode ? stressCount : 0}

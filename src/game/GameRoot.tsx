@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { type AudioVolumeSettings } from "./Audio";
 import { getCharacterById } from "./characters";
 import { ExperienceMenuOverlay } from "./ExperienceMenuOverlay";
-import { PerfHUD } from "./PerfHUD";
+import { MinimalStatsBar } from "./hud/MinimalStatsBar";
 import {
   type AimingState,
   type HitMarkerKind,
@@ -28,7 +28,6 @@ import {
   formatKeyCode,
   menuTitle,
 } from "./SettingsPanels";
-import { PubgHud } from "./hud/PubgHud";
 import { PubgInventoryOverlay } from "./inventory/PubgInventoryOverlay";
 import type { SniperRechamberState, WeaponKind } from "./Weapon";
 import {
@@ -38,7 +37,6 @@ import {
   DEFAULT_WEAPON_RECOIL_PROFILES,
   DEFAULT_WEAPON_ALIGNMENT,
   type CrosshairColor,
-  type EnemyOutlineColor,
   type ExperiencePhase,
   type GameSettings,
   type HudOverlayToggles,
@@ -93,29 +91,12 @@ const CROSSHAIR_COLOR_HEX: Record<CrosshairColor, string> = {
   magenta: "#ff63df",
 };
 
-const ENEMY_OUTLINE_COLOR_HEX: Record<EnemyOutlineColor, string> = {
-  red: "#ff4d4d",
-  yellow: "#facc15",
-  cyan: "#38d9ff",
-  magenta: "#ff4dc4",
-};
-
 const CROSSHAIR_COLOR_OPTIONS: Array<{
   id: CrosshairColor;
   label: string;
 }> = [
   { id: "white", label: "White" },
   { id: "green", label: "Green" },
-  { id: "red", label: "Red" },
-  { id: "yellow", label: "Yellow" },
-  { id: "cyan", label: "Cyan" },
-  { id: "magenta", label: "Magenta" },
-];
-
-const ENEMY_OUTLINE_COLOR_OPTIONS: Array<{
-  id: EnemyOutlineColor;
-  label: string;
-}> = [
   { id: "red", label: "Red" },
   { id: "yellow", label: "Yellow" },
   { id: "cyan", label: "Cyan" },
@@ -799,7 +780,7 @@ export function GameRoot({
 
       setHudPanels((prev) => ({
         ...prev,
-        performance: !prev.performance,
+        statsBar: !prev.statsBar,
       }));
     };
 
@@ -1051,13 +1032,7 @@ export function GameRoot({
       ? sniperRechamber.progress
       : 1;
   const sceneStressCount = selectedMap.supportsStressMode ? stressCount : 0;
-  const stressLabel = stressCount === 0 ? "Off" : `${stressCount} boxes`;
   const practiceMapLocked = phase !== "menu";
-  const lockLabel = player.pointerLocked
-    ? "Live look mode"
-    : inventoryOpen
-    ? "Inventory cursor mode"
-    : "Paused / cursor shown";
   const movementSpread = !settings.crosshair.dynamic.enabled
     ? 0
     : player.grounded && player.moving
@@ -1090,15 +1065,6 @@ export function GameRoot({
     ["--ch-outer-gap" as string]: `${outerGap}`,
     ["--sniper-cycle-progress" as string]: `${sniperRechamberProgress}`,
   } as CSSProperties);
-  const playerSummary = useMemo(() => {
-    return {
-      x: player.x.toFixed(1),
-      y: player.y.toFixed(1),
-      z: player.z.toFixed(1),
-      speed: player.speed.toFixed(2),
-    };
-  }, [player.speed, player.x, player.y, player.z]);
-
   const duplicateBindingCodes = useMemo(() => {
     const codeCounts = new Map<string, number>();
     for (const code of Object.values(settings.keybinds)) {
@@ -1120,12 +1086,6 @@ export function GameRoot({
     : player.movementTier === "walk"
     ? "Walk"
     : "Jog";
-  const rifleSlot = player.weaponLoadout.slotA;
-  const sniperSlot = player.weaponLoadout.slotB;
-  const activeSlotLabel = player.weaponLoadout.activeSlot === "slotA"
-    ? "Slot 1 (Rifle)"
-    : "Slot 2 (Sniper)";
-  const anyWeaponEquipped = rifleSlot.hasWeapon || sniperSlot.hasWeapon;
   const interactItemLabel = player.interactWeaponKind === "sniper"
     ? "Sniper"
     : player.interactWeaponKind === "rifle"
@@ -1145,9 +1105,7 @@ export function GameRoot({
     !showInventoryOverlay &&
     player.canInteract;
   const combatHudVisible = gameplayHudVisible && !showInventoryOverlay;
-  const uiOverlayClassName = gameplayHudVisible
-    ? "ui-overlay ui-overlay--practice"
-    : "ui-overlay";
+  const uiOverlayClassName = "ui-overlay";
   return (
     <div
       className={`app-shell ${
@@ -1197,65 +1155,10 @@ export function GameRoot({
         : null}
 
       <div className={uiOverlayClassName}>
-        {combatHudVisible && hudPanels.practice
-          ? (
-            <div className="corner-top-left panel tactical-panel practice-panel">
-              <div className="panel-eyebrow">GreyTrace / Practice</div>
-              <div className="panel-title-row">
-                <div className="brand-lockup" aria-label="GreyTrace logo">
-                  <span className="brand-word">GreyTrace</span>
-                </div>
-                <div className="status-pill">
-                  <span
-                    className={`status-dot ${
-                      player.pointerLocked ? "locked" : ""
-                    }`}
-                  />
-                  <span>{lockLabel}</span>
-                </div>
-              </div>
-              <dl className="stat-grid stat-grid-wide">
-                <dt>Player</dt>
-                <dd>
-                  {playerSummary.x}, {playerSummary.y}, {playerSummary.z}
-                </dd>
-                <dt>Speed</dt>
-                <dd>{playerSummary.speed} u/s</dd>
-                <dt>State</dt>
-                <dd>
-                  {player.grounded
-                    ? player.moving
-                      ? movementTierLabel
-                      : "Idle"
-                    : "Jump / Air"}
-                </dd>
-                <dt>Interact</dt>
-                <dd>
-                  {player.canInteract
-                    ? `${interactItemLabel} nearby`
-                    : "-"}
-                </dd>
-                <dt>Weapon</dt>
-                <dd>
-                  {anyWeaponEquipped
-                    ? activeSlotLabel
-                    : "None"}
-                </dd>
-                {selectedMap.supportsStressMode ? (
-                  <>
-                    <dt>Stress Mode</dt>
-                    <dd>{stressLabel}</dd>
-                  </>
-                ) : null}
-              </dl>
-            </div>
-          )
-          : null}
-
-        {combatHudVisible && hudPanels.performance
+        {combatHudVisible && hudPanels.statsBar
           ? (
             <div className="corner-top-right">
-              <PerfHUD metrics={perfMetrics} visible />
+              <MinimalStatsBar metrics={perfMetrics} visible />
             </div>
           )
           : null}
@@ -1597,52 +1500,6 @@ export function GameRoot({
                             </div>
                           </MenuSection>
 
-                          <MenuSection
-                            title="HUD Preset"
-                            blurb="Starting point for cleaner screen recording or debugging."
-                          >
-                            <div className="preset-grid">
-                              <button
-                                type="button"
-                                className="btn btn-wide"
-                                onClick={() =>
-                                  setHudPanels({
-                                    practice: false,
-                                    controls: false,
-                                    settings: false,
-                                    performance: true,
-                                  })}
-                              >
-                                Perf Only
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-wide"
-                                onClick={() =>
-                                  setHudPanels({
-                                    practice: true,
-                                    controls: true,
-                                    settings: true,
-                                    performance: true,
-                                  })}
-                              >
-                                Show All Panels
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-wide"
-                                onClick={() =>
-                                  setHudPanels({
-                                    practice: false,
-                                    controls: false,
-                                    settings: false,
-                                    performance: false,
-                                  })}
-                              >
-                                Clean Screen
-                              </button>
-                            </div>
-                          </MenuSection>
                         </div>
                       )
                       : null}
@@ -2561,8 +2418,8 @@ export function GameRoot({
                       ? (
                         <div className="menu-sections">
                           <MenuSection
-                            title="Overlay Panels"
-                            blurb="Toggle corner debug panels independently."
+                            title="In-game overlay"
+                            blurb="Top-right network and performance readout."
                           >
                             {OVERLAY_ROWS.map((row) => (
                               <SwitchRow
@@ -3149,93 +3006,6 @@ export function GameRoot({
                               </div>
                             </div>
                           </MenuSection>
-
-                          <MenuSection
-                            title="Enemy Visibility"
-                            blurb="Visible-only silhouette outline for bots."
-                          >
-                            <SwitchRow
-                              label="Enemy Outline"
-                              hint="Enable target silhouette"
-                              checked={settings.enemyOutline.enabled}
-                              onChange={(checked) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  enemyOutline: {
-                                    ...prev.enemyOutline,
-                                    enabled: checked,
-                                  },
-                                }))}
-                            />
-                            <div className="field-row">
-                              <div>
-                                <div className="field-label">Outline Color</div>
-                                <div className="field-hint">
-                                  Visible palette for fast acquisition
-                                </div>
-                              </div>
-                              <div className="color-chip-row">
-                                {ENEMY_OUTLINE_COLOR_OPTIONS.map((option) => (
-                                  <button
-                                    key={option.id}
-                                    type="button"
-                                    className={`color-chip ${
-                                      settings.enemyOutline.color === option.id
-                                        ? "active"
-                                        : ""
-                                    }`}
-                                    onClick={() =>
-                                      setSettings((prev) => ({
-                                        ...prev,
-                                        enemyOutline: {
-                                          ...prev.enemyOutline,
-                                          color: option.id,
-                                        },
-                                      }))}
-                                  >
-                                    <span
-                                      className="color-chip-swatch"
-                                      style={{
-                                        backgroundColor:
-                                          ENEMY_OUTLINE_COLOR_HEX[option.id],
-                                      }}
-                                    />
-                                    {option.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                            <RangeField
-                              label="Outline Thickness"
-                              value={settings.enemyOutline.thickness}
-                              min={0}
-                              max={8}
-                              step={0.1}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  enemyOutline: {
-                                    ...prev.enemyOutline,
-                                    thickness: value,
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Outline Opacity"
-                              value={settings.enemyOutline.opacity}
-                              min={0}
-                              max={1}
-                              step={0.01}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  enemyOutline: {
-                                    ...prev.enemyOutline,
-                                    opacity: value,
-                                  },
-                                }))}
-                            />
-                          </MenuSection>
                         </div>
                       )
                       : null}
@@ -3279,9 +3049,6 @@ export function GameRoot({
             : null}
         </div>
 
-        {combatHudVisible && !isPaused
-          ? <PubgHud player={player} visible={true} />
-          : null}
       </div>
       <div
         className="kill-pulse-overlay"

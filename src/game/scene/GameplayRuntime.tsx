@@ -16,7 +16,11 @@ import {
   type RunFacingPhase,
   usePlayerController,
 } from "../PlayerController";
-import { raycastTargets, type TargetRaycastHit } from "../Targets";
+import {
+  raycastTargets,
+  targetDummyGroupScale,
+  type TargetRaycastHit,
+} from "../Targets";
 import {
   type SniperRechamberState,
   type WeaponKind,
@@ -1019,6 +1023,8 @@ export const GameplayRuntime = forwardRef<
   const audioRef = useRef(sharedAudioManager);
   const controllerRef = useRef<PlayerControllerApi | null>(null);
   const targetsRef = useRef(targets);
+  const targetRevealRef = useRef(presentation.targetReveal);
+  targetRevealRef.current = presentation.targetReveal;
   const latestControllerSnapshotRef = useRef<PlayerSnapshot | null>(null);
   const lastHudSyncKeyRef = useRef("");
   const ammoVisualRevisionRef = useRef(-1);
@@ -1043,6 +1049,7 @@ export const GameplayRuntime = forwardRef<
   const aimingStateCallbackRef = useRef(onAimingStateChange);
 
   const perfAccumulatorRef = useRef(0);
+  const perfFrameMsEmaRef = useRef(0);
   const fpsFrameCountRef = useRef(0);
   const fpsTimeRef = useRef(0);
   const lastWeaponEquippedRef = useRef<boolean | null>(null);
@@ -3145,10 +3152,13 @@ export const GameplayRuntime = forwardRef<
         controller.addRecoil(shot.recoilPitchRadians, shot.recoilYawRadians);
       }
 
+      const targetVisualScale = targetDummyGroupScale(targetRevealRef.current);
       const cameraTargetHit = raycastTargets(
         shot.origin,
         shot.direction,
         targetsRef.current,
+        Number.POSITIVE_INFINITY,
+        targetVisualScale,
       );
       const cameraWorldHit = raycastBulletWorld(
         bulletHittableMeshesRef.current,
@@ -3216,6 +3226,7 @@ export const GameplayRuntime = forwardRef<
         fireDirection,
         targetsRef.current,
         maxFireDistance,
+        targetVisualScale,
       );
       const worldHit = raycastBulletWorld(
         bulletHittableMeshesRef.current,
@@ -3232,10 +3243,16 @@ export const GameplayRuntime = forwardRef<
       const cameraTargetDistanceFromMuzzle = cameraTargetHit
         ? tracerOrigin.distanceTo(cameraTargetHit.point)
         : Number.POSITIVE_INFINITY;
+      const cameraHeadButMuzzleOtherZone = !!cameraTargetHit &&
+        cameraTargetHit.zone === "head" &&
+        !!targetHit &&
+        targetHit.id === cameraTargetHit.id &&
+        targetHit.zone !== "head";
       const cameraTargetReachableFromMuzzle = !!cameraTargetHit &&
         (!worldHit ||
           cameraTargetDistanceFromMuzzle <=
-            worldHit.distance + BULLET_HIT_EPSILON);
+            worldHit.distance + BULLET_HIT_EPSILON ||
+          cameraHeadButMuzzleOtherZone);
       const preferCameraTarget = !!cameraTargetHit &&
         cameraTargetVisible &&
         cameraTargetReachableFromMuzzle &&
@@ -3505,15 +3522,35 @@ export const GameplayRuntime = forwardRef<
     fpsTimeRef.current += clampedDelta;
     fpsFrameCountRef.current += 1;
 
+    const frameMs = clampedDelta * 1000;
+    const emaAlpha = 0.12;
+    const prevEma = perfFrameMsEmaRef.current;
+    perfFrameMsEmaRef.current = prevEma === 0
+      ? frameMs
+      : prevEma * (1 - emaAlpha) + frameMs * emaAlpha;
+
     if (perfAccumulatorRef.current >= 0.2) {
       const fps = fpsTimeRef.current > 0
         ? fpsFrameCountRef.current / fpsTimeRef.current
         : 0;
+      const ema = perfFrameMsEmaRef.current;
+      const budgetMs = 1000 / 60;
+      const cpuUtilPercent = Math.min(100, Math.round((ema / budgetMs) * 100));
+      const draws = gl.info.render.calls;
+      const tris = gl.info.render.triangles;
+      const gpuUtilPercent = Math.min(
+        100,
+        Math.round(
+          Math.min(100, (draws / 4000) * 42 + (tris / 2_500_000) * 58),
+        ),
+      );
       perfCallbackRef.current({
         fps,
-        frameMs: clampedDelta * 1000,
-        drawCalls: gl.info.render.calls,
-        triangles: gl.info.render.triangles,
+        frameMs,
+        cpuUtilPercent,
+        gpuUtilPercent,
+        drawCalls: draws,
+        triangles: tris,
         geometries: gl.info.memory.geometries,
         textures: gl.info.memory.textures,
       });
