@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  type MutableRefObject,
   startTransition,
   useCallback,
   useEffect,
@@ -17,9 +18,10 @@ import {
   usePlayerController,
 } from "../PlayerController";
 import {
-  raycastTargets,
+  raycastVisibleTargets,
   targetDummyGroupScale,
   type TargetRaycastHit,
+  type TargetVisualHandle,
 } from "../Targets";
 import {
   type SniperRechamberState,
@@ -119,6 +121,7 @@ type GameplayRuntimeProps = {
   movement: MovementProfileSettings;
   weaponRecoilProfiles: WeaponRecoilProfiles;
   targets: TargetState[];
+  targetVisualRegistryRef: MutableRefObject<Map<string, TargetVisualHandle>>;
   onTargetHit: (targetId: string, damage: number, nowMs: number) => void;
   onResetTargets: () => void;
   onPlayerSnapshot: (snapshot: PlayerSnapshot) => void;
@@ -135,12 +138,15 @@ type GameplayRuntimeProps = {
   onPauseMenuToggle?: () => void;
 };
 
-const MENU_LOOK_HEIGHT = 1.06;
-const MENU_FRONT_DISTANCE = 2.9;
-const MENU_FRONT_HEIGHT = 1.2;
-const MENU_SIDE_DRIFT = 0.16;
-const MENU_VERTICAL_DRIFT = 0.04;
-const MENU_LOOK_DRIFT = 0.08;
+const MENU_LOOK_HEIGHT = 1.12;
+const MENU_FRONT_DISTANCE = 1.95;
+const MENU_FRONT_HEIGHT = 1.22;
+const MENU_SIDE_DRIFT = 0.08;
+const MENU_VERTICAL_DRIFT = 0.025;
+const MENU_LOOK_DRIFT = 0.05;
+const MENU_SHOULDER_OFFSET = 0.54;
+const MENU_LOOK_SHOULDER_OFFSET = 0.16;
+const MENU_FOV = 31;
 // Aligned with PlayerController: CAMERA_ARM_LENGTH=2.25, CAMERA_DEFAULT_ELEVATION=0.35
 // horizontalDist = 2.25 * cos(0.35) ≈ 2.11, verticalDist = 2.25 * sin(0.35) ≈ 0.77
 // camera.y = LOOK_AT_HEIGHT(1.2) + verticalDist(0.77) ≈ 1.97
@@ -757,14 +763,20 @@ function updateCharacterWeaponMesh(
   adsT: number,
   camera: THREE.Camera,
   activeWeapon: WeaponKind,
+  forcedWeapon: WeaponKind | null,
 ) {
   if (!weaponGroup) {
     return;
   }
 
-  const equipped = weapon.isEquipped();
-  weaponGroup.visible = equipped;
-  if (!equipped) {
+  const displayedWeapon = resolveDisplayedWeapon(
+    weapon,
+    switchState,
+    forcedWeapon,
+  );
+  const shouldShowWeapon = displayedWeapon !== null;
+  weaponGroup.visible = shouldShowWeapon;
+  if (!shouldShowWeapon) {
     if (rifleModel) {
       rifleModel.visible = false;
     }
@@ -777,10 +789,16 @@ function updateCharacterWeaponMesh(
     return;
   }
 
-  const displayedWeapon = resolveDisplayedWeapon(weapon, switchState);
-  const switchBlend = switchState.active
-    ? Math.sin(Math.PI * switchState.progress)
-    : 0;
+  const switchPoseBlend = !switchState.active
+    ? 0
+    : switchState.fromHolstered && !switchState.toHolstered
+    ? 1 - easeInOutCubic(switchState.progress)
+    : !switchState.fromHolstered && switchState.toHolstered
+    ? easeInOutCubic(switchState.progress)
+    : switchState.progress < 0.5
+    ? easeInOutCubic(switchState.progress * 2)
+    : 1 - easeInOutCubic((switchState.progress - 0.5) * 2);
+  const holsterDirection = displayedWeapon === "rifle" ? -1 : 1;
 
   if (anchor && firstPerson && adsT > 0.001) {
     // ── Blended ADS positioning ──
@@ -794,9 +812,13 @@ function updateCharacterWeaponMesh(
     _tempWeaponGroup.rotateX(alignment.rotX);
     _tempWeaponGroup.rotateY(alignment.rotY);
     _tempWeaponGroup.rotateZ(alignment.rotZ);
-    if (switchBlend > 0) {
-      _tempWeaponGroup.translateY(-switchBlend * 0.06);
-      _tempWeaponGroup.rotateX(-switchBlend * 0.35);
+    if (switchPoseBlend > 0) {
+      _tempWeaponGroup.translateX(holsterDirection * switchPoseBlend * 0.035);
+      _tempWeaponGroup.translateY(-switchPoseBlend * 0.1);
+      _tempWeaponGroup.translateZ(-switchPoseBlend * 0.08);
+      _tempWeaponGroup.rotateX(-switchPoseBlend * 0.65);
+      _tempWeaponGroup.rotateY(holsterDirection * switchPoseBlend * 0.18);
+      _tempWeaponGroup.rotateZ(holsterDirection * switchPoseBlend * 0.12);
     }
     _tempHipPos.copy(_tempWeaponGroup.position);
     _tempHipQuat.copy(_tempWeaponGroup.quaternion);
@@ -831,20 +853,24 @@ function updateCharacterWeaponMesh(
     weaponGroup.rotateX(alignment.rotX);
     weaponGroup.rotateY(alignment.rotY);
     weaponGroup.rotateZ(alignment.rotZ);
-    if (switchBlend > 0) {
-      weaponGroup.translateY(-switchBlend * 0.06);
-      weaponGroup.rotateX(-switchBlend * 0.35);
+    if (switchPoseBlend > 0) {
+      weaponGroup.translateX(holsterDirection * switchPoseBlend * 0.035);
+      weaponGroup.translateY(-switchPoseBlend * 0.1);
+      weaponGroup.translateZ(-switchPoseBlend * 0.08);
+      weaponGroup.rotateX(-switchPoseBlend * 0.65);
+      weaponGroup.rotateY(holsterDirection * switchPoseBlend * 0.18);
+      weaponGroup.rotateZ(holsterDirection * switchPoseBlend * 0.12);
     }
   } else {
     weaponGroup.position.set(
       0.34,
-      0.82 - switchBlend * 0.18,
-      -0.2 + switchBlend * 0.06,
+      0.82 - switchPoseBlend * 0.24,
+      -0.2 + switchPoseBlend * 0.11,
     );
     weaponGroup.rotation.set(
-      -switchBlend * 0.42,
-      switchBlend * 0.05,
-      -switchBlend * 0.12,
+      -switchPoseBlend * 0.75,
+      holsterDirection * switchPoseBlend * 0.16,
+      -holsterDirection * switchPoseBlend * 0.18,
     );
   }
 
@@ -870,11 +896,44 @@ function updateCharacterWeaponMesh(
 function resolveDisplayedWeapon(
   weapon: WeaponSystem,
   switchState: WeaponSwitchState,
-): WeaponKind {
+  forcedWeapon: WeaponKind | null = null,
+): WeaponKind | null {
+  if (forcedWeapon) {
+    return forcedWeapon;
+  }
   if (!switchState.active) {
-    return weapon.getActiveWeapon();
+    return weapon.getRaisedWeapon();
+  }
+  if (switchState.fromHolstered && !switchState.toHolstered) {
+    return switchState.to;
+  }
+  if (!switchState.fromHolstered && switchState.toHolstered) {
+    return switchState.from;
   }
   return switchState.progress < 0.5 ? switchState.from : switchState.to;
+}
+
+function shouldShowBackWeapon(
+  weaponKind: WeaponKind,
+  displayedWeapon: WeaponKind | null,
+  switchState: WeaponSwitchState,
+) {
+  if (!displayedWeapon) {
+    return true;
+  }
+
+  if (switchState.active) {
+    if (!switchState.fromHolstered && switchState.toHolstered) {
+      return weaponKind === switchState.from || displayedWeapon !== weaponKind;
+    }
+    if (switchState.fromHolstered && !switchState.toHolstered) {
+      if (weaponKind === switchState.to) {
+        return switchState.progress < 0.75;
+      }
+    }
+  }
+
+  return displayedWeapon !== weaponKind;
 }
 
 function updateTracerMesh(
@@ -966,6 +1025,7 @@ export const GameplayRuntime = forwardRef<
   movement,
   weaponRecoilProfiles,
   targets,
+  targetVisualRegistryRef,
   onTargetHit,
   onResetTargets,
   onPlayerSnapshot,
@@ -1656,6 +1716,13 @@ export const GameplayRuntime = forwardRef<
         emitPlayerSnapshot();
         return;
       }
+      if (action === "unarm") {
+        audioRef.current.cancelReload();
+        audioRef.current.cancelSniperShelling();
+        weapon.unarm(performance.now());
+        emitPlayerSnapshot();
+        return;
+      }
       if (action === "reload") {
         weapon.beginReload(performance.now());
         emitPlayerSnapshot();
@@ -1758,7 +1825,9 @@ export const GameplayRuntime = forwardRef<
   const handleGetIsWeaponBusy = useCallback(() => {
     const nowMs = performance.now();
     const weapon = weaponRef.current;
-    return weapon.isReloading(nowMs) || weapon.getSniperRechamberState(nowMs).active;
+    return weapon.isReloading(nowMs) ||
+      weapon.getSniperRechamberState(nowMs).active ||
+      weapon.getSwitchState(nowMs).active;
   }, []);
 
   const targetCollisionCircles = useMemo(
@@ -2691,6 +2760,13 @@ export const GameplayRuntime = forwardRef<
       rifleReadyPoseActive = false;
     }
 
+    if (presentation.phase === "menu") {
+      nextAnimState = "rifleIdle";
+      lowerBodyOverlayState = null;
+      upperBodyOverlayState = null;
+      rifleReadyPoseActive = false;
+    }
+
     const triggerHeldForWeapon = weaponControlEnabled &&
       rifleFireIntentRef.current;
     weapon.setTriggerHeld(triggerHeldForWeapon);
@@ -3069,6 +3145,7 @@ export const GameplayRuntime = forwardRef<
       controller.getAdsLerp(),
       camera,
       weapon.getActiveWeapon(),
+      presentation.phase === "menu" ? "rifle" : null,
     );
 
     const weaponSprinting = !weaponEquipped
@@ -3164,10 +3241,12 @@ export const GameplayRuntime = forwardRef<
       }
 
       const targetVisualScale = targetDummyGroupScale(targetRevealRef.current);
-      const cameraTargetHit = raycastTargets(
+      const cameraTargetHit = raycastVisibleTargets(
         shot.origin,
         shot.direction,
         targetsRef.current,
+        targetVisualRegistryRef.current,
+        raycasterRef.current,
         Number.POSITIVE_INFINITY,
         targetVisualScale,
       );
@@ -3232,10 +3311,12 @@ export const GameplayRuntime = forwardRef<
       }
 
       const maxFireDistance = fireDistance + BULLET_HIT_EPSILON;
-      const targetHit = raycastTargets(
+      const targetHit = raycastVisibleTargets(
         tracerOrigin,
         fireDirection,
         targetsRef.current,
+        targetVisualRegistryRef.current,
+        raycasterRef.current,
         maxFireDistance,
         targetVisualScale,
       );
@@ -3344,7 +3425,11 @@ export const GameplayRuntime = forwardRef<
 
     const worldState = weapon.getWorldState();
     const groundWeaponState = inventoryRef.current.getGroundWeaponVisualState();
-    const displayedWeapon = resolveDisplayedWeapon(weapon, switchState);
+    const displayedWeapon = resolveDisplayedWeapon(
+      weapon,
+      switchState,
+      presentation.phase === "menu" ? "rifle" : null,
+    );
     const showBackSlots = presentation.phase === "playing" && !firstPerson;
     const upperTorsoBoneForBack = characterUpperTorsoBoneRef.current;
     let backWeaponAnchor = backWeaponAnchorRef.current;
@@ -3370,7 +3455,7 @@ export const GameplayRuntime = forwardRef<
       backRifleSlotRef.current,
       showBackSlots &&
         worldState.loadout.slotA.hasWeapon &&
-        displayedWeapon !== "rifle",
+        shouldShowBackWeapon("rifle", displayedWeapon, switchState),
       switchState,
       -1,
       backWeaponAnchor,
@@ -3379,7 +3464,7 @@ export const GameplayRuntime = forwardRef<
       backSniperSlotRef.current,
       showBackSlots &&
         worldState.loadout.slotB.hasWeapon &&
-        displayedWeapon !== "sniper",
+        shouldShowBackWeapon("sniper", displayedWeapon, switchState),
       switchState,
       1,
       backWeaponAnchor,
@@ -3426,11 +3511,17 @@ export const GameplayRuntime = forwardRef<
       const frontPos = transitionFrontPosRef.current
         .copy(position)
         .addScaledVector(forward, MENU_FRONT_DISTANCE)
-        .addScaledVector(right, swayX * MENU_SIDE_DRIFT);
+        .addScaledVector(
+          right,
+          MENU_SHOULDER_OFFSET + swayX * MENU_SIDE_DRIFT,
+        );
       frontPos.y = position.y + MENU_FRONT_HEIGHT + swayY * MENU_VERTICAL_DRIFT;
       const frontLook = transitionFrontLookRef.current.copy(position);
       frontLook.y = position.y + MENU_LOOK_HEIGHT;
-      frontLook.addScaledVector(right, swayX * MENU_LOOK_DRIFT);
+      frontLook.addScaledVector(
+        right,
+        MENU_LOOK_SHOULDER_OFFSET + swayX * MENU_LOOK_DRIFT,
+      );
       const backPos = transitionBackPosRef.current
         .copy(position)
         .addScaledVector(forward, -TRANSITION_BACK_DISTANCE)
@@ -3452,20 +3543,21 @@ export const GameplayRuntime = forwardRef<
       const keyLight = menuCharacterKeyLightRef.current;
       if (keyLight) {
         keyLight.visible = menuLightBlend > 0.001;
-        keyLight.intensity = 5.0 * menuLightBlend;
+        keyLight.intensity = 7.25 * menuLightBlend;
         keyLight.position.copy(frontPos);
-        keyLight.position.y += 0.34;
-        keyLight.position.addScaledVector(right, 0.14);
+        keyLight.position.y += 0.2;
+        keyLight.position.addScaledVector(right, 0.22);
+        keyLight.position.addScaledVector(forward, 0.36);
       }
 
       const rimLight = menuCharacterRimLightRef.current;
       if (rimLight) {
         rimLight.visible = menuLightBlend > 0.001;
-        rimLight.intensity = 0.85 * menuLightBlend;
+        rimLight.intensity = 1.2 * menuLightBlend;
         rimLight.position.copy(position);
-        rimLight.position.addScaledVector(forward, -1.55);
-        rimLight.position.addScaledVector(right, -0.8);
-        rimLight.position.y = position.y + 1.86;
+        rimLight.position.addScaledVector(forward, -1.22);
+        rimLight.position.addScaledVector(right, -1.02);
+        rimLight.position.y = position.y + 1.74;
       }
 
       if (presentation.phase === "menu") {
@@ -3489,10 +3581,18 @@ export const GameplayRuntime = forwardRef<
       if ("isPerspectiveCamera" in camera && camera.isPerspectiveCamera) {
         const perspectiveCamera = camera as THREE.PerspectiveCamera;
         const phaseFov = presentation.phase === "entering"
-          ? THREE.MathUtils.lerp(40, fov, easeInOutCubic(phaseProgress))
+          ? THREE.MathUtils.lerp(
+            MENU_FOV,
+            fov,
+            easeInOutCubic(phaseProgress),
+          )
           : presentation.phase === "returning"
-          ? THREE.MathUtils.lerp(fov, 40, easeInOutCubic(phaseProgress))
-          : 40;
+          ? THREE.MathUtils.lerp(
+            fov,
+            MENU_FOV,
+            easeInOutCubic(phaseProgress),
+          )
+          : MENU_FOV;
         const nextFov = THREE.MathUtils.damp(
           perspectiveCamera.fov,
           phaseFov,

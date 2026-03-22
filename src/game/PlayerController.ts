@@ -28,6 +28,7 @@ import {
 type PlayerAction =
   | 'pickup'
   | 'drop'
+  | 'unarm'
   | 'reload'
   | 'reset'
   | 'equipRifle'
@@ -530,6 +531,9 @@ export function usePlayerController({
       }
       if (event.code === bindings.drop && !event.repeat) {
         actionCallbackRef.current('drop');
+      }
+      if (event.code === bindings.unarm && !event.repeat) {
+        actionCallbackRef.current('unarm');
       }
       if (event.code === bindings.reload && !event.repeat) {
         actionCallbackRef.current('reload');

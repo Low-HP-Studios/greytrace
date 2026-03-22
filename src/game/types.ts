@@ -33,6 +33,7 @@ export type ControlBindings = {
   jump: string;
   pickup: string;
   drop: string;
+  unarm: string;
   reload: string;
   reset: string;
   tab: string;
@@ -54,6 +55,7 @@ export const DEFAULT_CONTROL_BINDINGS: ControlBindings = {
   jump: 'Space',
   pickup: 'KeyF',
   drop: 'KeyG',
+  unarm: 'KeyX',
   reload: 'KeyR',
   reset: 'KeyT',
   tab: 'Tab',
@@ -296,6 +298,7 @@ export type PlayerWeaponSlotSnapshot = {
 
 export type PlayerWeaponLoadoutSnapshot = {
   activeSlot: 'slotA' | 'slotB';
+  weaponRaised: boolean;
   slotA: PlayerWeaponSlotSnapshot;
   slotB: PlayerWeaponSlotSnapshot;
 };
@@ -459,6 +462,7 @@ export const DEFAULT_PLAYER_SNAPSHOT: PlayerSnapshot = {
   inventory: DEFAULT_INVENTORY_PANEL_SNAPSHOT,
   weaponLoadout: {
     activeSlot: 'slotA',
+    weaponRaised: false,
     slotA: {
       weaponKind: 'rifle',
       hasWeapon: false,

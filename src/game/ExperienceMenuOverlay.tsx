@@ -6,7 +6,6 @@ import {
 } from "./characters";
 import { PRACTICE_MAP_OPTIONS, getPracticeMapById } from "./scene/practice-maps";
 import type { MapId } from "./types";
-import { CharacterPreviewCanvas } from "../screens/LobbyCharacter";
 
 type ExperienceMenuOverlayProps = {
   onEnterPractice: () => void;
@@ -42,25 +41,6 @@ const NAV_ITEMS: NavItem[] = [
 // Ring buffer of speed samples for the download graph
 const SPEED_SAMPLES = 40;
 
-function LockIcon() {
-  return (
-    <svg
-      className="menu-lock-icon"
-      viewBox="0 0 24 24"
-      width="14"
-      height="14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
-}
-
 function SettingsIcon() {
   return (
     <svg
@@ -94,6 +74,18 @@ function ArrowIcon() {
       <path d="m12 5 7 7-7 7" />
     </svg>
   );
+}
+
+function getCharacterMonogram(displayName: string) {
+  return displayName
+    .split(/\s+/)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("")
+    .slice(0, 2);
+}
+
+function formatCatalogIndex(index: number) {
+  return String(index + 1).padStart(2, "0");
 }
 
 function LobbyFpsCounter() {
@@ -232,14 +224,20 @@ export function ExperienceMenuOverlay({
   }, []);
 
   const selectedCharacterDef = getCharacterById(selectedCharacterId);
+  const selectedCharacterIndex = Math.max(
+    0,
+    CHARACTER_REGISTRY.findIndex((char) => char.id === selectedCharacterId),
+  );
   const selectedMap = getPracticeMapById(selectedMapId);
 
   const isDownloading = updaterStatus.phase === "downloading";
   const progress = typeof updaterStatus.progress === "number" ? updaterStatus.progress : null;
+  const selectedCharacterMonogram = getCharacterMonogram(
+    selectedCharacterDef.displayName,
+  );
 
   return (
-    <div className="lobby-layout-v2">
-      {/* ── Topbar: three-zone ── */}
+    <div className="lobby-layout-v2 lobby-layout-v3">
       <header className="lobby-topbar-v2">
         <div className="lobby-brand-v2">
           <h1 className="lobby-logo-v2">GrayTrace</h1>
@@ -287,33 +285,23 @@ export function ExperienceMenuOverlay({
         </div>
       </header>
 
-      {/* ── Main content ── */}
       <main className="lobby-main-v2">
-
-        {/* PLAY TAB */}
         {activeTab === "play" && (
-          <div className="lobby-hero-v2">
-            <div className="lobby-mode-card-v2 teaser">
-              <div className="lobby-teaser-lock-v2"><LockIcon /></div>
-              <div className="lobby-teaser-label-v2">Coming Soon</div>
-              <div className="lobby-teaser-name-v2">Ranked Mode</div>
-            </div>
-
-            <div className="lobby-mode-card-v2 active">
+          <div className="lobby-play-stage-v3">
+            <section className="lobby-panel-v3 lobby-play-hero-v3">
               <div className="lobby-card-header-v2">
-                <h2 className="lobby-card-title-v2">Training Simulation</h2>
+                <h2 className="lobby-card-title-v2">Practice</h2>
                 <span className="lobby-card-badge-v2 ready">Ready</span>
               </div>
-              <p className="lobby-card-desc-v2">
-                Choose a practice map, then test weapon mechanics, spray
-                patterns, and advanced techniques in a controlled sandbox.
+              <p className="lobby-hero-copy-v3">
+                Live targets. No stakes. Enough room to miss in private.
               </p>
-              <div className="lobby-map-selector-v2">
+              <div className="lobby-map-panel-v3">
                 <div className="lobby-map-selector-header-v2">
                   <span className="lobby-map-selector-label-v2">Map</span>
                   <span className="lobby-map-selector-value-v2">{selectedMap.label}</span>
                 </div>
-                <div className="segmented-row">
+                <div className="segmented-row lobby-map-pills-v3">
                   {PRACTICE_MAP_OPTIONS.map((option) => (
                     <button
                       key={option.id}
@@ -329,29 +317,22 @@ export function ExperienceMenuOverlay({
                   {selectedMap.description}
                 </p>
               </div>
-              <div className="lobby-card-actions-v2">
+              <div className="lobby-card-actions-v2 lobby-card-actions-v3">
                 <button type="button" className="lobby-play-btn-v2" onClick={onEnterPractice}>
                   <span>Enter Practice</span>
                   <ArrowIcon />
                 </button>
                 <button type="button" className="lobby-play-btn-v2 secondary" onClick={showOnlineToast}>
-                  Online Match — Coming Soon
+                  Online in Development
                 </button>
               </div>
-            </div>
-
-            <div className="lobby-mode-card-v2 teaser">
-              <div className="lobby-teaser-lock-v2"><LockIcon /></div>
-              <div className="lobby-teaser-label-v2">Coming Soon</div>
-              <div className="lobby-teaser-name-v2">Custom Match</div>
-            </div>
+            </section>
           </div>
         )}
 
-        {/* COLLECTION TAB */}
         {activeTab === "collection" && (
-          <div className="lobby-collection-v2">
-            <div className="lobby-collection-list-v2">
+          <div className="lobby-collection-v2 lobby-collection-v3">
+            <div className="lobby-collection-list-v2 lobby-panel-v3">
               <div className="lobby-collection-list-header-v2">
                 <h2>Characters</h2>
                 <span className="lobby-collection-count-v2">{CHARACTER_REGISTRY.length}</span>
@@ -372,32 +353,60 @@ export function ExperienceMenuOverlay({
                 ))}
               </div>
             </div>
-            <div className="lobby-collection-preview-v2">
-              <CharacterPreviewCanvas characterDef={selectedCharacterDef} transparent />
-              <div className="lobby-collection-preview-name-v2">
-                {selectedCharacterDef.displayName}
+            <section className="lobby-panel-v3 lobby-character-dossier-v3">
+              <div className="lobby-character-mark-v3">
+                {selectedCharacterMonogram}
               </div>
-            </div>
+              <span className="lobby-section-label-v3">Selected Operative</span>
+              <h2 className="lobby-character-title-v3">{selectedCharacterDef.displayName}</h2>
+              <p className="lobby-character-copy-v3">
+                This selection drives the live lobby background now. One render,
+                one rifle, and fewer fake preview boxes cluttering the crime scene.
+              </p>
+              <div className="lobby-character-facts-v3">
+                <article className="lobby-meta-card-v3">
+                  <span>Registry</span>
+                  <strong>
+                    {formatCatalogIndex(selectedCharacterIndex)}/{CHARACTER_REGISTRY.length}
+                  </strong>
+                </article>
+                <article className="lobby-meta-card-v3">
+                  <span>Status</span>
+                  <strong>Equipped</strong>
+                </article>
+                <article className="lobby-meta-card-v3">
+                  <span>Presentation</span>
+                  <strong>Noir live feed</strong>
+                </article>
+              </div>
+            </section>
           </div>
         )}
 
-        {/* STORE TAB */}
         {activeTab === "store" && (
-          <div className="lobby-store-v2">
+          <div className="lobby-store-v2 lobby-store-v3">
             <div className="lobby-store-header-v2">
               <div>
                 <h2 className="lobby-store-title-v2">Character Store</h2>
-                <p className="lobby-store-subtitle-v2">All characters are available during Early Access</p>
+                <p className="lobby-store-subtitle-v2">
+                  All operatives are unlocked during Early Access, because fake scarcity is still fake.
+                </p>
               </div>
               <span className="lobby-store-balance-v2">All Owned</span>
             </div>
             <div className="lobby-store-grid-v2">
-              {CHARACTER_REGISTRY.map((char) => {
+              {CHARACTER_REGISTRY.map((char, index) => {
                 const isEquipped = selectedCharacterId === char.id;
+                const monogram = getCharacterMonogram(char.displayName);
                 return (
-                  <div key={char.id} className="lobby-store-item-v2">
+                  <div
+                    key={char.id}
+                    className={`lobby-store-item-v2 ${isEquipped ? "equipped" : ""}`}
+                  >
                     <div className="lobby-store-item-art-v2" aria-hidden="true">
-                      <span className="lobby-store-item-owned-tag-v2">OWNED</span>
+                      <span className="lobby-store-item-seq-v3">{formatCatalogIndex(index)}</span>
+                      <span className="lobby-store-item-monogram-v3">{monogram}</span>
+                      <span className="lobby-store-item-owned-tag-v2">Owned</span>
                     </div>
                     <div className="lobby-store-item-info-v2">
                       <span className="lobby-store-item-name-v2">{char.displayName}</span>
@@ -417,10 +426,8 @@ export function ExperienceMenuOverlay({
           </div>
         )}
 
-        {/* UPDATES TAB */}
         {activeTab === "updates" && (
-          <div className="updates-page-v2">
-            {/* Version info row */}
+          <div className="updates-page-v2 updates-page-v3">
             <div className="updates-meta-row-v2">
               <div className="updates-version-grid-v2">
                 <div className="updates-metric-v2">

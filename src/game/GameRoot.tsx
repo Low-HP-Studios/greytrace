@@ -52,6 +52,7 @@ import {
   getPracticeMapById,
   PRACTICE_MAP_OPTIONS,
 } from "./scene/practice-maps";
+import { LobbyMusicController } from "./LobbyMusicController";
 import {
   type BindingKey,
   type PauseMenuTab,
@@ -1099,6 +1100,11 @@ export function GameRoot({
         showInventoryOverlay ? "inventory-open" : isGameplayPaused ? "paused" : "playing"
       } phase-${phase}`}
     >
+      <LobbyMusicController
+        active={!booting && phase === "menu"}
+        musicVolume={audioVolumes.music}
+      />
+
       <Scene
         ref={sceneRef}
         settings={settings}
@@ -1883,7 +1889,7 @@ export function GameRoot({
                         <div className="menu-sections">
                           <MenuSection
                             title="Volume Mixer"
-                            blurb="Separate sliders so footsteps don’t get buried under rifle spam."
+                            blurb="Separate sliders so menu music and rifle noise stop fighting like divorced parents."
                           >
                             <VolumeSlider
                               label="Master"
@@ -1892,6 +1898,15 @@ export function GameRoot({
                                 setAudioVolumes((prev) => ({
                                   ...prev,
                                   master: value,
+                                }))}
+                            />
+                            <VolumeSlider
+                              label="Music"
+                              value={audioVolumes.music}
+                              onChange={(value) =>
+                                setAudioVolumes((prev) => ({
+                                  ...prev,
+                                  music: value,
                                 }))}
                             />
                             <VolumeSlider
