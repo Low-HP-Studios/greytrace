@@ -4,6 +4,7 @@ import { markBootEvent } from "../game/boot-trace";
 
 type LoadingScreenProps = {
   canDismiss: boolean;
+  musicVolume: number;
   onMainPhaseStart: () => void;
   onFadeOutStart: () => void;
   onComplete: () => void;
@@ -28,6 +29,10 @@ type WindowWithPassiveListener = Window & typeof globalThis;
 let introAudioSingleton: HTMLAudioElement | null = null;
 let introAudioPlayableMarked = false;
 let introAudioRetryArmed = false;
+
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
 
 function retryIntroAudioPlayback() {
   detachIntroAudioRetryListeners();
@@ -62,7 +67,6 @@ function getIntroAudio(): HTMLAudioElement {
   if (!introAudioSingleton) {
     const audio = new Audio("/assets/branding/Intro.mp3");
     audio.preload = "auto";
-    audio.volume = 0.72;
     audio.addEventListener("canplaythrough", () => {
       if (!introAudioPlayableMarked) {
         introAudioPlayableMarked = true;
@@ -103,6 +107,7 @@ async function playIntroAudio() {
 
 export function LoadingScreen({
   canDismiss,
+  musicVolume,
   onMainPhaseStart,
   onFadeOutStart,
   onComplete,
@@ -112,6 +117,10 @@ export function LoadingScreen({
   const mountTimeRef = useRef(performance.now());
   const fadeStartedRef = useRef(false);
   const mainPhaseStartedRef = useRef(false);
+
+  useEffect(() => {
+    getIntroAudio().volume = clamp01(musicVolume);
+  }, [musicVolume]);
 
   useEffect(() => {
     primeIntroAudio();

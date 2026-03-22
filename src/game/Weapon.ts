@@ -29,6 +29,7 @@ export type WeaponSlotState = {
 
 export type WeaponLoadoutState = {
   activeSlot: WeaponSlotId;
+  weaponRaised: boolean;
   slotA: WeaponSlotState;
   slotB: WeaponSlotState;
 };
@@ -157,8 +158,10 @@ export type SniperRechamberState = {
 export type WeaponSwitchState = {
   active: boolean;
   progress: number;
-  from: WeaponKind;
-  to: WeaponKind;
+  from: WeaponKind | null;
+  to: WeaponKind | null;
+  fromHolstered: boolean;
+  toHolstered: boolean;
   remainingMs: number;
 };
 
@@ -176,7 +179,10 @@ const DEFAULT_DROPPED_POSITION = {
   rifle: new THREE.Vector3(1.4, DROP_HEIGHT, 3.5),
   sniper: new THREE.Vector3(1.9, DROP_HEIGHT, 3.5),
 };
-const WEAPON_SWITCH_DURATION_MS = 180;
+const WEAPON_DRAW_DURATION_MS = 260;
+const WEAPON_HOLSTER_DURATION_MS = 260;
+const WEAPON_SWAP_DURATION_MS =
+  WEAPON_DRAW_DURATION_MS + WEAPON_HOLSTER_DURATION_MS;
 
 function resolveDefaultSlot(weaponKind: WeaponKind): WeaponSlotState {
   return {
@@ -209,6 +215,7 @@ export class WeaponSystem {
   private slotA: WeaponSlotState = { ...DEFAULT_SLOT_A };
   private slotB: WeaponSlotState = { ...DEFAULT_SLOT_B };
   private activeSlot: WeaponSlotId = 'slotA';
+  private raisedSlot: WeaponSlotId | null = null;
   private droppedRifle: WeaponDropState = {
     isPresentOnGround: false,
     position: DEFAULT_DROPPED_POSITION.rifle.clone(),
@@ -226,9 +233,13 @@ export class WeaponSystem {
 
   private sniperRechamberStartedAtMs = 0;
   private sniperRechamberUntilMs = 0;
+  private sniperRechamberRestartPending = false;
 
-  private pendingSwitchToKind: WeaponKind | null = null;
-  private switchFromKind: WeaponKind = 'rifle';
+  private switchActive = false;
+  private switchFromSlot: WeaponSlotId | null = null;
+  private switchToSlot: WeaponSlotId | null = null;
+  private switchFromKind: WeaponKind | null = null;
+  private switchToKind: WeaponKind | null = null;
   private switchStartedAtMs = 0;
   private switchUntilMs = 0;
 
@@ -327,6 +338,8 @@ export class WeaponSystem {
       reserveAmmo?: number;
     },
   ) {
+    const hadOwnedWeapon = this.hasAnyWeapon();
+    const hadRaisedWeapon = this.raisedSlot !== null;
     const config = WEAPON_CONFIG[kind];
     const slot = this.getSlotById(slotId);
     this.applySlotDefaultsForWeapon(slot, kind);
@@ -344,6 +357,10 @@ export class WeaponSystem {
     if (!this.getSlotById(this.activeSlot).hasWeapon) {
       this.activeSlot = slotId;
     }
+    if (!hadOwnedWeapon && !hadRaisedWeapon) {
+      this.activeSlot = slotId;
+      this.raisedSlot = slotId;
+    }
     this.activeWeaponChanged();
   }
 
@@ -353,10 +370,14 @@ export class WeaponSystem {
       return null;
     }
     const previous = { ...slot };
+    const otherSlotId = this.getOtherSlotId(slotId);
+    const otherSlotHasWeapon = this.getSlotById(otherSlotId).hasWeapon;
+    if (this.raisedSlot === slotId) {
+      this.raisedSlot = otherSlotHasWeapon ? otherSlotId : null;
+    }
     this.clearSlot(slotId);
     if (this.activeSlot === slotId) {
-      const otherSlotId = this.getOtherSlotId(slotId);
-      if (this.getSlotById(otherSlotId).hasWeapon) {
+      if (otherSlotHasWeapon) {
         this.activeSlot = otherSlotId;
       }
     }
@@ -384,6 +405,10 @@ export class WeaponSystem {
     return kind === 'rifle' ? this.droppedRifle : this.droppedSniper;
   }
 
+  private hasAnyWeapon() {
+    return this.slotA.hasWeapon || this.slotB.hasWeapon;
+  }
+
   private resolveActiveSlot(): WeaponSlotState {
     return this.getSlotById(this.activeSlot);
   }
@@ -391,6 +416,34 @@ export class WeaponSystem {
   private resolveActiveWeaponKind(): WeaponKind | null {
     const active = this.resolveActiveSlot();
     return active.hasWeapon ? active.weaponKind : null;
+  }
+
+  private resolveRaisedSlotState(): WeaponSlotState | null {
+    if (!this.raisedSlot) {
+      return null;
+    }
+    const slot = this.getSlotById(this.raisedSlot);
+    return slot.hasWeapon ? slot : null;
+  }
+
+  private resolveRaisedWeaponKind(): WeaponKind | null {
+    const raised = this.resolveRaisedSlotState();
+    return raised?.weaponKind ?? null;
+  }
+
+  private clearSniperRechamber() {
+    this.sniperRechamberStartedAtMs = 0;
+    this.sniperRechamberUntilMs = 0;
+  }
+
+  private startSniperRechamber(nowMs: number) {
+    const rechamberMs = WEAPON_CONFIG.sniper.rechamberMs ?? 0;
+    if (rechamberMs <= 0) {
+      return;
+    }
+    this.sniperRechamberRestartPending = false;
+    this.sniperRechamberStartedAtMs = nowMs;
+    this.sniperRechamberUntilMs = nowMs + rechamberMs;
   }
 
   private getMagBonus(kind: WeaponKind) {
@@ -475,22 +528,97 @@ export class WeaponSystem {
   }
 
   private isSwitching(nowMs: number) {
-    return Boolean(
-      this.pendingSwitchToKind !== null &&
+    return this.switchActive &&
       nowMs >= this.switchStartedAtMs &&
-      nowMs < this.switchUntilMs,
-    );
+      nowMs < this.switchUntilMs;
+  }
+
+  private clearSwitchState() {
+    this.switchActive = false;
+    this.switchFromSlot = null;
+    this.switchToSlot = null;
+    this.switchFromKind = null;
+    this.switchToKind = null;
+    this.switchStartedAtMs = 0;
+    this.switchUntilMs = 0;
+  }
+
+  private beginSwitchToSlot(slotId: WeaponSlotId | null, nowMs: number) {
+    this.applyPendingSwitch(nowMs);
+    if (this.isSwitching(nowMs)) {
+      return false;
+    }
+
+    const currentRaisedSlot = this.resolveRaisedSlotState()
+      ? this.raisedSlot
+      : null;
+    const currentRaisedKind = currentRaisedSlot
+      ? this.getSlotById(currentRaisedSlot).weaponKind
+      : null;
+
+    if (slotId) {
+      const targetSlot = this.getSlotById(slotId);
+      if (!targetSlot.hasWeapon || !targetSlot.weaponKind) {
+        return false;
+      }
+      this.activeSlot = slotId;
+    }
+
+    if (currentRaisedSlot === slotId) {
+      return false;
+    }
+
+    if (
+      currentRaisedKind === "sniper" &&
+      currentRaisedSlot !== slotId &&
+      this.sniperRechamberUntilMs > nowMs
+    ) {
+      this.clearSniperRechamber();
+      this.sniperRechamberRestartPending = true;
+    }
+
+    const switchDurationMs = currentRaisedSlot && slotId
+      ? WEAPON_SWAP_DURATION_MS
+      : currentRaisedSlot
+      ? WEAPON_HOLSTER_DURATION_MS
+      : slotId
+      ? WEAPON_DRAW_DURATION_MS
+      : 0;
+    if (switchDurationMs <= 0) {
+      return false;
+    }
+
+    this.switchActive = true;
+    this.switchFromSlot = currentRaisedSlot;
+    this.switchToSlot = slotId;
+    this.switchFromKind = currentRaisedSlot
+      ? this.getSlotById(currentRaisedSlot).weaponKind
+      : null;
+    this.switchToKind = slotId
+      ? this.getSlotById(slotId).weaponKind
+      : null;
+    this.switchStartedAtMs = nowMs;
+    this.switchUntilMs = nowMs + switchDurationMs;
+    this.setTriggerHeld(false);
+    this.clearTracer();
+    return true;
   }
 
   private applyPendingSwitch(nowMs: number) {
-    if (this.pendingSwitchToKind === null || nowMs < this.switchUntilMs) {
+    if (!this.switchActive || nowMs < this.switchUntilMs) {
       return;
     }
-    this.activeSlot = this.getSlotIdForKind(this.pendingSwitchToKind);
-    this.pendingSwitchToKind = null;
-    this.switchStartedAtMs = 0;
-    this.switchUntilMs = 0;
-    this.switchFromKind = this.resolveActiveWeaponKind() ?? 'rifle';
+    this.raisedSlot = this.switchToSlot &&
+        this.getSlotById(this.switchToSlot).hasWeapon
+      ? this.switchToSlot
+      : null;
+    if (
+      this.resolveRaisedWeaponKind() === "sniper" &&
+      this.sniperRechamberRestartPending
+    ) {
+      this.startSniperRechamber(nowMs);
+    }
+    this.clearSwitchState();
     this.clearTracer();
     this.setTriggerHeld(false);
   }
@@ -540,15 +668,16 @@ export class WeaponSystem {
     this.applyPendingSwitch(nowMs);
     this.applyPendingReloadCompletion(nowMs);
 
-    const activeSlot = this.resolveActiveSlot();
-    const activeKind = this.resolveActiveWeaponKind();
+    const raisedSlotId = this.raisedSlot;
+    const activeSlot = this.resolveRaisedSlotState();
+    const activeKind = this.resolveRaisedWeaponKind();
     const reloading = this.isReloading(nowMs);
 
     // Auto-reload when magazine is empty, regardless of trigger state
     if (
       !reloading &&
       !this.isSwitching(nowMs) &&
-      activeSlot.hasWeapon &&
+      activeSlot &&
       activeKind &&
       activeSlot.magAmmo <= 0 &&
       activeSlot.reserveAmmo > 0
@@ -559,7 +688,7 @@ export class WeaponSystem {
 
     if (
       this.isSwitching(nowMs) ||
-      !activeSlot.hasWeapon ||
+      !activeSlot ||
       !activeKind ||
       !this.triggerHeld ||
       reloading
@@ -645,11 +774,12 @@ export class WeaponSystem {
 
       this.muzzleFlashUntil = nowMs + config.muzzleFlashMs;
       if (activeKind === 'sniper' && config.rechamberMs !== undefined) {
-        this.sniperRechamberStartedAtMs = nowMs;
-        this.sniperRechamberUntilMs = nowMs + config.rechamberMs;
+        this.startSniperRechamber(nowMs);
       }
 
-      this.setSlotById(this.activeSlot, { ...activeSlot });
+      if (raisedSlotId) {
+        this.setSlotById(raisedSlotId, { ...activeSlot });
+      }
       this.applyPendingReloadCompletion(nowMs + 1);
       if (activeSlot.magAmmo <= 0 && this.reloadSlot === null) {
         this.beginReload(nowMs);
@@ -661,6 +791,7 @@ export class WeaponSystem {
   }
 
   getActiveWeaponPayload(): WeaponKind | null {
+    this.applyPendingSwitch(performance.now());
     const active = this.resolveActiveWeaponKind();
     if (active) {
       return active;
@@ -678,13 +809,20 @@ export class WeaponSystem {
     return this.getActiveWeaponPayload() ?? 'rifle';
   }
 
+  getRaisedWeapon(): WeaponKind | null {
+    this.applyPendingSwitch(performance.now());
+    return this.resolveRaisedWeaponKind();
+  }
+
   getSlotStateForLoadout(slotId: WeaponSlotId): WeaponSlotState {
     return { ...this.getSlotById(slotId) };
   }
 
   getLoadoutState(): WeaponLoadoutState {
+    this.applyPendingSwitch(performance.now());
     return {
       activeSlot: this.activeSlot,
+      weaponRaised: this.isEquipped(),
       slotA: { ...this.slotA },
       slotB: { ...this.slotB },
     };
@@ -744,8 +882,9 @@ export class WeaponSystem {
 
     this.equipToSlot(targetSlotId, nearest);
     this.getDropState(nearest).isPresentOnGround = false;
-    if (!this.resolveActiveSlot().hasWeapon) {
+    if (!this.resolveRaisedSlotState()) {
       this.activeSlot = targetSlotId;
+      this.raisedSlot = targetSlotId;
     }
     this.activeWeaponChanged();
     return true;
@@ -755,12 +894,14 @@ export class WeaponSystem {
     this.setTriggerHeld(false);
     this.nextShotInMs = 0;
     this.shotIndex = 0;
-    this.sniperRechamberUntilMs = 0;
-    this.sniperRechamberStartedAtMs = 0;
-    this.pendingSwitchToKind = null;
-    this.switchFromKind = this.resolveActiveWeaponKind() ?? 'rifle';
-    this.switchStartedAtMs = 0;
-    this.switchUntilMs = 0;
+    this.clearSniperRechamber();
+    if (!this.slotB.hasWeapon || this.slotB.weaponKind !== "sniper") {
+      this.sniperRechamberRestartPending = false;
+    }
+    if (this.raisedSlot && !this.getSlotById(this.raisedSlot).hasWeapon) {
+      this.raisedSlot = null;
+    }
+    this.clearSwitchState();
     this.clearTracer();
   }
 
@@ -770,43 +911,28 @@ export class WeaponSystem {
     if (!slotState.hasWeapon || slotState.weaponKind !== next) {
       return false;
     }
-    if (this.activeSlot === targetSlot && !this.isSwitching(nowMs)) {
-      return false;
-    }
-
-    this.applyPendingSwitch(nowMs);
-    this.pendingSwitchToKind = next;
-    this.switchFromKind = this.resolveActiveWeaponKind() ?? next;
-    this.switchStartedAtMs = nowMs;
-    this.switchUntilMs = nowMs + WEAPON_SWITCH_DURATION_MS;
-    this.setTriggerHeld(false);
-    this.clearTracer();
-    return true;
+    this.activeSlot = targetSlot;
+    return this.beginSwitchToSlot(targetSlot, nowMs);
   }
 
   setActiveSlot(slotId: WeaponSlotId): boolean {
     const nowMs = performance.now();
     const targetSlot = this.getSlotById(slotId);
-    if (
-      this.activeSlot === slotId ||
-      this.isSwitching(nowMs) ||
-      !targetSlot.hasWeapon ||
-      !targetSlot.weaponKind
-    ) {
+    if (!targetSlot.hasWeapon || !targetSlot.weaponKind) {
       return false;
     }
 
-    this.pendingSwitchToKind = targetSlot.weaponKind;
-    this.switchFromKind = this.resolveActiveWeaponKind() ?? 'rifle';
-    this.switchStartedAtMs = nowMs;
-    this.switchUntilMs = nowMs + WEAPON_SWITCH_DURATION_MS;
-    this.setTriggerHeld(false);
-    this.clearTracer();
-    return true;
+    this.activeSlot = slotId;
+    return this.beginSwitchToSlot(slotId, nowMs);
+  }
+
+  unarm(nowMs: number): boolean {
+    return this.beginSwitchToSlot(null, nowMs);
   }
 
   drop(playerPosition: THREE.Vector3, cameraForward: THREE.Vector3): boolean {
-    const slot = this.resolveActiveSlot();
+    const slotId = this.raisedSlot ?? this.activeSlot;
+    const slot = this.getSlotById(slotId);
     if (!slot.hasWeapon || !slot.weaponKind) {
       return false;
     }
@@ -820,11 +946,14 @@ export class WeaponSystem {
       playerPosition.z + cameraForward.z * DROP_FORWARD_DISTANCE,
     );
 
-    this.clearSlot(this.activeSlot);
+    this.clearSlot(slotId);
 
-    const otherSlotId = this.getOtherSlotId(this.activeSlot);
+    const otherSlotId = this.getOtherSlotId(slotId);
     if (this.getSlotById(otherSlotId).hasWeapon) {
       this.activeSlot = otherSlotId;
+      this.raisedSlot = otherSlotId;
+    } else {
+      this.raisedSlot = null;
     }
 
     this.activeWeaponChanged();
@@ -855,10 +984,14 @@ export class WeaponSystem {
     this.applyPendingReloadCompletion(nowMs);
     this.applyPendingSwitch(nowMs);
 
-    const slot = this.resolveActiveSlot();
+    const slotId = this.raisedSlot;
     if (this.isReloading(nowMs)) {
       return false;
     }
+    if (!slotId) {
+      return false;
+    }
+    const slot = this.getSlotById(slotId);
     if (!slot.hasWeapon || !slot.weaponKind) {
       return false;
     }
@@ -869,7 +1002,7 @@ export class WeaponSystem {
     }
 
     const profile = WEAPON_CONFIG[slot.weaponKind];
-    this.reloadSlot = this.activeSlot;
+    this.reloadSlot = slotId;
     this.reloadWeaponKind = slot.weaponKind;
     this.reloadAmmoToLoad = Math.min(need, slot.reserveAmmo);
     this.reloadStartedAtMs = nowMs;
@@ -902,9 +1035,9 @@ export class WeaponSystem {
   }
 
   getFireState(nowMs: number): WeaponFireState {
-    const active = this.resolveActiveSlot();
-    const activeKind = this.resolveActiveWeaponKind();
-    if (!active.hasWeapon || !activeKind) {
+    const active = this.resolveRaisedSlotState();
+    const activeKind = this.resolveRaisedWeaponKind();
+    if (!active || !activeKind) {
       return { blocked: true, reason: "noWeapon" };
     }
 
@@ -950,13 +1083,15 @@ export class WeaponSystem {
 
   getSwitchState(nowMs: number): WeaponSwitchState {
     this.applyPendingSwitch(nowMs);
-    if (!this.pendingSwitchToKind) {
-      const active = this.resolveActiveWeaponKind() ?? 'rifle';
+    if (!this.switchActive) {
+      const active = this.resolveRaisedWeaponKind();
       return {
         active: false,
         progress: 1,
         from: active,
         to: active,
+        fromHolstered: active === null,
+        toHolstered: active === null,
         remainingMs: 0,
       };
     }
@@ -967,7 +1102,9 @@ export class WeaponSystem {
       active: true,
       progress: Math.min(1, elapsed / duration),
       from: this.switchFromKind,
-      to: this.pendingSwitchToKind,
+      to: this.switchToKind,
+      fromHolstered: this.switchFromSlot === null,
+      toHolstered: this.switchToSlot === null,
       remainingMs: Math.max(0, this.switchUntilMs - nowMs),
     };
   }
@@ -1005,7 +1142,8 @@ export class WeaponSystem {
   }
 
   isEquipped(): boolean {
-    return this.slotA.hasWeapon || this.slotB.hasWeapon;
+    this.applyPendingSwitch(performance.now());
+    return !this.switchActive && this.resolveRaisedSlotState() !== null;
   }
 
   getDropPosition(kind: WeaponKind): THREE.Vector3 | null {
@@ -1038,6 +1176,7 @@ export class WeaponSystem {
     this.slotA = { ...DEFAULT_SLOT_A };
     this.slotB = { ...DEFAULT_SLOT_B };
     this.activeSlot = 'slotA';
+    this.raisedSlot = null;
 
     this.droppedRifle.isPresentOnGround = false;
     this.droppedRifle.position.copy(DEFAULT_DROPPED_POSITION.rifle);
@@ -1048,13 +1187,10 @@ export class WeaponSystem {
     this.nextShotInMs = 0;
     this.shotIndex = 0;
     this.muzzleFlashUntil = 0;
-    this.sniperRechamberStartedAtMs = 0;
-    this.sniperRechamberUntilMs = 0;
+    this.clearSniperRechamber();
+    this.sniperRechamberRestartPending = false;
 
-    this.pendingSwitchToKind = null;
-    this.switchFromKind = this.resolveActiveWeaponKind() ?? 'rifle';
-    this.switchStartedAtMs = 0;
-    this.switchUntilMs = 0;
+    this.clearSwitchState();
 
     this.reloadWeaponKind = null;
     this.reloadSlot = null;
@@ -1084,6 +1220,7 @@ export const DEFAULT_WEAPON_WORLD_STATE: WeaponWorldState = {
   activeSlot: 'slotA',
   loadout: {
     activeSlot: 'slotA',
+    weaponRaised: false,
     slotA: resolveDefaultSlot('rifle'),
     slotB: resolveDefaultSlot('sniper'),
   },

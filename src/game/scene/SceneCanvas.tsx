@@ -17,6 +17,7 @@ import {
   Targets,
   resetTargets,
   RESPAWN_DELAY_MS,
+  type TargetVisualHandle,
 } from "../Targets";
 import type {
   GameSettings,
@@ -53,17 +54,19 @@ import {
 
 export type { HitMarkerKind, AimingState, ShotFiredState };
 
-const VOID_BG = new THREE.Color("#0a1628");
+const VOID_BG = new THREE.Color("#050506");
 const LIVE_BG = new THREE.Color("#b8d4e8");
-const VOID_FOG = new THREE.Color("#0a1628");
+const VOID_FOG = new THREE.Color("#090909");
 const LIVE_FOG = new THREE.Color("#e8c88a");
-const VOID_SKY_LIGHT = new THREE.Color("#1a2a4a");
+const VOID_SKY_LIGHT = new THREE.Color("#111114");
 const LIVE_SKY_LIGHT = new THREE.Color("#c8dce8");
-const VOID_GROUND_LIGHT = new THREE.Color("#141820");
+const VOID_GROUND_LIGHT = new THREE.Color("#080808");
 const LIVE_GROUND_LIGHT = new THREE.Color("#d4a862");
-const MENU_KEY_LIGHT = new THREE.Color("#c0d0f0");
-const LOBBY_FRAME_RATE = 60;
-const LOBBY_FRAME_INTERVAL_MS = 1000 / LOBBY_FRAME_RATE;
+const MENU_KEY_LIGHT = new THREE.Color("#f6e8d6");
+const MENU_FRAME_RATE = 30;
+const TRANSITION_FRAME_RATE = 60;
+const MENU_FRAME_INTERVAL_MS = 1000 / MENU_FRAME_RATE;
+const TRANSITION_FRAME_INTERVAL_MS = 1000 / TRANSITION_FRAME_RATE;
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
@@ -173,8 +176,10 @@ function SceneBootCompiler({
 
 function SceneFramePacer({
   lobbyCapEnabled,
+  frameIntervalMs,
 }: {
   lobbyCapEnabled: boolean;
+  frameIntervalMs: number;
 }) {
   const advance = useThree((state) => state.advance);
 
@@ -183,8 +188,8 @@ function SceneFramePacer({
     let rafId: number;
     let lastTime = 0;
     const loop = (time: number) => {
-      if (time - lastTime >= LOBBY_FRAME_INTERVAL_MS) {
-        lastTime = time - ((time - lastTime) % LOBBY_FRAME_INTERVAL_MS);
+      if (time - lastTime >= frameIntervalMs) {
+        lastTime = time - ((time - lastTime) % frameIntervalMs);
         advance(time);
       }
       rafId = window.requestAnimationFrame(loop);
@@ -194,7 +199,7 @@ function SceneFramePacer({
     return () => {
       window.cancelAnimationFrame(rafId);
     };
-  }, [advance, lobbyCapEnabled]);
+  }, [advance, frameIntervalMs, lobbyCapEnabled]);
 
   return null;
 }
@@ -252,6 +257,9 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
   const [targets, setTargets] = useState<TargetState[]>(() =>
     clonePracticeMapTargets(practiceMap.targets),
   );
+  const targetVisualRegistryRef = useRef<Map<string, TargetVisualHandle>>(
+    new Map(),
+  );
   const sceneTargetsRef = useRef(targets);
   const runtimeRef = useRef<GameplayRuntimeHandle | null>(null);
   const recoveringContextRef = useRef(false);
@@ -260,6 +268,9 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
   const resetTimeoutsRef = useRef<Map<string, number>>(new Map());
   const compileReady = booting && runtimeAssetsReady;
   const lobbyFrameCapEnabled = presentation.phase !== "playing";
+  const frameIntervalMs = presentation.phase === "menu"
+    ? MENU_FRAME_INTERVAL_MS
+    : TRANSITION_FRAME_INTERVAL_MS;
   const [glbCollisionVolumes, setGlbCollisionVolumes] = useState<readonly BlockingVolume[]>([]);
 
   const handleCollisionReady = useCallback((volumes: readonly BlockingVolume[]) => {
@@ -280,8 +291,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
   const renderedPracticeMap = !booting && presentation.phase === "playing"
     ? practiceMap
     : RANGE_PRACTICE_MAP;
-  // Don't advance frames during menu — scene is hidden; only pace during returning transition
-  const paceEnabled = lobbyFrameCapEnabled && presentation.phase !== "menu";
+  const paceEnabled = lobbyFrameCapEnabled;
 
   const dpr = useMemo(() => {
     const devicePixelRatio =
@@ -297,11 +307,11 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
     presentation.worldTheme - presentation.killPulse * 0.08,
   );
   const floorGridOpacity = presentation.phase === "menu"
-    ? 0.82
+    ? 0
     : presentation.phase === "entering"
-    ? 0.82 * (1 - clamp01(phaseProgress / 0.38))
+    ? 0.14 * (1 - clamp01(phaseProgress / 0.28))
     : presentation.phase === "returning"
-    ? 0.82 * clamp01((phaseProgress - 0.62) / 0.24)
+    ? 0.14 * clamp01((phaseProgress - 0.72) / 0.16)
     : 0;
   const backgroundColor = blendColor(VOID_BG, LIVE_BG, worldTheme);
   const fogColor = blendColor(VOID_FOG, LIVE_FOG, worldTheme);
@@ -311,11 +321,11 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
     LIVE_GROUND_LIGHT,
     worldTheme,
   );
-  const ambientIntensity = THREE.MathUtils.lerp(0.35, 0.5, worldTheme);
-  const hemisphereIntensity = THREE.MathUtils.lerp(0.45, 0.95, worldTheme);
-  const sunIntensity = THREE.MathUtils.lerp(0.18, 0.8, worldTheme);
-  const fillIntensity = THREE.MathUtils.lerp(0.25, 0.6, worldTheme);
-  const voidCharacterLightIntensity = THREE.MathUtils.lerp(3.0, 0.16, worldTheme);
+  const ambientIntensity = THREE.MathUtils.lerp(0.14, 0.5, worldTheme);
+  const hemisphereIntensity = THREE.MathUtils.lerp(0.22, 0.95, worldTheme);
+  const sunIntensity = THREE.MathUtils.lerp(0.05, 0.8, worldTheme);
+  const fillIntensity = THREE.MathUtils.lerp(0.12, 0.6, worldTheme);
+  const voidCharacterLightIntensity = THREE.MathUtils.lerp(4.4, 0.16, worldTheme);
 
   const handleTargetHit = useCallback(
     (targetId: string, damage: number, nowMs: number) => {
@@ -440,7 +450,10 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
       frameloop={lobbyFrameCapEnabled ? "never" : "always"}
     >
       <SceneContextRecoveryWatcher onContextLost={handleSceneContextLost} />
-      <SceneFramePacer lobbyCapEnabled={paceEnabled} />
+      <SceneFramePacer
+        lobbyCapEnabled={paceEnabled}
+        frameIntervalMs={frameIntervalMs}
+      />
       <color attach="background" args={[backgroundColor]} />
       <fog attach="fog" args={[fogColor, 60, 420]} />
       <hemisphereLight
@@ -486,6 +499,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
         reveal={presentation.targetReveal}
         loadCharacterAsset={deferredAssetsEnabled}
         characterOverride={characterOverride}
+        visualRegistryRef={targetVisualRegistryRef}
       />
       <StressBoxes
         count={practiceMap.supportsStressMode ? stressCount : 0}
@@ -505,6 +519,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
         movement={settings.movement}
         weaponRecoilProfiles={settings.weaponRecoilProfiles}
         targets={targets}
+        targetVisualRegistryRef={targetVisualRegistryRef}
         onTargetHit={handleTargetHit}
         onResetTargets={handleResetTargets}
         onPlayerSnapshot={onPlayerSnapshot}

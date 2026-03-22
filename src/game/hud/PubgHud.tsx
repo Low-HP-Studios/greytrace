@@ -46,7 +46,10 @@ function PubgHudInner({ player, visible }: PubgHudProps) {
   const { weaponLoadout, weaponReload } = player;
   const slotA = weaponLoadout.slotA;
   const slotB = weaponLoadout.slotB;
-  const isSlotAActive = weaponLoadout.activeSlot === "slotA";
+  const isSlotAActive = weaponLoadout.weaponRaised &&
+    weaponLoadout.activeSlot === "slotA";
+  const isSlotBActive = weaponLoadout.weaponRaised &&
+    weaponLoadout.activeSlot === "slotB";
   const activeSlot = isSlotAActive ? slotA : slotB;
 
   return (
@@ -62,14 +65,14 @@ function PubgHudInner({ player, visible }: PubgHudProps) {
           <WeaponSlotCard
             slot={slotB}
             slotNumber={2}
-            isActive={!isSlotAActive}
+            isActive={isSlotBActive}
             weaponModel={models.sniper}
           />
         </div>
       </div>
 
       <div className="pubg-hud pubg-hud--center">
-        {activeSlot.hasWeapon ? (
+        {weaponLoadout.weaponRaised && activeSlot.hasWeapon ? (
           <AmmoDisplay
             magAmmo={activeSlot.magAmmo}
             reserveAmmo={activeSlot.reserveAmmo}

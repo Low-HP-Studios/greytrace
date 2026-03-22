@@ -22,17 +22,17 @@ import {
 } from "./Textures";
 import { loadGlbAsset, preloadTextureAsset } from "../AssetLoader";
 
-const VOID_SKY = new THREE.Color("#0a1628");
+const VOID_SKY = new THREE.Color("#040405");
 const LIVE_SKY = new THREE.Color("#b8d4e8");
-const VOID_WALKABLE = new THREE.Color("#1c1a14");
+const VOID_WALKABLE = new THREE.Color("#080809");
 const LIVE_WALKABLE = new THREE.Color("#e8e8e8");
 const GRID_MAJOR_COLOR = new THREE.Color("#8fb3ff");
 const GRID_MINOR_COLOR = new THREE.Color("#ffffff");
-const SAND_COLOR_VOID = new THREE.Color("#1e1a10");
+const SAND_COLOR_VOID = new THREE.Color("#060607");
 const SAND_COLOR_LIVE = new THREE.Color("#c4a96a");
-const WATER_COLOR_VOID = new THREE.Color("#0a1520");
+const WATER_COLOR_VOID = new THREE.Color("#050609");
 const WATER_COLOR_LIVE = new THREE.Color("#1e4a61");
-const SCHOOL_BASE_VOID = new THREE.Color("#191919");
+const SCHOOL_BASE_VOID = new THREE.Color("#0b0b0d");
 const SCHOOL_BASE_LIVE = new THREE.Color("#64615b");
 const FLOOR_GRID_DIVISIONS = 16;
 const SAND_STRIP_SIZE = 320;

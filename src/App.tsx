@@ -6,6 +6,7 @@ import { sharedAudioManager } from "./game/Audio";
 import { createDeferredBootPreloadManifest } from "./game/boot-assets";
 import { markBootEvent } from "./game/boot-trace";
 import { GameRoot } from "./game/GameRoot";
+import { loadPersistedSettings } from "./game/settings";
 import { LoadingScreen } from "./screens/LoadingScreen";
 
 type IdleDeadlineLike = {
@@ -52,6 +53,7 @@ function App() {
   const [sceneReady, setSceneReady] = useState(false);
   const mainPhaseStartedRef = useRef(false);
   const deferredWarmupStartedRef = useRef(false);
+  const persistedSettings = useMemo(loadPersistedSettings, []);
   const deferredManifest = useMemo(
     () => createDeferredBootPreloadManifest(sharedAudioManager),
     [],
@@ -138,6 +140,7 @@ function App() {
       {loadingOverlayVisible ? (
         <LoadingScreen
           canDismiss={canDismiss}
+          musicVolume={persistedSettings.audioVolumes.music}
           onMainPhaseStart={handleMainPhaseStart}
           onFadeOutStart={handleFadeOutStart}
           onComplete={handleOverlayComplete}

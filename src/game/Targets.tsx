@@ -1,4 +1,11 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type MutableRefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -11,6 +18,7 @@ import type { TargetState } from "./types";
 import {
   type CharacterModelOverride,
   applyCharacterTextures,
+  normalizeBoneName,
   remapAnimationClip,
   removeRootMotion,
 } from "./scene/CharacterModel";
@@ -23,6 +31,7 @@ type TargetsProps = {
   loadCharacterAsset?: boolean;
   onReadyChange?: (ready: boolean) => void;
   characterOverride?: CharacterModelOverride;
+  visualRegistryRef?: TargetVisualRegistryRef;
 };
 
 export type TargetRaycastHit = {
@@ -35,12 +44,32 @@ export type TargetRaycastHit = {
 
 export type TargetHitZone = "head" | "body" | "leg";
 
+export type TargetLandmarks = {
+  head: THREE.Bone;
+  neck: THREE.Bone;
+  hips: THREE.Bone;
+  leftUpperLeg: THREE.Bone;
+  rightUpperLeg: THREE.Bone;
+};
+
+export type TargetVisualHandle = {
+  targetId: string;
+  root: THREE.Group;
+  shootableMeshes: THREE.Mesh[];
+  landmarks: TargetLandmarks;
+};
+
+export type TargetVisualRegistryRef = MutableRefObject<
+  Map<string, TargetVisualHandle>
+>;
+
 const DAMAGE_PER_SHOT = 25;
 const RESPAWN_DELAY_MS = 2000;
 const T = PRACTICE_TARGET_HEIGHT;
 const TARGET_HP_BAR_Y = 1.32 * T;
 export const TARGET_DUMMY_GROUP_SCALE_MIN = 0.82;
 export const TARGET_DUMMY_GROUP_SCALE_REVEAL = 0.18;
+const TARGET_VISUAL_SKINNED_BOUND_RADIUS_SCALE = 1.5;
 
 export function targetDummyGroupScale(reveal: number) {
   return TARGET_DUMMY_GROUP_SCALE_MIN + reveal * TARGET_DUMMY_GROUP_SCALE_REVEAL;
@@ -66,14 +95,25 @@ type TargetHitboxPart =
 const TARGET_COLLISION_RADIUS = 0.35;
 
 const TARGET_HITBOX_PARTS: TargetHitboxPart[] = [
-  // ── Head (2 parts) ──
-  // Skull sphere – extends above model top so the crown is always shootable
+  // ── Head (3 parts) ──
+  // The Trooper FBX head sits lower than the old sphere expected, so keep
+  // face/jaw coverage slightly lower and wider to match the visible mask.
+  // Helmet / upper skull
   {
     kind: "sphere",
     hitbox: {
       zone: "head",
-      center: [0, 0.945 * T, 0.015 * T],
-      radius: 0.085 * T,
+      center: [0, 0.915 * T, 0.015 * T],
+      radius: 0.095 * T,
+    },
+  },
+  // Face / visor
+  {
+    kind: "box",
+    hitbox: {
+      zone: "head",
+      center: [0, 0.875 * T, 0.01 * T],
+      halfSize: [0.075 * T, 0.055 * T, 0.08 * T],
     },
   },
   // Neck / jaw bridge
@@ -81,8 +121,8 @@ const TARGET_HITBOX_PARTS: TargetHitboxPart[] = [
     kind: "box",
     hitbox: {
       zone: "head",
-      center: [0, 0.845 * T, 0.02 * T],
-      halfSize: [0.055 * T, 0.03 * T, 0.055 * T],
+      center: [0, 0.81 * T, 0.015 * T],
+      halfSize: [0.055 * T, 0.03 * T, 0.06 * T],
     },
   },
   // ── Body (4 parts) – tight torso, no arm-gap overshoot ──
@@ -194,6 +234,98 @@ function getTrackProperty(trackName: string) {
   return dotIdx <= 0 ? "" : trackName.slice(dotIdx);
 }
 
+function resolveTargetLandmarkKey(
+  normalizedBoneName: string,
+): keyof TargetLandmarks | null {
+  switch (normalizedBoneName) {
+    case "head":
+      return "head";
+    case "neck":
+      return "neck";
+    case "hips":
+    case "pelvis":
+      return "hips";
+    case "l_upper_leg":
+    case "leftupleg":
+    case "left_upper_leg":
+    case "upleg_l":
+    case "thigh_l":
+    case "lthigh":
+      return "leftUpperLeg";
+    case "r_upper_leg":
+    case "rightupleg":
+    case "right_upper_leg":
+    case "upleg_r":
+    case "thigh_r":
+    case "rthigh":
+      return "rightUpperLeg";
+    default:
+      return null;
+  }
+}
+
+function resolveTargetVisualHandle(
+  targetId: string,
+  root: THREE.Group,
+  characterInstance: THREE.Group,
+): TargetVisualHandle | null {
+  const shootableMeshes: THREE.Mesh[] = [];
+  const landmarks: Partial<TargetLandmarks> = {};
+
+  root.updateWorldMatrix(true, true);
+  characterInstance.traverse((child) => {
+    if ((child as THREE.Mesh).isMesh) {
+      const mesh = child as THREE.Mesh;
+      if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) {
+        const skinnedMesh = mesh as THREE.SkinnedMesh;
+        skinnedMesh.frustumCulled = false;
+        skinnedMesh.computeBoundingSphere();
+        if (skinnedMesh.boundingSphere) {
+          skinnedMesh.boundingSphere.radius *=
+            TARGET_VISUAL_SKINNED_BOUND_RADIUS_SCALE;
+        }
+      }
+      shootableMeshes.push(mesh);
+    }
+
+    if (!(child as THREE.Bone).isBone) {
+      return;
+    }
+
+    const key = resolveTargetLandmarkKey(
+      normalizeBoneName((child as THREE.Bone).name).toLowerCase(),
+    );
+    if (!key || landmarks[key]) {
+      return;
+    }
+    landmarks[key] = child as THREE.Bone;
+  });
+
+  if (
+    shootableMeshes.length === 0 ||
+    !landmarks.head ||
+    !landmarks.neck ||
+    !landmarks.hips ||
+    !landmarks.leftUpperLeg ||
+    !landmarks.rightUpperLeg
+  ) {
+    return null;
+  }
+
+  return {
+    targetId,
+    root,
+    shootableMeshes,
+    landmarks: {
+      head: landmarks.head,
+      neck: landmarks.neck,
+      hips: landmarks.hips,
+      leftUpperLeg: landmarks.leftUpperLeg,
+      rightUpperLeg: landmarks.rightUpperLeg,
+    },
+  };
+}
+
 type TargetCharacterAsset = {
   model: THREE.Group | null;
   idleClip: THREE.AnimationClip | null;
@@ -262,6 +394,14 @@ const _tempAabbFarNormal = new THREE.Vector3();
 const _tempAabbPoint = new THREE.Vector3();
 const _tempTargetLocalOrigin = new THREE.Vector3();
 const _tempTargetLocalDirection = new THREE.Vector3();
+const _tempVisualPointLocal = new THREE.Vector3();
+const _tempVisualHeadLocal = new THREE.Vector3();
+const _tempVisualNeckLocal = new THREE.Vector3();
+const _tempVisualHipsLocal = new THREE.Vector3();
+const _tempVisualLeftUpperLegLocal = new THREE.Vector3();
+const _tempVisualRightUpperLegLocal = new THREE.Vector3();
+const _tempVisualHitNormal = new THREE.Vector3();
+const _tempVisualHitNormalMatrix = new THREE.Matrix3();
 
 function transformTargetHit(
   hit: TargetRaycastHit,
@@ -356,6 +496,127 @@ export function raycastTargets(
   }
 
   return closestHit;
+}
+
+function classifyTargetVisualZone(
+  handle: TargetVisualHandle,
+  pointWorld: THREE.Vector3,
+): TargetHitZone {
+  handle.root.updateWorldMatrix(true, true);
+
+  const pointLocal = handle.root.worldToLocal(_tempVisualPointLocal.copy(pointWorld));
+  const headLocal = handle.root.worldToLocal(
+    handle.landmarks.head.getWorldPosition(_tempVisualHeadLocal),
+  );
+  const neckLocal = handle.root.worldToLocal(
+    handle.landmarks.neck.getWorldPosition(_tempVisualNeckLocal),
+  );
+  const hipsLocal = handle.root.worldToLocal(
+    handle.landmarks.hips.getWorldPosition(_tempVisualHipsLocal),
+  );
+  const leftUpperLegLocal = handle.root.worldToLocal(
+    handle.landmarks.leftUpperLeg.getWorldPosition(_tempVisualLeftUpperLegLocal),
+  );
+  const rightUpperLegLocal = handle.root.worldToLocal(
+    handle.landmarks.rightUpperLeg.getWorldPosition(_tempVisualRightUpperLegLocal),
+  );
+
+  const headThresholdY = (neckLocal.y + headLocal.y) * 0.5;
+  const upperLegAverageY = (leftUpperLegLocal.y + rightUpperLegLocal.y) * 0.5;
+  const legThresholdY = (hipsLocal.y + upperLegAverageY) * 0.5;
+
+  if (pointLocal.y >= headThresholdY) {
+    return "head";
+  }
+  if (pointLocal.y <= legThresholdY) {
+    return "leg";
+  }
+  return "body";
+}
+
+export function raycastVisibleTargets(
+  origin: THREE.Vector3,
+  direction: THREE.Vector3,
+  targets: TargetState[],
+  visualRegistry: Map<string, TargetVisualHandle>,
+  raycaster: THREE.Raycaster,
+  maxDistance = Number.POSITIVE_INFINITY,
+  targetVisualScale = 1,
+): TargetRaycastHit | null {
+  if (maxDistance <= 0) {
+    return null;
+  }
+
+  const shootableMeshes: THREE.Object3D[] = [];
+  const handleByMesh = new Map<THREE.Object3D, TargetVisualHandle>();
+
+  for (const target of targets) {
+    if (target.disabled) {
+      continue;
+    }
+
+    const handle = visualRegistry.get(target.id);
+    if (!handle || !handle.root.visible) {
+      continue;
+    }
+
+    handle.root.updateWorldMatrix(true, true);
+    for (const mesh of handle.shootableMeshes) {
+      if (!mesh.visible) {
+        continue;
+      }
+      shootableMeshes.push(mesh);
+      handleByMesh.set(mesh, handle);
+    }
+  }
+
+  let visualHit: TargetRaycastHit | null = null;
+  if (shootableMeshes.length > 0) {
+    raycaster.near = 0;
+    raycaster.far = maxDistance;
+    raycaster.set(origin, direction);
+    const intersections = raycaster.intersectObjects(shootableMeshes, false);
+
+    for (const intersection of intersections) {
+      if (intersection.distance <= 0 || intersection.distance > maxDistance) {
+        continue;
+      }
+
+      const handle = handleByMesh.get(intersection.object);
+      if (!handle) {
+        continue;
+      }
+
+      if (intersection.face) {
+        _tempVisualHitNormal.copy(intersection.face.normal);
+        _tempVisualHitNormalMatrix.getNormalMatrix(intersection.object.matrixWorld);
+        _tempVisualHitNormal.applyMatrix3(_tempVisualHitNormalMatrix).normalize();
+      } else {
+        _tempVisualHitNormal.set(0, 1, 0);
+      }
+
+      visualHit = {
+        id: handle.targetId,
+        zone: classifyTargetVisualZone(handle, intersection.point),
+        point: intersection.point.clone(),
+        normal: _tempVisualHitNormal.clone(),
+        distance: intersection.distance,
+      };
+      break;
+    }
+  }
+
+  if (visualHit) {
+    return visualHit;
+  }
+
+  return raycastTargets(
+    origin,
+    direction,
+    targets,
+    maxDistance,
+    targetVisualScale,
+  );
 }
 
 function raycastSpherePart(
@@ -626,11 +887,13 @@ const TargetDummy = memo(function TargetDummy({
   shadows,
   reveal,
   characterAsset,
+  visualRegistryRef,
 }: {
   target: TargetState;
   shadows: boolean;
   reveal: number;
   characterAsset: TargetCharacterAsset;
+  visualRegistryRef?: TargetVisualRegistryRef;
 }) {
   const [x, baseY, z] = target.position;
   const now = performance.now();
@@ -685,6 +948,33 @@ const TargetDummy = memo(function TargetDummy({
     });
   }, [characterInstance, isHit, reveal, shadows]);
 
+  useEffect(() => {
+    const registry = visualRegistryRef?.current;
+    const root = groupRef.current;
+    if (!registry) {
+      return;
+    }
+
+    if (!root || !characterInstance) {
+      registry.delete(target.id);
+      return;
+    }
+
+    const handle = resolveTargetVisualHandle(target.id, root, characterInstance);
+    if (handle) {
+      registry.set(target.id, handle);
+    } else {
+      registry.delete(target.id);
+    }
+
+    return () => {
+      const current = registry.get(target.id);
+      if (current?.root === root) {
+        registry.delete(target.id);
+      }
+    };
+  }, [characterInstance, target.id, visualRegistryRef]);
+
   useFrame((_, delta) => {
     if (reveal <= 0.01 || target.disabled) return;
     characterMixerRef.current?.update(delta);
@@ -732,6 +1022,7 @@ export function Targets({
   loadCharacterAsset = true,
   onReadyChange,
   characterOverride,
+  visualRegistryRef,
 }: TargetsProps) {
   const characterAsset = useTargetCharacterAsset(loadCharacterAsset, characterOverride);
   const assetReady = characterAsset.ready;
@@ -749,6 +1040,7 @@ export function Targets({
           shadows={shadows}
           reveal={reveal}
           characterAsset={characterAsset}
+          visualRegistryRef={visualRegistryRef}
         />
       ))}
     </group>

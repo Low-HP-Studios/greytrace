@@ -3,6 +3,7 @@ import type { WeaponKind } from "./Weapon";
 
 export type AudioVolumeSettings = {
   master: number;
+  music: number;
   gunshot: number;
   footsteps: number;
   hit: number;
@@ -102,6 +103,7 @@ const AUDIO_URL_CANDIDATES = {
 
 export const DEFAULT_AUDIO_VOLUMES: AudioVolumeSettings = {
   master: 0.5,
+  music: 0.2,
   gunshot: 1,
   footsteps: 1,
   hit: 1,

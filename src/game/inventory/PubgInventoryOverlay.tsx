@@ -236,8 +236,13 @@ export function PubgInventoryOverlay({
 
           <div className="inventory-weapon-blocks">
             {(["primary", "secondary"] as const).map((weaponSlot) => {
-              const isActive = (weaponSlot === "primary" && player.weaponLoadout.activeSlot === "slotA") ||
-                (weaponSlot === "secondary" && player.weaponLoadout.activeSlot === "slotB");
+              const isActive = player.weaponLoadout.weaponRaised &&
+                (
+                  (weaponSlot === "primary" &&
+                    player.weaponLoadout.activeSlot === "slotA") ||
+                  (weaponSlot === "secondary" &&
+                    player.weaponLoadout.activeSlot === "slotB")
+                );
               return (
                 <div
                   key={weaponSlot}

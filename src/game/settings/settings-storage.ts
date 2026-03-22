@@ -347,6 +347,7 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
         jump: readString(keybinds.jump, defaults.settings.keybinds.jump),
         pickup: readString(keybinds.pickup, defaults.settings.keybinds.pickup),
         drop: readString(keybinds.drop, defaults.settings.keybinds.drop),
+        unarm: readString(keybinds.unarm, defaults.settings.keybinds.unarm),
         reload: parsedReloadBinding,
         reset: migratedResetBinding,
         tab: parsedTabBinding,
@@ -715,6 +716,12 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
         0,
         1,
         defaults.audioVolumes.master,
+      ),
+      music: readClampedNumber(
+        migratePercent(audioVolumes.music),
+        0,
+        1,
+        defaults.audioVolumes.music,
       ),
       gunshot: readClampedNumber(
         audioVolumes.gunshot,
