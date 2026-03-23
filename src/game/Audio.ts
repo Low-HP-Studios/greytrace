@@ -58,7 +58,7 @@ const AUDIO_DEBUG = import.meta.env.DEV;
 const TARGET_FOOTSTEP_PEAK = 0.12;
 const MAX_FOOTSTEP_FILE_GAIN = 12;
 const FOOTSTEP_MAX_SECONDS = 0.32;
-const RIFLE_SHOT_MAX_SECONDS = 0.45;
+const RIFLE_SHOT_FADE_TAIL_SECONDS = 0.12;
 const SNIPER_SHOT_FADE_TAIL_SECONDS = 0.18;
 const FOOTSTEP_BUFFER_KEYS: readonly FootstepBufferKey[] = [
   "footstepLeft",
@@ -95,7 +95,7 @@ const AUDIO_URL_CANDIDATES = {
     "/assets/audio/improved/gun-sound.wav",
   ],
   sniperShot: [
-    "/assets/audio/improved/sniper/sniper-shot.mp3",
+    "/assets/audio/improved/sniper/sniper-shot.wav",
     "/assets/audio/sniper-shooting.mp3",
     "/assets/audio/sniper-shooting.ogg",
     "/assets/audio/sniper-shooting.wav",
@@ -104,16 +104,16 @@ const AUDIO_URL_CANDIDATES = {
     "/assets/audio/sniper-shoot.wav",
   ],
   sniperShell: [
-    "/assets/audio/improved/sniper/sniper-shelling.mp3",
+    "/assets/audio/improved/sniper/sniper-shelling.wav",
     "/assets/audio/sniper-shelling.mp3",
     "/assets/audio/sniper-shelling.ogg",
     "/assets/audio/sniper-shelling.wav",
   ],
   rifleReload: [
-    "/assets/audio/improved/rifle/rifle-reloading.mp3",
+    "/assets/audio/improved/rifle/rifle-reloading.wav",
   ],
   sniperReload: [
-    "/assets/audio/improved/sniper/sniper-reloading.mp3",
+    "/assets/audio/improved/sniper/sniper-reloading.wav",
   ],
   dryFire: [
     "/assets/audio/improved/fire-empty-gun.mp3",
@@ -151,11 +151,11 @@ const AUDIO_URL_CANDIDATES = {
 
 export const DEFAULT_AUDIO_VOLUMES: AudioVolumeSettings = {
   master: 0.5,
-  music: 0.2,
+  music: 0.1,
   gunshot: 1,
-  footsteps: 1,
+  footsteps: 0.1,
   hit: 1,
-  ui: 0.7,
+  ui: 0.5,
 };
 
 export class AudioManager {
@@ -367,9 +367,7 @@ export class AudioManager {
           ? 1
           : 0.96 + Math.random() * 0.1;
       source.connect(voice);
-      const playbackSeconds = kind === "sniper"
-        ? source.buffer.duration
-        : Math.min(RIFLE_SHOT_MAX_SECONDS, source.buffer.duration);
+      const playbackSeconds = source.buffer.duration;
       voice.gain.setValueAtTime(1, now);
       if (kind === "sniper") {
         voice.gain.setValueAtTime(
@@ -381,7 +379,14 @@ export class AudioManager {
           now + playbackSeconds,
         );
       } else {
-        voice.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+        voice.gain.setValueAtTime(
+          1,
+          now + Math.max(0, playbackSeconds - RIFLE_SHOT_FADE_TAIL_SECONDS),
+        );
+        voice.gain.exponentialRampToValueAtTime(
+          0.0001,
+          now + playbackSeconds,
+        );
       }
       source.start(now);
       source.stop(now + playbackSeconds);
