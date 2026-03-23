@@ -736,6 +736,7 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
         defaults.audioVolumes.footsteps,
       ),
       hit: readClampedNumber(audioVolumes.hit, 0, 1, defaults.audioVolumes.hit),
+      ui: readClampedNumber(audioVolumes.ui, 0, 1, defaults.audioVolumes.ui),
     },
   };
 }

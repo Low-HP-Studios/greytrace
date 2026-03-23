@@ -8,7 +8,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
-import { type AudioVolumeSettings } from "./Audio";
+import { sharedAudioManager, type AudioVolumeSettings } from "./Audio";
 import { preloadPracticeMapAssets } from "./boot-assets";
 import { getCharacterById } from "./characters";
 import { ExperienceMenuOverlay } from "./ExperienceMenuOverlay";
@@ -121,6 +121,21 @@ function resolveKillPulseAmount(progress: number) {
   return 1 - easeInOutCubic((progress - 0.35) / 0.65);
 }
 
+function resolveUiAudioButton(target: EventTarget | null) {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const button = target.closest("button");
+  return button instanceof HTMLButtonElement ? button : null;
+}
+
+function isUiAudioButtonEnabled(button: HTMLButtonElement) {
+  return !button.disabled &&
+    button.getAttribute("aria-disabled") !== "true" &&
+    !button.classList.contains("locked");
+}
+
 function isLoadoutSlotEqual(
   previous: PlayerSnapshot["weaponLoadout"]["slotA"],
   next: PlayerSnapshot["weaponLoadout"]["slotA"],
@@ -210,6 +225,7 @@ export function GameRoot({
   onSceneBootReady,
 }: GameRootProps) {
   const persistedSettings = useMemo(loadPersistedSettings, []);
+  const appShellRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
   const settingsModalRef = useRef<HTMLDivElement | null>(null);
   const [settings, setSettings] = useState<GameSettings>(
@@ -947,6 +963,52 @@ export function GameRoot({
   ]);
 
   useEffect(() => {
+    sharedAudioManager.setVolumes(audioVolumes);
+  }, [audioVolumes]);
+
+  useEffect(() => {
+    const appShell = appShellRef.current;
+    if (!appShell) {
+      return;
+    }
+
+    const handlePointerOver = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") {
+        return;
+      }
+
+      const button = resolveUiAudioButton(event.target);
+      if (!button || !isUiAudioButtonEnabled(button)) {
+        return;
+      }
+
+      const previousButton = resolveUiAudioButton(event.relatedTarget);
+      if (button === previousButton) {
+        return;
+      }
+
+      sharedAudioManager.playUiHover();
+    };
+
+    const handleClick = (event: MouseEvent) => {
+      const button = resolveUiAudioButton(event.target);
+      if (!button || !isUiAudioButtonEnabled(button)) {
+        return;
+      }
+
+      sharedAudioManager.playUiPress();
+    };
+
+    appShell.addEventListener("pointerover", handlePointerOver, true);
+    appShell.addEventListener("click", handleClick, true);
+
+    return () => {
+      appShell.removeEventListener("pointerover", handlePointerOver, true);
+      appShell.removeEventListener("click", handleClick, true);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!bindingCapture) {
       return;
     }
@@ -1188,6 +1250,7 @@ export function GameRoot({
   const uiOverlayClassName = "ui-overlay";
   return (
     <div
+      ref={appShellRef}
       className={`app-shell ${
         showInventoryOverlay ? "inventory-open" : isGameplayPaused ? "paused" : "playing"
       } phase-${phase}`}
@@ -2028,6 +2091,15 @@ export function GameRoot({
                                 setAudioVolumes((prev) => ({
                                   ...prev,
                                   hit: value,
+                                }))}
+                            />
+                            <VolumeSlider
+                              label="UI"
+                              value={audioVolumes.ui}
+                              onChange={(value) =>
+                                setAudioVolumes((prev) => ({
+                                  ...prev,
+                                  ui: value,
                                 }))}
                             />
                           </MenuSection>

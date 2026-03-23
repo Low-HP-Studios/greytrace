@@ -30,9 +30,14 @@ const DEFERRED_AUDIO_KEYS: readonly AudioBufferKey[] = [
   "rifleReload",
   "sniperReload",
   "dryFire",
-  "footstep",
+  "footstepLeft",
+  "footstepRight",
+  "footstepSometimes",
+  "crouchEnter",
   "kill",
   "hit",
+  "uiHover",
+  "uiPress",
 ];
 
 const AUDIO_LABELS: Record<AudioBufferKey, string> = {
@@ -42,9 +47,14 @@ const AUDIO_LABELS: Record<AudioBufferKey, string> = {
   rifleReload: "Rifle reload audio",
   sniperReload: "Sniper reload audio",
   dryFire: "Dry fire audio",
-  footstep: "Footstep audio",
+  footstepLeft: "Left footstep audio",
+  footstepRight: "Right footstep audio",
+  footstepSometimes: "Rare footstep audio",
+  crouchEnter: "Crouch enter audio",
   kill: "Kill sound",
   hit: "Hit sound",
+  uiHover: "UI hover audio",
+  uiPress: "UI press audio",
 };
 
 const AUDIO_WEIGHTS: Record<AudioBufferKey, number> = {
@@ -54,9 +64,14 @@ const AUDIO_WEIGHTS: Record<AudioBufferKey, number> = {
   rifleReload: 1.1,
   sniperReload: 1.1,
   dryFire: 0.9,
-  footstep: 1.6,
+  footstepLeft: 0.8,
+  footstepRight: 0.8,
+  footstepSometimes: 0.8,
+  crouchEnter: 0.8,
   kill: 1.0,
   hit: 0.8,
+  uiHover: 0.45,
+  uiPress: 0.45,
 };
 
 export function createDeferredBootPreloadManifest(
