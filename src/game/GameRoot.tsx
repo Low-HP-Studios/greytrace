@@ -8,7 +8,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
-import { type AudioVolumeSettings } from "./Audio";
+import { sharedAudioManager, type AudioVolumeSettings } from "./Audio";
 import { preloadPracticeMapAssets } from "./boot-assets";
 import { getCharacterById } from "./characters";
 import { ExperienceMenuOverlay } from "./ExperienceMenuOverlay";
@@ -35,7 +35,6 @@ import type { SniperRechamberState, WeaponKind } from "./Weapon";
 import {
   DEFAULT_PERF_METRICS,
   DEFAULT_PLAYER_SNAPSHOT,
-  DEFAULT_WEAPON_RECOIL_PROFILES,
   type CrosshairColor,
   type ExperiencePhase,
   type GameSettings,
@@ -119,6 +118,21 @@ function resolveKillPulseAmount(progress: number) {
     return easeInOutCubic(progress / 0.35);
   }
   return 1 - easeInOutCubic((progress - 0.35) / 0.65);
+}
+
+function resolveUiAudioButton(target: EventTarget | null) {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const button = target.closest("button");
+  return button instanceof HTMLButtonElement ? button : null;
+}
+
+function isUiAudioButtonEnabled(button: HTMLButtonElement) {
+  return !button.disabled &&
+    button.getAttribute("aria-disabled") !== "true" &&
+    !button.classList.contains("locked");
 }
 
 function isLoadoutSlotEqual(
@@ -210,6 +224,7 @@ export function GameRoot({
   onSceneBootReady,
 }: GameRootProps) {
   const persistedSettings = useMemo(loadPersistedSettings, []);
+  const appShellRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
   const settingsModalRef = useRef<HTMLDivElement | null>(null);
   const [settings, setSettings] = useState<GameSettings>(
@@ -947,6 +962,52 @@ export function GameRoot({
   ]);
 
   useEffect(() => {
+    sharedAudioManager.setVolumes(audioVolumes);
+  }, [audioVolumes]);
+
+  useEffect(() => {
+    const appShell = appShellRef.current;
+    if (!appShell) {
+      return;
+    }
+
+    const handlePointerOver = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") {
+        return;
+      }
+
+      const button = resolveUiAudioButton(event.target);
+      if (!button || !isUiAudioButtonEnabled(button)) {
+        return;
+      }
+
+      const previousButton = resolveUiAudioButton(event.relatedTarget);
+      if (button === previousButton) {
+        return;
+      }
+
+      sharedAudioManager.playUiHover();
+    };
+
+    const handleClick = (event: MouseEvent) => {
+      const button = resolveUiAudioButton(event.target);
+      if (!button || !isUiAudioButtonEnabled(button)) {
+        return;
+      }
+
+      sharedAudioManager.playUiPress();
+    };
+
+    appShell.addEventListener("pointerover", handlePointerOver, true);
+    appShell.addEventListener("click", handleClick, true);
+
+    return () => {
+      appShell.removeEventListener("pointerover", handlePointerOver, true);
+      appShell.removeEventListener("click", handleClick, true);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!bindingCapture) {
       return;
     }
@@ -1188,6 +1249,7 @@ export function GameRoot({
   const uiOverlayClassName = "ui-overlay";
   return (
     <div
+      ref={appShellRef}
       className={`app-shell ${
         showInventoryOverlay ? "inventory-open" : isGameplayPaused ? "paused" : "playing"
       } phase-${phase}`}
@@ -1676,255 +1738,6 @@ export function GameRoot({
 
 
                           <MenuSection
-                            title="Weapon Recoil Tuning"
-                            blurb="Tune recoil and movement spread for rifle and sniper. Values apply immediately."
-                          >
-                            <div className="settings-chip-wrap">
-                              <span className="pill-chip">Rifle Recoil</span>
-                            </div>
-                            <RangeField
-                              label="Rifle Pitch Base"
-                              value={settings.weaponRecoilProfiles.rifle.recoilPitchBase}
-                              min={0}
-                              max={0.25}
-                              step={0.0001}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  weaponRecoilProfiles: {
-                                    ...prev.weaponRecoilProfiles,
-                                    rifle: {
-                                      ...prev.weaponRecoilProfiles.rifle,
-                                      recoilPitchBase: value,
-                                    },
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Rifle Pitch Ramp"
-                              value={settings.weaponRecoilProfiles.rifle.recoilPitchRamp}
-                              min={0}
-                              max={0.02}
-                              step={0.00001}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  weaponRecoilProfiles: {
-                                    ...prev.weaponRecoilProfiles,
-                                    rifle: {
-                                      ...prev.weaponRecoilProfiles.rifle,
-                                      recoilPitchRamp: value,
-                                    },
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Rifle Yaw Range"
-                              value={settings.weaponRecoilProfiles.rifle.recoilYawRange}
-                              min={0}
-                              max={0.15}
-                              step={0.0001}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  weaponRecoilProfiles: {
-                                    ...prev.weaponRecoilProfiles,
-                                    rifle: {
-                                      ...prev.weaponRecoilProfiles.rifle,
-                                      recoilYawRange: value,
-                                    },
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Rifle Yaw Drift"
-                              value={settings.weaponRecoilProfiles.rifle.recoilYawDrift}
-                              min={0}
-                              max={0.02}
-                              step={0.00001}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  weaponRecoilProfiles: {
-                                    ...prev.weaponRecoilProfiles,
-                                    rifle: {
-                                      ...prev.weaponRecoilProfiles.rifle,
-                                      recoilYawDrift: value,
-                                    },
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Rifle Move Spread Base"
-                              value={settings.weaponRecoilProfiles.rifle.moveSpreadBase}
-                              min={0}
-                              max={1}
-                              step={0.01}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  weaponRecoilProfiles: {
-                                    ...prev.weaponRecoilProfiles,
-                                    rifle: {
-                                      ...prev.weaponRecoilProfiles.rifle,
-                                      moveSpreadBase: value,
-                                    },
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Rifle Move Spread Sprint"
-                              value={settings.weaponRecoilProfiles.rifle.moveSpreadSprint}
-                              min={0}
-                              max={1}
-                              step={0.01}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  weaponRecoilProfiles: {
-                                    ...prev.weaponRecoilProfiles,
-                                    rifle: {
-                                      ...prev.weaponRecoilProfiles.rifle,
-                                      moveSpreadSprint: value,
-                                    },
-                                  },
-                                }))}
-                            />
-
-                            <div className="settings-chip-wrap">
-                              <span className="pill-chip">Sniper Recoil</span>
-                            </div>
-                            <RangeField
-                              label="Sniper Pitch Base"
-                              value={settings.weaponRecoilProfiles.sniper.recoilPitchBase}
-                              min={0}
-                              max={0.5}
-                              step={0.001}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  weaponRecoilProfiles: {
-                                    ...prev.weaponRecoilProfiles,
-                                    sniper: {
-                                      ...prev.weaponRecoilProfiles.sniper,
-                                      recoilPitchBase: value,
-                                    },
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Sniper Pitch Ramp"
-                              value={settings.weaponRecoilProfiles.sniper.recoilPitchRamp}
-                              min={0}
-                              max={0.04}
-                              step={0.0001}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  weaponRecoilProfiles: {
-                                    ...prev.weaponRecoilProfiles,
-                                    sniper: {
-                                      ...prev.weaponRecoilProfiles.sniper,
-                                      recoilPitchRamp: value,
-                                    },
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Sniper Yaw Range"
-                              value={settings.weaponRecoilProfiles.sniper.recoilYawRange}
-                              min={0}
-                              max={1}
-                              step={0.001}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  weaponRecoilProfiles: {
-                                    ...prev.weaponRecoilProfiles,
-                                    sniper: {
-                                      ...prev.weaponRecoilProfiles.sniper,
-                                      recoilYawRange: value,
-                                    },
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Sniper Yaw Drift"
-                              value={settings.weaponRecoilProfiles.sniper.recoilYawDrift}
-                              min={0}
-                              max={0.02}
-                              step={0.0001}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  weaponRecoilProfiles: {
-                                    ...prev.weaponRecoilProfiles,
-                                    sniper: {
-                                      ...prev.weaponRecoilProfiles.sniper,
-                                      recoilYawDrift: value,
-                                    },
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Sniper Move Spread Base"
-                              value={settings.weaponRecoilProfiles.sniper.moveSpreadBase}
-                              min={0}
-                              max={1}
-                              step={0.01}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  weaponRecoilProfiles: {
-                                    ...prev.weaponRecoilProfiles,
-                                    sniper: {
-                                      ...prev.weaponRecoilProfiles.sniper,
-                                      moveSpreadBase: value,
-                                    },
-                                  },
-                                }))}
-                            />
-                            <RangeField
-                              label="Sniper Move Spread Sprint"
-                              value={settings.weaponRecoilProfiles.sniper.moveSpreadSprint}
-                              min={0}
-                              max={1}
-                              step={0.01}
-                              onChange={(value) =>
-                                setSettings((prev) => ({
-                                  ...prev,
-                                  weaponRecoilProfiles: {
-                                    ...prev.weaponRecoilProfiles,
-                                    sniper: {
-                                      ...prev.weaponRecoilProfiles.sniper,
-                                      moveSpreadSprint: value,
-                                    },
-                                  },
-                                }))}
-                            />
-                            <div className="settings-chip-wrap">
-                              <button
-                                type="button"
-                                className="btn"
-                                onClick={() =>
-                                  setSettings((prev) => ({
-                                    ...prev,
-                                    weaponRecoilProfiles: {
-                                      rifle: {
-                                        ...DEFAULT_WEAPON_RECOIL_PROFILES.rifle,
-                                      },
-                                      sniper: {
-                                        ...DEFAULT_WEAPON_RECOIL_PROFILES.sniper,
-                                      },
-                                    },
-                                  }))}
-                              >
-                                Reset Recoil Tuning
-                              </button>
-                            </div>
-                          </MenuSection>
-
-                          <MenuSection
                             title="Settings Profile JSON"
                             blurb="Copy your full profile or import someone else's object for instant presets."
                           >
@@ -2028,6 +1841,15 @@ export function GameRoot({
                                 setAudioVolumes((prev) => ({
                                   ...prev,
                                   hit: value,
+                                }))}
+                            />
+                            <VolumeSlider
+                              label="UI"
+                              value={audioVolumes.ui}
+                              onChange={(value) =>
+                                setAudioVolumes((prev) => ({
+                                  ...prev,
+                                  ui: value,
                                 }))}
                             />
                           </MenuSection>

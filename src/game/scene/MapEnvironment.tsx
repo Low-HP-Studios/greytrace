@@ -627,12 +627,95 @@ function SchoolBlockoutEnvironment({
 
 const MIN_WALL_HEIGHT = 0.5;
 const MIN_WALL_TOP_Y = 0.3;
+const FLOOR_LIKE_MAX_HEIGHT = 0.55;
+const FLOOR_LIKE_MIN_SPAN = 2;
+const LARGE_HULL_MIN_SPAN = 10;
+const LARGE_HULL_MIN_HEIGHT = 4;
+const WALL_LIKE_MAX_THIN_AXIS = 1.35;
+const WALL_LIKE_MIN_LONG_AXIS = 2;
+const GENERIC_CUBE_PROP_MIN_SPAN = 2;
+const GENERIC_CUBE_PROP_MAX_SPAN = 4.5;
+const GENERIC_CUBE_PROP_MAX_HEIGHT = 4.5;
+const GENERIC_CUBE_PROP_MAX_TOP_Y = 6.5;
+const SCHOOL_COLLISION_IGNORE_RE =
+  /^(outerground|plane|circle|cylinder)/i;
+const SCHOOL_COLLISION_DIRECT_INCLUDE_RE =
+  /(wall_firstage|container|trafficbarrier|concrete_barrier|pallet|barricade|table|wood|car|tent)/i;
+
+function collapseSchoolCollisionName(name: string) {
+  return name.replace(/_\d+$/u, "");
+}
+
+function isFloorLikeVolume(size: THREE.Vector3) {
+  return (
+    size.y <= FLOOR_LIKE_MAX_HEIGHT &&
+    Math.max(size.x, size.z) >= FLOOR_LIKE_MIN_SPAN
+  );
+}
+
+function isLargeHullVolume(size: THREE.Vector3) {
+  return (
+    size.x >= LARGE_HULL_MIN_SPAN &&
+    size.z >= LARGE_HULL_MIN_SPAN &&
+    size.y >= LARGE_HULL_MIN_HEIGHT
+  );
+}
+
+function isWallLikeVolume(size: THREE.Vector3) {
+  const thinAxis = Math.min(size.x, size.z);
+  const longAxis = Math.max(size.x, size.z);
+  return (
+    thinAxis <= WALL_LIKE_MAX_THIN_AXIS &&
+    longAxis >= WALL_LIKE_MIN_LONG_AXIS &&
+    size.y >= MIN_WALL_HEIGHT
+  );
+}
+
+function isGenericCubePropVolume(size: THREE.Vector3, box: THREE.Box3) {
+  return (
+    size.x >= GENERIC_CUBE_PROP_MIN_SPAN &&
+    size.z >= GENERIC_CUBE_PROP_MIN_SPAN &&
+    size.x <= GENERIC_CUBE_PROP_MAX_SPAN &&
+    size.z <= GENERIC_CUBE_PROP_MAX_SPAN &&
+    size.y <= GENERIC_CUBE_PROP_MAX_HEIGHT &&
+    box.max.y <= GENERIC_CUBE_PROP_MAX_TOP_Y
+  );
+}
+
+function shouldExtractCollisionVolume(
+  name: string,
+  size: THREE.Vector3,
+  box: THREE.Box3,
+) {
+  if (SCHOOL_COLLISION_IGNORE_RE.test(name)) {
+    return false;
+  }
+
+  if (isFloorLikeVolume(size)) {
+    return false;
+  }
+
+  if (SCHOOL_COLLISION_DIRECT_INCLUDE_RE.test(name)) {
+    return true;
+  }
+
+  if (!/^cube/i.test(name)) {
+    return false;
+  }
+
+  if (isLargeHullVolume(size)) {
+    return false;
+  }
+
+  return isWallLikeVolume(size) || isGenericCubePropVolume(size, box);
+}
 
 function extractCollisionVolumes(
   root: THREE.Object3D,
   scale: number,
 ): BlockingVolume[] {
   const volumes: BlockingVolume[] = [];
+  const mergedBoxes = new Map<string, THREE.Box3>();
   root.updateMatrixWorld(true);
 
   root.traverse((child) => {
@@ -647,12 +730,24 @@ function extractCollisionVolumes(
 
     box.min.multiplyScalar(scale);
     box.max.multiplyScalar(scale);
+    const collisionName = collapseSchoolCollisionName(mesh.name || "mesh");
+    const existingBox = mergedBoxes.get(collisionName);
 
+    if (existingBox) {
+      existingBox.union(box);
+      return;
+    }
+
+    mergedBoxes.set(collisionName, box.clone());
+  });
+
+  for (const [name, box] of mergedBoxes) {
     const size = new THREE.Vector3();
     box.getSize(size);
 
-    if (size.y < MIN_WALL_HEIGHT) return;
-    if (box.max.y < MIN_WALL_TOP_Y) return;
+    if (size.y < MIN_WALL_HEIGHT) continue;
+    if (box.max.y < MIN_WALL_TOP_Y) continue;
+    if (!shouldExtractCollisionVolume(name, size, box)) continue;
 
     const center = new THREE.Vector3();
     box.getCenter(center);
@@ -661,7 +756,7 @@ function extractCollisionVolumes(
       center: [center.x, center.y, center.z],
       size: [size.x, size.y, size.z],
     });
-  });
+  }
 
   return volumes;
 }

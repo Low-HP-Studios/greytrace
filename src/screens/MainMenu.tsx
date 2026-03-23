@@ -470,6 +470,8 @@ export function MainMenu({ onStartGame }: MainMenuProps) {
                         onChange={(value) => setAudioVolumes((prev) => ({ ...prev, footsteps: value }))} />
                       <VolumeSlider label="Hit / Kill" value={audioVolumes.hit}
                         onChange={(value) => setAudioVolumes((prev) => ({ ...prev, hit: value }))} />
+                      <VolumeSlider label="UI" value={audioVolumes.ui}
+                        onChange={(value) => setAudioVolumes((prev) => ({ ...prev, ui: value }))} />
                     </MenuSection>
                   </div>
                 )}

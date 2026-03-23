@@ -129,6 +129,8 @@ const GROUND_DECEL_RATE = 22;
 const DIRECTION_REVERSAL_DECEL_RATE = 30;
 const GROUND_STEP_UP_HEIGHT = 0.9;
 const GROUND_STEP_DOWN_HEIGHT = 1.8;
+const BLOCKING_TOP_EPSILON = 0.001;
+const BLOCKING_TOP_MIN_WIDTH = 1.1;
 
 const CAMERA_ARM_LENGTH = 2.25;
 const CAMERA_ARM_LENGTH_ADS = 0.0;
@@ -1045,17 +1047,36 @@ export function usePlayerController({
 
     const readGroundSample = () => {
       const surfaces = walkableSurfacesRef.current;
-      if (surfaces.length === 0) {
-        return undefined;
-      }
-
-      return sampleWalkableSurfaceHeight(
-        surfaces,
+      const surfaceHeight = surfaces.length > 0
+        ? sampleWalkableSurfaceHeight(
+            surfaces,
+            positionRef.current.x,
+            positionRef.current.z,
+            positionRef.current.y,
+            GROUND_STEP_UP_HEIGHT,
+          )
+        : null;
+      const blockingTopHeight = sampleBlockingVolumeTop(
+        blockingVolumesRef.current,
         positionRef.current.x,
         positionRef.current.z,
         positionRef.current.y,
         GROUND_STEP_UP_HEIGHT,
       );
+
+      if (surfaceHeight === null && blockingTopHeight === null) {
+        return undefined;
+      }
+
+      if (surfaceHeight === null) {
+        return blockingTopHeight ?? undefined;
+      }
+
+      if (blockingTopHeight === null) {
+        return surfaceHeight;
+      }
+
+      return Math.max(surfaceHeight, blockingTopHeight);
     };
 
     const nowJumpMs = performance.now();
@@ -1343,8 +1364,8 @@ export function usePlayerController({
         camera.position.copy(tppCameraPos).lerp(fppCameraPos, viewT);
       }
 
-      // Reset sniper zoom when not ADS or not sniper
-      if (!adsRef.current || activeWeapon !== 'sniper') {
+      // Preserve the dialed-in zoom while the player keeps the sniper equipped.
+      if (activeWeapon !== 'sniper') {
         sniperZoomRef.current = 1;
       }
 
@@ -1619,6 +1640,51 @@ function resolveBlockingVolumeCollisions(
       maxZ: volume.center[2] + volume.size[2] / 2,
     });
   }
+}
+
+function sampleBlockingVolumeTop(
+  blockingVolumes: readonly BlockingVolume[],
+  x: number,
+  z: number,
+  currentY: number,
+  maxStepUp = Number.POSITIVE_INFINITY,
+) {
+  let resolvedHeight: number | null = null;
+  const maxAllowedHeight = currentY + maxStepUp;
+
+  for (const volume of blockingVolumes) {
+    if (
+      volume.size[0] < BLOCKING_TOP_MIN_WIDTH ||
+      volume.size[2] < BLOCKING_TOP_MIN_WIDTH
+    ) {
+      continue;
+    }
+
+    const minX = volume.center[0] - volume.size[0] / 2;
+    const maxX = volume.center[0] + volume.size[0] / 2;
+    const minZ = volume.center[2] - volume.size[2] / 2;
+    const maxZ = volume.center[2] + volume.size[2] / 2;
+
+    if (
+      x < minX - BLOCKING_TOP_EPSILON ||
+      x > maxX + BLOCKING_TOP_EPSILON ||
+      z < minZ - BLOCKING_TOP_EPSILON ||
+      z > maxZ + BLOCKING_TOP_EPSILON
+    ) {
+      continue;
+    }
+
+    const topY = volume.center[1] + volume.size[1] / 2;
+    if (topY > maxAllowedHeight) {
+      continue;
+    }
+
+    if (resolvedHeight === null || topY > resolvedHeight) {
+      resolvedHeight = topY;
+    }
+  }
+
+  return resolvedHeight;
 }
 
 function isBindingDown(keys: KeyState, bindingCode: string) {

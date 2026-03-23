@@ -298,6 +298,13 @@ type FootstepPhaseTracker = {
   state: CharacterAnimState | null;
 };
 
+type FootstepTrigger = {
+  kind: "step";
+  foot: "left" | "right";
+} | {
+  kind: "reset";
+};
+
 function getFootstepMarkers(state: CharacterAnimState): readonly number[] {
   if (
     state === "sprint" ||
@@ -322,12 +329,15 @@ function getFootstepMarkers(state: CharacterAnimState): readonly number[] {
 function consumeFootstepTrigger(
   tracker: FootstepPhaseTracker,
   sample: CharacterFootstepSample | null,
-): boolean {
+): FootstepTrigger | null {
   if (!sample) {
+    const shouldReset = tracker.state !== null ||
+      tracker.cycle !== 0 ||
+      tracker.lastNormalizedTime !== 0;
     tracker.state = null;
     tracker.cycle = 0;
     tracker.lastNormalizedTime = 0;
-    return false;
+    return shouldReset ? { kind: "reset" } : null;
   }
 
   const normalizedTime = THREE.MathUtils.clamp(
@@ -339,7 +349,7 @@ function consumeFootstepTrigger(
     tracker.state = sample.state;
     tracker.cycle = 0;
     tracker.lastNormalizedTime = normalizedTime;
-    return false;
+    return null;
   }
 
   let cycle = tracker.cycle;
@@ -352,16 +362,23 @@ function consumeFootstepTrigger(
   tracker.cycle = cycle;
   tracker.lastNormalizedTime = normalizedTime;
 
-  for (const marker of getFootstepMarkers(sample.state)) {
+  for (const [markerIndex, marker] of getFootstepMarkers(sample.state).entries()) {
     if (
       previousAbsolute < cycle + marker &&
       currentAbsolute >= cycle + marker
     ) {
-      return true;
+      return {
+        kind: "step",
+        foot: markerIndex === 0 ? "left" : "right",
+      };
     }
   }
 
-  return false;
+  return null;
+}
+
+function createSometimesStepWindow() {
+  return 4 + Math.floor(Math.random() * 5);
 }
 
 function resolveRifleWalkState(
@@ -1213,6 +1230,7 @@ export const GameplayRuntime = forwardRef<
     lastNormalizedTime: 0,
     state: null,
   });
+  const stepsBeforeSometimesRef = useRef(createSometimesStepWindow());
   const returningFreezePosRef = useRef(new THREE.Vector3());
   const returningFreezeLookRef = useRef(new THREE.Vector3());
   const lastPhaseRef = useRef(presentation.phase);
@@ -1928,6 +1946,7 @@ export const GameplayRuntime = forwardRef<
       lastNormalizedTime: 0,
       state: null,
     };
+    stepsBeforeSometimesRef.current = createSometimesStepWindow();
     lastCharacterAnimStateRef.current = "idle";
     lastPlanarPositionRef.current.set(
       spawnPosition[0],
@@ -2464,6 +2483,9 @@ export const GameplayRuntime = forwardRef<
         crouchTransitionState !== requestedState
       ) {
         startCrouchTransition(requestedState, currentCrouchPose);
+        if (requestedState === "enter") {
+          audio.playCrouchEnter();
+        }
       }
     }
     crouchTransitionStateRef.current = crouchTransitionState;
@@ -2990,10 +3012,22 @@ export const GameplayRuntime = forwardRef<
       if (mixer) {
         mixer.update(clampedDelta);
       }
-      if (
-        consumeFootstepTrigger(footstepPhaseRef.current, getFootstepSample())
-      ) {
-        audio.playFootstep(footstepPlaybackRate);
+      const footstepTrigger = consumeFootstepTrigger(
+        footstepPhaseRef.current,
+        getFootstepSample(),
+      );
+      if (footstepTrigger?.kind === "reset") {
+        stepsBeforeSometimesRef.current = createSometimesStepWindow();
+      } else if (footstepTrigger?.kind === "step") {
+        const footstepVariant = stepsBeforeSometimesRef.current <= 0
+          ? "sometimes"
+          : footstepTrigger.foot;
+        if (footstepVariant === "sometimes") {
+          stepsBeforeSometimesRef.current = createSometimesStepWindow();
+        } else {
+          stepsBeforeSometimesRef.current -= 1;
+        }
+        audio.playFootstep(footstepVariant, footstepPlaybackRate);
       }
       if (headBone) {
         if (!characterHeadBaseQuatRef.current) {
