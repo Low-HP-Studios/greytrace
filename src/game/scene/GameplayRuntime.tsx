@@ -45,7 +45,11 @@ import type {
   WeaponAlignmentOffset,
   WeaponRecoilProfiles,
 } from "../types";
-import { isSprintInputEligible } from "../movement";
+import {
+  isSprintInputEligible,
+  PHASE1_MOVEMENT_CONFIG,
+  resolveLocalPlanarVector,
+} from "../movement";
 import {
   type CharacterFootstepSample,
   type CharacterModelOverride,
@@ -271,7 +275,8 @@ type SlideIntentHookState = {
 
 const RIFLE_HOLD_DIAGONAL_THRESHOLD = 0.35;
 const WALK_DIAGONAL_THRESHOLD = 0.35;
-const LOCOMOTION_VISUAL_INPUT_DAMP = 12;
+const LOCOMOTION_VISUAL_INPUT_DAMP =
+  PHASE1_MOVEMENT_CONFIG.locomotionVisualInputDamp;
 const LOCOMOTION_VISUAL_LATERAL_SWITCH_THRESHOLD = 0.42;
 const LOCOMOTION_VISUAL_NEUTRAL_THRESHOLD = 0.18;
 const UNARMED_WALK_START_MS = 220;
@@ -284,8 +289,8 @@ const CROUCH_TRANSITION_MS = Math.round(
 );
 const CROUCH_SPRINT_RELEASE_POSE = 0.35;
 const RIFLE_RUN_INPUT_GRACE_MS = 120;
-const RIFLE_LOCOMOTION_SCALE_MIN = 0.9;
-const RIFLE_LOCOMOTION_SCALE_MAX = 1.2;
+const RIFLE_LOCOMOTION_SCALE_MIN = PHASE1_MOVEMENT_CONFIG.locomotionScaleMin;
+const RIFLE_LOCOMOTION_SCALE_MAX = PHASE1_MOVEMENT_CONFIG.locomotionScaleMax;
 const INVENTORY_DROP_ZONE_NEARBY = "__drop_to_ground__";
 // Keep these in sync with PlayerController movement constants.
 const PLAYER_WALK_SPEED = 5.3;
@@ -500,6 +505,9 @@ function updateVisualLocomotionInput(
   movementActive: boolean,
   moveX: number,
   moveY: number,
+  localVelocityX: number,
+  localVelocityY: number,
+  planarSpeed: number,
   delta: number,
 ): THREE.Vector2 {
   if (!movementActive) {
@@ -507,20 +515,46 @@ function updateVisualLocomotionInput(
     return current;
   }
 
+  let targetX = moveX;
+  let targetY = moveY;
+  const localVelocityLengthSq =
+    localVelocityX * localVelocityX + localVelocityY * localVelocityY;
+  if (localVelocityLengthSq > 0.0001) {
+    const localVelocityLength = Math.sqrt(localVelocityLengthSq);
+    const velocityAuthority = THREE.MathUtils.smoothstep(
+      planarSpeed,
+      PHASE1_MOVEMENT_CONFIG.visualVelocityAuthorityStartSpeed,
+      PHASE1_MOVEMENT_CONFIG.visualVelocityAuthorityFullSpeed,
+    );
+    targetX = THREE.MathUtils.lerp(
+      moveX,
+      localVelocityX / localVelocityLength,
+      velocityAuthority,
+    );
+    targetY = THREE.MathUtils.lerp(
+      moveY,
+      localVelocityY / localVelocityLength,
+      velocityAuthority,
+    );
+  }
+
   if (current.lengthSq() <= 0.0001) {
-    current.set(moveX, moveY);
+    current.set(targetX, targetY);
+    if (current.lengthSq() > 1) {
+      current.normalize();
+    }
     return current;
   }
 
   current.x = THREE.MathUtils.damp(
     current.x,
-    moveX,
+    targetX,
     LOCOMOTION_VISUAL_INPUT_DAMP,
     delta,
   );
   current.y = THREE.MathUtils.damp(
     current.y,
-    moveY,
+    targetY,
     LOCOMOTION_VISUAL_INPUT_DAMP,
     delta,
   );
@@ -1156,12 +1190,10 @@ export const GameplayRuntime = forwardRef<
   });
   const movementSettingsRef = useRef<MovementProfileSettings>(movement);
   const locomotionVisualInputRef = useRef(new THREE.Vector2());
+  const locomotionLocalVelocityRef = useRef(new THREE.Vector2());
   const unarmedWalkStateRef = useRef<UnarmedWalkVisualState>("idle");
   const unarmedWalkStateUntilRef = useRef(0);
   const lastCharacterAnimStateRef = useRef<CharacterAnimState>("idle");
-  const lastPlanarPositionRef = useRef(
-    new THREE.Vector2(spawnPosition[0], spawnPosition[2]),
-  );
 
   const worldRiflePickupRef = useRef<THREE.Group>(null);
   const worldSniperPickupRef = useRef<THREE.Group>(null);
@@ -1939,6 +1971,7 @@ export const GameplayRuntime = forwardRef<
       lastIntentMoveY: 0,
     };
     locomotionVisualInputRef.current.set(0, 0);
+    locomotionLocalVelocityRef.current.set(0, 0);
     unarmedWalkStateRef.current = "idle";
     unarmedWalkStateUntilRef.current = 0;
     footstepPhaseRef.current = {
@@ -1948,10 +1981,6 @@ export const GameplayRuntime = forwardRef<
     };
     stepsBeforeSometimesRef.current = createSometimesStepWindow();
     lastCharacterAnimStateRef.current = "idle";
-    lastPlanarPositionRef.current.set(
-      spawnPosition[0],
-      spawnPosition[2],
-    );
     controllerRef.current?.setRunFacing("off");
     controllerRef.current?.setMovementProfile({
       walkScale: 1,
@@ -2320,7 +2349,8 @@ export const GameplayRuntime = forwardRef<
       }
     }
 
-    const moving = controller.isMoving() && controller.isGrounded();
+    const grounded = controller.isGrounded();
+    const moving = controller.isMoving() && grounded;
     const sprinting = controller.isSprinting();
     const sprintPressed = controller.isSprintPressed();
     const walkPressed = controller.isWalkPressed();
@@ -2357,24 +2387,27 @@ export const GameplayRuntime = forwardRef<
     const adsActive = controller.isADS();
     const firstPerson = controller.isFirstPerson();
     const moveInput = controller.getMoveInput();
-    const playerPosition = controller.getPosition();
-    const lastPlanarPosition = lastPlanarPositionRef.current;
-    const planarDeltaX = playerPosition.x - lastPlanarPosition.x;
-    const planarDeltaZ = playerPosition.z - lastPlanarPosition.y;
-    const planarSpeed = clampedDelta > 0
-      ? Math.hypot(planarDeltaX, planarDeltaZ) / clampedDelta
-      : 0;
-    lastPlanarPosition.set(playerPosition.x, playerPosition.z);
+    const planarVelocity = controller.getPlanarVelocity();
+    const planarSpeed = controller.getPlanarSpeed();
+    const localPlanarVelocity = resolveLocalPlanarVector(
+      locomotionLocalVelocityRef.current,
+      planarVelocity.x,
+      planarVelocity.y,
+      controller.getAimYaw(),
+    );
     const moveX = moveInput.x;
     const moveY = moveInput.y;
     const hasDirectionalInput = Math.abs(moveX) > 0.05 ||
       Math.abs(moveY) > 0.05;
-    const movementActive = moving && hasDirectionalInput;
+    const movementActive = grounded && (moving || hasDirectionalInput);
     const visualLocomotionInput = updateVisualLocomotionInput(
       locomotionVisualInputRef.current,
       movementActive,
       moveX,
       moveY,
+      localPlanarVelocity.x,
+      localPlanarVelocity.y,
+      planarSpeed,
       clampedDelta,
     );
     const animMoveX = visualLocomotionInput.x;
@@ -2389,7 +2422,7 @@ export const GameplayRuntime = forwardRef<
     slideIntent.eligible = isWeaponHoldEquipped &&
       !adsActive &&
       movementActive &&
-      controller.isGrounded() &&
+      grounded &&
       moveY > rifleRunForwardThreshold &&
       Math.abs(moveX) <= rifleRunLateralThreshold &&
       (
