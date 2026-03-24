@@ -289,6 +289,11 @@ const CROUCH_TRANSITION_MS = Math.round(
 );
 const CROUCH_SPRINT_RELEASE_POSE = 0.35;
 const RIFLE_RUN_INPUT_GRACE_MS = 120;
+const DIRECTION_CHANGE_THRESHOLD_RAD = Math.PI / 2;
+const DIRECTION_CHANGE_PAUSE_MS = 180;
+const DIRECTION_CHANGE_DAMP_RATE = 18;
+const DIRECTION_CHANGE_MIN_INPUT_LENGTH = 0.3;
+const SPRINT_STOP_RECOVERY_MS = 80;
 const RIFLE_LOCOMOTION_SCALE_MIN = PHASE1_MOVEMENT_CONFIG.locomotionScaleMin;
 const RIFLE_LOCOMOTION_SCALE_MAX = PHASE1_MOVEMENT_CONFIG.locomotionScaleMax;
 const INVENTORY_DROP_ZONE_NEARBY = "__drop_to_ground__";
@@ -308,6 +313,12 @@ type FootstepTrigger = {
   foot: "left" | "right";
 } | {
   kind: "reset";
+};
+
+type VisualLocomotionUpdateOptions = {
+  pauseActive?: boolean;
+  pauseDampRate?: number;
+  skipSnapFromZero?: boolean;
 };
 
 function getFootstepMarkers(state: CharacterAnimState): readonly number[] {
@@ -500,6 +511,22 @@ function resolveCrouchState(moveX: number, moveY: number): CharacterAnimState {
   return moveX >= 0 ? "crouchRight" : "crouchLeft";
 }
 
+function computeInputAngleDelta(
+  previous: THREE.Vector2,
+  next: THREE.Vector2,
+): number {
+  const previousLengthSq = previous.lengthSq();
+  const nextLengthSq = next.lengthSq();
+  if (previousLengthSq <= 0.0001 || nextLengthSq <= 0.0001) {
+    return 0;
+  }
+
+  const dot = (
+    previous.x * next.x + previous.y * next.y
+  ) / Math.sqrt(previousLengthSq * nextLengthSq);
+  return Math.acos(THREE.MathUtils.clamp(dot, -1, 1));
+}
+
 function updateVisualLocomotionInput(
   current: THREE.Vector2,
   movementActive: boolean,
@@ -509,9 +536,23 @@ function updateVisualLocomotionInput(
   localVelocityY: number,
   planarSpeed: number,
   delta: number,
+  options?: VisualLocomotionUpdateOptions,
 ): THREE.Vector2 {
   if (!movementActive) {
     current.set(0, 0);
+    return current;
+  }
+
+  const pauseActive = options?.pauseActive ?? false;
+  const pauseDampRate = options?.pauseDampRate ?? LOCOMOTION_VISUAL_INPUT_DAMP;
+  const skipSnapFromZero = options?.skipSnapFromZero ?? false;
+
+  if (pauseActive) {
+    current.x = THREE.MathUtils.damp(current.x, 0, pauseDampRate, delta);
+    current.y = THREE.MathUtils.damp(current.y, 0, pauseDampRate, delta);
+    if (current.lengthSq() <= 0.0001) {
+      current.set(0, 0);
+    }
     return current;
   }
 
@@ -539,7 +580,22 @@ function updateVisualLocomotionInput(
   }
 
   if (current.lengthSq() <= 0.0001) {
-    current.set(targetX, targetY);
+    if (skipSnapFromZero) {
+      current.x = THREE.MathUtils.damp(
+        0,
+        targetX,
+        LOCOMOTION_VISUAL_INPUT_DAMP,
+        delta,
+      );
+      current.y = THREE.MathUtils.damp(
+        0,
+        targetY,
+        LOCOMOTION_VISUAL_INPUT_DAMP,
+        delta,
+      );
+    } else {
+      current.set(targetX, targetY);
+    }
     if (current.lengthSq() > 1) {
       current.normalize();
     }
@@ -611,6 +667,30 @@ function shouldUseRifleRunInput(
   return movementActive &&
     runModifierPressed &&
     isSprintInputEligible(moveX, moveY);
+}
+
+function isStandingRifleDirectionPauseEligible(
+  grounded: boolean,
+  moving: boolean,
+  hasDirectionalInput: boolean,
+  meaningfulInput: boolean,
+  isWeaponHoldEquipped: boolean,
+  adsActive: boolean,
+  crouched: boolean,
+  crouchTransitionState: CrouchTransitionState,
+  firePrepIntent: boolean,
+  runState: RifleRunVisualState,
+): boolean {
+  return grounded &&
+    moving &&
+    hasDirectionalInput &&
+    meaningfulInput &&
+    isWeaponHoldEquipped &&
+    !adsActive &&
+    !crouched &&
+    crouchTransitionState === "idle" &&
+    !firePrepIntent &&
+    runState === "idle";
 }
 
 function normalizeAngle(angleRadians: number): number {
@@ -1191,6 +1271,10 @@ export const GameplayRuntime = forwardRef<
   const movementSettingsRef = useRef<MovementProfileSettings>(movement);
   const locomotionVisualInputRef = useRef(new THREE.Vector2());
   const locomotionLocalVelocityRef = useRef(new THREE.Vector2());
+  const directionChangeTrackedInputRef = useRef(new THREE.Vector2());
+  const directionChangePauseUntilRef = useRef(0);
+  const sprintStopRecoveryUntilRef = useRef(0);
+  const skipDirectionChangeSnapRef = useRef(false);
   const unarmedWalkStateRef = useRef<UnarmedWalkVisualState>("idle");
   const unarmedWalkStateUntilRef = useRef(0);
   const lastCharacterAnimStateRef = useRef<CharacterAnimState>("idle");
@@ -1972,6 +2056,10 @@ export const GameplayRuntime = forwardRef<
     };
     locomotionVisualInputRef.current.set(0, 0);
     locomotionLocalVelocityRef.current.set(0, 0);
+    directionChangeTrackedInputRef.current.set(0, 0);
+    directionChangePauseUntilRef.current = 0;
+    sprintStopRecoveryUntilRef.current = 0;
+    skipDirectionChangeSnapRef.current = false;
     unarmedWalkStateRef.current = "idle";
     unarmedWalkStateUntilRef.current = 0;
     footstepPhaseRef.current = {
@@ -2397,21 +2485,12 @@ export const GameplayRuntime = forwardRef<
     );
     const moveX = moveInput.x;
     const moveY = moveInput.y;
+    const meaningfulDirectionInput =
+      moveX * moveX + moveY * moveY >=
+        DIRECTION_CHANGE_MIN_INPUT_LENGTH * DIRECTION_CHANGE_MIN_INPUT_LENGTH;
     const hasDirectionalInput = Math.abs(moveX) > 0.05 ||
       Math.abs(moveY) > 0.05;
     const movementActive = grounded && (moving || hasDirectionalInput);
-    const visualLocomotionInput = updateVisualLocomotionInput(
-      locomotionVisualInputRef.current,
-      movementActive,
-      moveX,
-      moveY,
-      localPlanarVelocity.x,
-      localPlanarVelocity.y,
-      planarSpeed,
-      clampedDelta,
-    );
-    const animMoveX = visualLocomotionInput.x;
-    const animMoveY = visualLocomotionInput.y;
     const isWeaponHoldEquipped = weaponEquipped;
     const previousRunState = rifleRunStateRef.current;
     const previousCrouched = wasCrouchedRef.current;
@@ -2679,6 +2758,89 @@ export const GameplayRuntime = forwardRef<
       controller.setRunFacing(runFacingPhase, rifleRunHeadingYawRef.current);
     }
 
+    let sprintStopRecoveryUntil = sprintStopRecoveryUntilRef.current;
+    if (previousRunState === "stop" && runState === "idle") {
+      sprintStopRecoveryUntil = nowMs + SPRINT_STOP_RECOVERY_MS;
+    }
+
+    let directionChangePauseUntil = directionChangePauseUntilRef.current;
+    let skipDirectionChangeSnap = skipDirectionChangeSnapRef.current;
+    const trackedDirectionInput = directionChangeTrackedInputRef.current;
+    const standingRifleDirectionPauseEligible =
+      isStandingRifleDirectionPauseEligible(
+        grounded,
+        moving,
+        hasDirectionalInput,
+        meaningfulDirectionInput,
+        isWeaponHoldEquipped,
+        adsActive,
+        crouched,
+        crouchTransitionState,
+        firePrepIntent,
+        runState,
+      );
+    const directionChangePauseWasActive = directionChangePauseUntil > nowMs;
+    const phase2RecoveryActive = nowMs < sprintStopRecoveryUntil;
+
+    if (!standingRifleDirectionPauseEligible) {
+      trackedDirectionInput.set(0, 0);
+      directionChangePauseUntil = 0;
+      sprintStopRecoveryUntil = 0;
+      skipDirectionChangeSnap = false;
+    } else {
+      if (!directionChangePauseWasActive && directionChangePauseUntil > 0) {
+        directionChangePauseUntil = 0;
+        skipDirectionChangeSnap = true;
+      }
+
+      if (meaningfulDirectionInput) {
+        if (directionChangePauseWasActive || phase2RecoveryActive) {
+          trackedDirectionInput.set(moveX, moveY);
+        } else if (trackedDirectionInput.lengthSq() > 0.0001) {
+          const angleDelta = computeInputAngleDelta(
+            trackedDirectionInput,
+            moveInput,
+          );
+          trackedDirectionInput.set(moveX, moveY);
+          if (angleDelta > DIRECTION_CHANGE_THRESHOLD_RAD) {
+            directionChangePauseUntil = nowMs + DIRECTION_CHANGE_PAUSE_MS;
+            skipDirectionChangeSnap = false;
+          }
+        } else {
+          trackedDirectionInput.set(moveX, moveY);
+        }
+      } else {
+        trackedDirectionInput.set(0, 0);
+      }
+    }
+
+    const directionChangePauseActive = standingRifleDirectionPauseEligible &&
+      !phase2RecoveryActive &&
+      directionChangePauseUntil > nowMs;
+    const visualLocomotionInput = updateVisualLocomotionInput(
+      locomotionVisualInputRef.current,
+      movementActive,
+      moveX,
+      moveY,
+      localPlanarVelocity.x,
+      localPlanarVelocity.y,
+      planarSpeed,
+      clampedDelta,
+      {
+        pauseActive: directionChangePauseActive,
+        pauseDampRate: DIRECTION_CHANGE_DAMP_RATE,
+        skipSnapFromZero: skipDirectionChangeSnap,
+      },
+    );
+    if (skipDirectionChangeSnap && !directionChangePauseActive) {
+      skipDirectionChangeSnap = false;
+    }
+    directionChangePauseUntilRef.current = directionChangePauseUntil;
+    sprintStopRecoveryUntilRef.current = sprintStopRecoveryUntil;
+    skipDirectionChangeSnapRef.current = skipDirectionChangeSnap;
+    const animMoveX = visualLocomotionInput.x;
+    const animMoveY = visualLocomotionInput.y;
+
     const useUnarmedWalkLocomotion = !weaponEquipped &&
       movementTier !== "run";
 
@@ -2755,6 +2917,8 @@ export const GameplayRuntime = forwardRef<
           nextAnimState = "rifleRun";
         } else if (runState === "stop") {
           nextAnimState = "rifleRunStop";
+        } else if (directionChangePauseActive) {
+          nextAnimState = "rifleJog";
         } else if (walkPressed) {
           nextAnimState = stabilizeLateralTransition(
             resolveRifleWalkState(animMoveX, animMoveY),
@@ -2906,10 +3070,14 @@ export const GameplayRuntime = forwardRef<
     const runVisualState = nextAnimState === "rifleRun" ||
       nextAnimState === "rifleRunStart" ||
       nextAnimState === "rifleRunStop";
+    const directionChangePauseNeutralJog = directionChangePauseActive &&
+      nextAnimState === "rifleJog";
     const locomotionReferenceSpeed = runVisualState
       ? PLAYER_SPRINT_SPEED * movementProfileRunScale
       : PLAYER_WALK_SPEED * (
         !weaponEquipped && useUnarmedWalkLocomotion
+          ? movementProfileJogScale
+          : directionChangePauseNeutralJog
           ? movementProfileJogScale
           : movementTier === "walk"
           ? movementProfileWalkScale
