@@ -400,6 +400,9 @@ function prepareTargetCharacterModel(model: THREE.Group): void {
 function sanitizeTargetAnimationClip(
   clip: THREE.AnimationClip | null,
   modelBoneNames: Set<string>,
+  options?: {
+    preserveHipsPosition?: boolean;
+  },
 ): THREE.AnimationClip | null {
   if (!clip) {
     return null;
@@ -407,10 +410,23 @@ function sanitizeTargetAnimationClip(
 
   const remappedClip = remapAnimationClip(clip, modelBoneNames).clone();
   removeRootMotion(remappedClip);
-  remappedClip.tracks = remappedClip.tracks.filter((track) =>
-    modelBoneNames.has(getTrackNodeName(track.name)) &&
-    getTrackProperty(track.name) !== ".position"
-  );
+  remappedClip.tracks = remappedClip.tracks.filter((track) => {
+    const nodeName = getTrackNodeName(track.name);
+    if (!modelBoneNames.has(nodeName)) {
+      return false;
+    }
+
+    const property = getTrackProperty(track.name);
+    if (property !== ".position") {
+      return true;
+    }
+
+    if (!options?.preserveHipsPosition) {
+      return false;
+    }
+
+    return normalizeBoneName(nodeName).toLowerCase().includes("hips");
+  });
   return remappedClip;
 }
 
@@ -471,6 +487,7 @@ function useTargetCharacterAsset(
         const remappedDeath = sanitizeTargetAnimationClip(
           deathClip,
           modelBoneNames,
+          { preserveHipsPosition: true },
         );
 
         if (!disposed) {
