@@ -1,7 +1,7 @@
-import { loadAudioBuffer } from "./AssetLoader";
-import type { WeaponKind } from "./Weapon";
+import { loadAudioBuffer } from './AssetLoader';
+import type { WeaponKind } from './Weapon';
 
-export type FootstepVariant = "left" | "right" | "sometimes";
+export type FootstepVariant = 'left' | 'right' | 'sometimes';
 
 export type AudioVolumeSettings = {
   master: number;
@@ -52,7 +52,7 @@ type LoadedAudioBuffer = {
 };
 
 export type AudioBufferKey = keyof LoadedBuffers;
-type FootstepBufferKey = "footstepLeft" | "footstepRight" | "footstepSometimes";
+type FootstepBufferKey = 'footstepLeft' | 'footstepRight' | 'footstepSometimes';
 
 const AUDIO_DEBUG = import.meta.env.DEV;
 const TARGET_FOOTSTEP_PEAK = 0.12;
@@ -60,93 +60,78 @@ const MAX_FOOTSTEP_FILE_GAIN = 12;
 const FOOTSTEP_MAX_SECONDS = 0.32;
 const RIFLE_SHOT_FADE_TAIL_SECONDS = 0.12;
 const SNIPER_SHOT_FADE_TAIL_SECONDS = 0.18;
+const HIT_SOUND_GAIN_SCALE = 0.25;
 const FOOTSTEP_BUFFER_KEYS: readonly FootstepBufferKey[] = [
-  "footstepLeft",
-  "footstepRight",
-  "footstepSometimes",
+  'footstepLeft',
+  'footstepRight',
+  'footstepSometimes',
 ];
-const FOOTSTEP_BUFFER_KEY_BY_VARIANT: Record<FootstepVariant, FootstepBufferKey> = {
-  left: "footstepLeft",
-  right: "footstepRight",
-  sometimes: "footstepSometimes",
+const FOOTSTEP_BUFFER_KEY_BY_VARIANT: Record<
+  FootstepVariant,
+  FootstepBufferKey
+> = {
+  left: 'footstepLeft',
+  right: 'footstepRight',
+  sometimes: 'footstepSometimes',
 };
-const FOOTSTEP_VARIANT_BY_BUFFER_KEY: Record<FootstepBufferKey, FootstepVariant> = {
-  footstepLeft: "left",
-  footstepRight: "right",
-  footstepSometimes: "sometimes",
+const FOOTSTEP_VARIANT_BY_BUFFER_KEY: Record<
+  FootstepBufferKey,
+  FootstepVariant
+> = {
+  footstepLeft: 'left',
+  footstepRight: 'right',
+  footstepSometimes: 'sometimes',
 };
 const AUDIO_BUFFER_KEYS: AudioBufferKey[] = [
-  "rifleShot",
-  "sniperShot",
-  "sniperShell",
-  "rifleReload",
-  "sniperReload",
-  "dryFire",
+  'rifleShot',
+  'sniperShot',
+  'sniperShell',
+  'rifleReload',
+  'sniperReload',
+  'dryFire',
   ...FOOTSTEP_BUFFER_KEYS,
-  "crouchEnter",
-  "kill",
-  "hit",
-  "uiHover",
-  "uiPress",
+  'crouchEnter',
+  'kill',
+  'hit',
+  'uiHover',
+  'uiPress',
 ];
 
 const AUDIO_URL_CANDIDATES = {
-  rifleShot: [
-    "/assets/audio/improved/gun-sound.wav",
-  ],
+  rifleShot: ['/assets/audio/improved/gun-sound.wav'],
   sniperShot: [
-    "/assets/audio/improved/sniper/sniper-shot.wav",
-    "/assets/audio/sniper-shooting.mp3",
-    "/assets/audio/sniper-shooting.ogg",
-    "/assets/audio/sniper-shooting.wav",
-    "/assets/audio/sniper-shoot.mp3",
-    "/assets/audio/sniper-shoot.ogg",
-    "/assets/audio/sniper-shoot.wav",
+    '/assets/audio/improved/sniper/sniper-shot.wav',
+    '/assets/audio/sniper-shooting.mp3',
+    '/assets/audio/sniper-shooting.ogg',
+    '/assets/audio/sniper-shooting.wav',
+    '/assets/audio/sniper-shoot.mp3',
+    '/assets/audio/sniper-shoot.ogg',
+    '/assets/audio/sniper-shoot.wav',
   ],
   sniperShell: [
-    "/assets/audio/improved/sniper/sniper-shelling.wav",
-    "/assets/audio/sniper-shelling.mp3",
-    "/assets/audio/sniper-shelling.ogg",
-    "/assets/audio/sniper-shelling.wav",
+    '/assets/audio/improved/sniper/sniper-shelling.wav',
+    '/assets/audio/sniper-shelling.mp3',
+    '/assets/audio/sniper-shelling.ogg',
+    '/assets/audio/sniper-shelling.wav',
   ],
-  rifleReload: [
-    "/assets/audio/improved/rifle/rifle-reloading.wav",
-  ],
-  sniperReload: [
-    "/assets/audio/improved/sniper/sniper-reloading.wav",
-  ],
-  dryFire: [
-    "/assets/audio/improved/fire-empty-gun.wav",
-  ],
-  footstepLeft: [
-    "/assets/audio/footsteps/left-leg.wav",
-  ],
-  footstepRight: [
-    "/assets/audio/footsteps/right-left.wav",
-  ],
-  footstepSometimes: [
-    "/assets/audio/footsteps/sometimes.wav",
-  ],
-  crouchEnter: [
-    "/assets/audio/footsteps/crouch.wav",
-  ],
-  kill: [
-    "/assets/audio/improved/kill-sound.wav",
-  ],
+  rifleReload: ['/assets/audio/improved/rifle/rifle-reloading.wav'],
+  sniperReload: ['/assets/audio/improved/sniper/sniper-reloading.wav'],
+  dryFire: ['/assets/audio/improved/fire-empty-gun.wav'],
+  footstepLeft: ['/assets/audio/footsteps/left-leg.wav'],
+  footstepRight: ['/assets/audio/footsteps/right-left.wav'],
+  footstepSometimes: ['/assets/audio/footsteps/sometimes.wav'],
+  crouchEnter: ['/assets/audio/footsteps/crouch.wav'],
+  kill: ['/assets/audio/improved/kill-sound.wav'],
   hit: [
-    "/assets/audio/hit.mp3",
-    "/assets/audio/hit.ogg",
-    "/assets/audio/hit.wav",
-    "/audio/hit.mp3",
-    "/audio/hit.ogg",
-    "/audio/hit.wav",
+    '/assets/audio/hit.mp3',
+    '/assets/audio/hit.ogg',
+    '/assets/audio/hit.wav',
+    '/audio/hit.mp3',
+    '/audio/hit.ogg',
+    '/audio/hit.wav',
   ],
-  uiHover: [
-    "/assets/audio/ui/hover.wav",
-  ],
-  uiPress: [
-    "/assets/audio/ui/press.wav",
-  ],
+  uiHover: ['/assets/audio/ui/hover.wav'],
+  uiPress: ['/assets/audio/ui/press.wav'],
 } as const;
 
 export const DEFAULT_AUDIO_VOLUMES: AudioVolumeSettings = {
@@ -252,26 +237,28 @@ export class AudioManager {
 
       if (isFootstepBufferKey(key)) {
         this.handleFootstepBufferLoaded(key, loaded);
-      } else if (key === "crouchEnter") {
+      } else if (key === 'crouchEnter') {
         this.handleCrouchEnterBufferLoaded(loaded);
       } else if (AUDIO_DEBUG && loaded.url) {
-        console.info("[Audio] Buffer loaded", {
+        console.info('[Audio] Buffer loaded', {
           key,
           url: loaded.url,
         });
       }
 
       return loaded.buffer !== null;
-    })().catch((error: unknown) => {
-      if (AUDIO_DEBUG) {
-        console.warn(`[Audio] Failed to prepare ${key}`, error);
-      }
-      return false;
-    }).finally(() => {
-      if (!this.buffers[key]) {
-        this.bufferLoadPromises.delete(key);
-      }
-    });
+    })()
+      .catch((error: unknown) => {
+        if (AUDIO_DEBUG) {
+          console.warn(`[Audio] Failed to prepare ${key}`, error);
+        }
+        return false;
+      })
+      .finally(() => {
+        if (!this.buffers[key]) {
+          this.bufferLoadPromises.delete(key);
+        }
+      });
 
     this.bufferLoadPromises.set(key, request);
     return request;
@@ -285,10 +272,10 @@ export class AudioManager {
 
     void this.prepare();
 
-    if (context.state !== "running") {
+    if (context.state !== 'running') {
       void context.resume().catch((error: unknown) => {
         if (AUDIO_DEBUG) {
-          console.warn("[Audio] Resume failed", error);
+          console.warn('[Audio] Resume failed', error);
         }
       });
     }
@@ -303,14 +290,18 @@ export class AudioManager {
   }
 
   playFootstep(variant: FootstepVariant, filePlaybackRate?: number) {
-    if (!this.context || this.context.state !== "running") {
+    if (!this.context || this.context.state !== 'running') {
       return;
     }
     this.playFootstepInternal(variant, filePlaybackRate);
   }
 
   playCrouchEnter() {
-    if (!this.context || this.context.state !== "running" || !this.footstepGain) {
+    if (
+      !this.context ||
+      this.context.state !== 'running' ||
+      !this.footstepGain
+    ) {
       return;
     }
 
@@ -320,7 +311,7 @@ export class AudioManager {
       source.playbackRate.value = 0.98 + Math.random() * 0.04;
       const gain = this.context.createGain();
       const tone = this.context.createBiquadFilter();
-      tone.type = "lowpass";
+      tone.type = 'lowpass';
       tone.frequency.value = 1800;
       gain.gain.value = 0.92 * this.crouchEnterFileGain;
       source.connect(tone);
@@ -333,18 +324,22 @@ export class AudioManager {
     }
 
     if (AUDIO_DEBUG) {
-      console.warn("[Audio] Crouch enter file buffer unavailable.");
+      console.warn('[Audio] Crouch enter file buffer unavailable.');
     }
-    void this.prepareBuffer("crouchEnter");
+    void this.prepareBuffer('crouchEnter');
   }
 
   playLanding() {
-    if (!this.context || this.context.state !== "running" || !this.footstepGain) {
+    if (
+      !this.context ||
+      this.context.state !== 'running' ||
+      !this.footstepGain
+    ) {
       return;
     }
 
     const bufferKey: FootstepBufferKey =
-      Math.random() < 0.5 ? "footstepLeft" : "footstepRight";
+      Math.random() < 0.5 ? 'footstepLeft' : 'footstepRight';
     const variant = FOOTSTEP_VARIANT_BY_BUFFER_KEY[bufferKey];
     const buffer = this.buffers[bufferKey];
 
@@ -354,7 +349,7 @@ export class AudioManager {
       source.playbackRate.value = 0.72 + Math.random() * 0.06;
       const gain = this.context.createGain();
       const tone = this.context.createBiquadFilter();
-      tone.type = "lowpass";
+      tone.type = 'lowpass';
       tone.frequency.value = 1400;
       gain.gain.value = 1.3 * this.footstepFileGains[variant];
       source.connect(tone);
@@ -367,67 +362,60 @@ export class AudioManager {
     }
 
     if (AUDIO_DEBUG) {
-      console.warn("[Audio] Landing footstep buffer unavailable.");
+      console.warn('[Audio] Landing footstep buffer unavailable.');
     }
     void this.prepareBuffer(bufferKey);
   }
 
-  playGunshot(kind: WeaponKind = "rifle") {
-    if (!this.context || this.context.state !== "running" || !this.gunGain) {
+  playGunshot(kind: WeaponKind = 'rifle') {
+    if (!this.context || this.context.state !== 'running' || !this.gunGain) {
       return;
     }
 
     const now = this.context.currentTime;
     const voice = this.gunVoicePool[this.nextGunVoiceIndex];
-    this.nextGunVoiceIndex = (this.nextGunVoiceIndex + 1) % this.gunVoicePool.length;
+    this.nextGunVoiceIndex =
+      (this.nextGunVoiceIndex + 1) % this.gunVoicePool.length;
 
     voice.gain.cancelScheduledValues(now);
     voice.gain.setValueAtTime(0, now);
 
     const shotBuffer =
-      kind === "sniper"
-        ? this.buffers.sniperShot ?? this.buffers.rifleShot
-        : this.buffers.rifleShot ?? this.buffers.sniperShot;
+      kind === 'sniper'
+        ? (this.buffers.sniperShot ?? this.buffers.rifleShot)
+        : (this.buffers.rifleShot ?? this.buffers.sniperShot);
     const shotSourceUrl =
-      kind === "sniper"
-        ? this.sourceUrls.sniperShot ?? this.sourceUrls.rifleShot
-        : this.sourceUrls.rifleShot ?? this.sourceUrls.sniperShot;
+      kind === 'sniper'
+        ? (this.sourceUrls.sniperShot ?? this.sourceUrls.rifleShot)
+        : (this.sourceUrls.rifleShot ?? this.sourceUrls.sniperShot);
 
     if (shotBuffer) {
       const source = this.context.createBufferSource();
       source.buffer = shotBuffer;
       source.playbackRate.value =
-        kind === "sniper"
-          ? 1
-          : 0.96 + Math.random() * 0.1;
+        kind === 'sniper' ? 1 : 0.96 + Math.random() * 0.1;
       source.connect(voice);
       const playbackSeconds = source.buffer.duration;
       voice.gain.setValueAtTime(1, now);
-      if (kind === "sniper") {
+      if (kind === 'sniper') {
         voice.gain.setValueAtTime(
           1,
           now + Math.max(0, playbackSeconds - SNIPER_SHOT_FADE_TAIL_SECONDS),
         );
-        voice.gain.exponentialRampToValueAtTime(
-          0.0001,
-          now + playbackSeconds,
-        );
+        voice.gain.exponentialRampToValueAtTime(0.0001, now + playbackSeconds);
       } else {
         voice.gain.setValueAtTime(
           1,
           now + Math.max(0, playbackSeconds - RIFLE_SHOT_FADE_TAIL_SECONDS),
         );
-        voice.gain.exponentialRampToValueAtTime(
-          0.0001,
-          now + playbackSeconds,
-        );
+        voice.gain.exponentialRampToValueAtTime(0.0001, now + playbackSeconds);
       }
       source.start(now);
       source.stop(now + playbackSeconds);
       if (AUDIO_DEBUG) {
         this.gunshotDebugCounter += 1;
         if (this.gunshotDebugCounter % 8 === 0) {
-          console.debug("[Audio] Gunshot trigger", {
+          console.debug('[Audio] Gunshot trigger', {
             kind,
             source: shotSourceUrl,
           });
@@ -436,13 +424,13 @@ export class AudioManager {
       return;
     }
 
-    if (kind === "sniper") {
+    if (kind === 'sniper') {
       voice.gain.setValueAtTime(1, now);
       voice.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
 
       const thump = this.context.createOscillator();
       const thumpGain = this.context.createGain();
-      thump.type = "triangle";
+      thump.type = 'triangle';
       thump.frequency.setValueAtTime(130 + Math.random() * 18, now);
       thump.frequency.exponentialRampToValueAtTime(42, now + 0.14);
       thumpGain.gain.setValueAtTime(0.001, now);
@@ -455,7 +443,7 @@ export class AudioManager {
 
       const crack = this.context.createOscillator();
       const crackGain = this.context.createGain();
-      crack.type = "square";
+      crack.type = 'square';
       crack.frequency.setValueAtTime(880 + Math.random() * 110, now);
       crack.frequency.exponentialRampToValueAtTime(220, now + 0.045);
       crackGain.gain.setValueAtTime(0.001, now);
@@ -471,7 +459,7 @@ export class AudioManager {
         noiseSource.buffer = this.whiteNoiseBuffer;
         const highpass = this.context.createBiquadFilter();
         const noiseGain = this.context.createGain();
-        highpass.type = "highpass";
+        highpass.type = 'highpass';
         highpass.frequency.value = 1400;
         noiseGain.gain.setValueAtTime(0.001, now);
         noiseGain.gain.exponentialRampToValueAtTime(0.38, now + 0.003);
@@ -490,7 +478,7 @@ export class AudioManager {
 
     const osc = this.context.createOscillator();
     const oscGain = this.context.createGain();
-    osc.type = "sawtooth";
+    osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(160 + Math.random() * 40, now);
     osc.frequency.exponentialRampToValueAtTime(45, now + 0.07);
     oscGain.gain.setValueAtTime(0.001, now);
@@ -504,7 +492,7 @@ export class AudioManager {
       noiseSource.buffer = this.whiteNoiseBuffer;
       const bandpass = this.context.createBiquadFilter();
       const noiseGain = this.context.createGain();
-      bandpass.type = "bandpass";
+      bandpass.type = 'bandpass';
       bandpass.frequency.value = 1600 + Math.random() * 600;
       bandpass.Q.value = 0.6;
       noiseGain.gain.setValueAtTime(0.001, now);
@@ -522,7 +510,7 @@ export class AudioManager {
   }
 
   playDryFire() {
-    if (!this.context || this.context.state !== "running" || !this.gunGain) {
+    if (!this.context || this.context.state !== 'running' || !this.gunGain) {
       return;
     }
 
@@ -547,7 +535,7 @@ export class AudioManager {
 
     const click = this.context.createOscillator();
     const clickGain = this.context.createGain();
-    click.type = "square";
+    click.type = 'square';
     click.frequency.setValueAtTime(1300, now);
     click.frequency.exponentialRampToValueAtTime(700, now + 0.045);
     clickGain.gain.setValueAtTime(0.001, now);
@@ -558,7 +546,7 @@ export class AudioManager {
     click.start(now);
     click.stop(now + 0.07);
 
-    void this.prepareBuffer("dryFire");
+    void this.prepareBuffer('dryFire');
   }
 
   cancelReload() {
@@ -578,8 +566,8 @@ export class AudioManager {
     }
   }
 
-  playReload(kind: WeaponKind = "rifle", maxDurationSeconds?: number) {
-    if (!this.context || this.context.state !== "running" || !this.gunGain) {
+  playReload(kind: WeaponKind = 'rifle', maxDurationSeconds?: number) {
+    if (!this.context || this.context.state !== 'running' || !this.gunGain) {
       return;
     }
 
@@ -587,30 +575,33 @@ export class AudioManager {
 
     const now = this.context.currentTime;
     const reloadBuffer =
-      kind === "sniper"
-        ? this.buffers.sniperReload ?? this.buffers.rifleReload
-        : this.buffers.rifleReload ?? this.buffers.sniperReload;
+      kind === 'sniper'
+        ? (this.buffers.sniperReload ?? this.buffers.rifleReload)
+        : (this.buffers.rifleReload ?? this.buffers.sniperReload);
     const reloadSourceUrl =
-      kind === "sniper"
-        ? this.sourceUrls.sniperReload ?? this.sourceUrls.rifleReload
-        : this.sourceUrls.rifleReload ?? this.sourceUrls.sniperReload;
+      kind === 'sniper'
+        ? (this.sourceUrls.sniperReload ?? this.sourceUrls.rifleReload)
+        : (this.sourceUrls.rifleReload ?? this.sourceUrls.sniperReload);
 
     if (reloadBuffer) {
       const source = this.context.createBufferSource();
       source.buffer = reloadBuffer;
       source.playbackRate.value = 1;
       const gain = this.context.createGain();
-      gain.gain.value = kind === "sniper" ? 0.86 : 0.82;
+      gain.gain.value = kind === 'sniper' ? 0.86 : 0.82;
       source.connect(gain);
       gain.connect(this.gunGain);
       source.start(now);
 
       const resolvedStopDuration =
-        typeof maxDurationSeconds === "number" && Number.isFinite(maxDurationSeconds)
+        typeof maxDurationSeconds === 'number' &&
+        Number.isFinite(maxDurationSeconds)
           ? Math.max(0, maxDurationSeconds)
           : null;
       if (resolvedStopDuration !== null) {
-        source.stop(now + Math.min(resolvedStopDuration, source.buffer.duration));
+        source.stop(
+          now + Math.min(resolvedStopDuration, source.buffer.duration),
+        );
       }
 
       this.reloadSource = source;
@@ -624,7 +615,7 @@ export class AudioManager {
       if (AUDIO_DEBUG) {
         this.reloadDebugCounter += 1;
         if (this.reloadDebugCounter % 4 === 0) {
-          console.debug("[Audio] Reload trigger", {
+          console.debug('[Audio] Reload trigger', {
             kind,
             source: reloadSourceUrl,
           });
@@ -633,12 +624,16 @@ export class AudioManager {
       return;
     }
 
-    void this.prepareBuffer(kind === "sniper" ? "sniperReload" : "rifleReload");
+    void this.prepareBuffer(kind === 'sniper' ? 'sniperReload' : 'rifleReload');
   }
 
   cancelSniperShelling() {
     if (this.shellingSource) {
-      try { this.shellingSource.stop(); } catch { /* already stopped */ }
+      try {
+        this.shellingSource.stop();
+      } catch {
+        /* already stopped */
+      }
       this.shellingSource = null;
     }
     if (this.shellingGain && this.context) {
@@ -650,7 +645,7 @@ export class AudioManager {
   }
 
   playSniperShelling() {
-    if (!this.context || this.context.state !== "running" || !this.gunGain) {
+    if (!this.context || this.context.state !== 'running' || !this.gunGain) {
       return;
     }
 
@@ -677,7 +672,7 @@ export class AudioManager {
       if (AUDIO_DEBUG) {
         this.shellingDebugCounter += 1;
         if (this.shellingDebugCounter % 4 === 0) {
-          console.debug("[Audio] Sniper shelling trigger", {
+          console.debug('[Audio] Sniper shelling trigger', {
             source: this.sourceUrls.sniperShell,
           });
         }
@@ -687,7 +682,7 @@ export class AudioManager {
 
     const click = this.context.createOscillator();
     const clickGain = this.context.createGain();
-    click.type = "square";
+    click.type = 'square';
     click.frequency.setValueAtTime(2100, now);
     click.frequency.exponentialRampToValueAtTime(1200, now + 0.06);
     clickGain.gain.setValueAtTime(0.001, now);
@@ -699,8 +694,8 @@ export class AudioManager {
     click.stop(now + 0.08);
   }
 
-  playHit(kind: "body" | "head" = "body") {
-    if (!this.context || this.context.state !== "running" || !this.hitGain) {
+  playHit(kind: 'body' | 'head' = 'body') {
+    if (!this.context || this.context.state !== 'running' || !this.hitGain) {
       return;
     }
 
@@ -710,11 +705,11 @@ export class AudioManager {
       const source = this.context.createBufferSource();
       source.buffer = this.buffers.hit;
       source.playbackRate.value =
-        kind === "head"
+        kind === 'head'
           ? 1.2 + Math.random() * 0.08
           : 0.95 + Math.random() * 0.15;
       const gain = this.context.createGain();
-      gain.gain.value = kind === "head" ? 1.05 : 0.9;
+      gain.gain.value = (kind === 'head' ? 1.05 : 0.9) * HIT_SOUND_GAIN_SCALE;
       source.connect(gain);
       gain.connect(this.hitGain);
       source.start(now);
@@ -724,11 +719,17 @@ export class AudioManager {
 
     const osc = this.context.createOscillator();
     const gain = this.context.createGain();
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(kind === "head" ? 1120 : 720, now);
-    osc.frequency.exponentialRampToValueAtTime(kind === "head" ? 620 : 480, now + 0.05);
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(kind === 'head' ? 1120 : 720, now);
+    osc.frequency.exponentialRampToValueAtTime(
+      kind === 'head' ? 620 : 480,
+      now + 0.05,
+    );
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.exponentialRampToValueAtTime(kind === "head" ? 0.32 : 0.25, now + 0.004);
+    gain.gain.exponentialRampToValueAtTime(
+      (kind === 'head' ? 0.32 : 0.25) * HIT_SOUND_GAIN_SCALE,
+      now + 0.004,
+    );
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
     osc.connect(gain);
     gain.connect(this.hitGain);
@@ -737,7 +738,7 @@ export class AudioManager {
   }
 
   playKill() {
-    if (!this.context || this.context.state !== "running" || !this.hitGain) {
+    if (!this.context || this.context.state !== 'running' || !this.hitGain) {
       return;
     }
 
@@ -761,7 +762,7 @@ export class AudioManager {
     gain.connect(this.hitGain);
 
     const low = this.context.createOscillator();
-    low.type = "triangle";
+    low.type = 'triangle';
     low.frequency.setValueAtTime(420, now);
     low.frequency.exponentialRampToValueAtTime(520, now + 0.05);
     const lowGain = this.context.createGain();
@@ -772,7 +773,7 @@ export class AudioManager {
     lowGain.connect(gain);
 
     const high = this.context.createOscillator();
-    high.type = "sine";
+    high.type = 'sine';
     high.frequency.setValueAtTime(980, now + 0.028);
     high.frequency.exponentialRampToValueAtTime(1240, now + 0.085);
     const highGain = this.context.createGain();
@@ -789,11 +790,11 @@ export class AudioManager {
   }
 
   playUiHover() {
-    this.playUiSound("uiHover", 0.72, [0.98, 1.04]);
+    this.playUiSound('uiHover', 0.72, [0.98, 1.04]);
   }
 
   playUiPress() {
-    this.playUiSound("uiPress", 0.9, [0.96, 1.01]);
+    this.playUiSound('uiPress', 0.9, [0.96, 1.01]);
   }
 
   dispose() {
@@ -827,7 +828,7 @@ export class AudioManager {
       this.context = new ContextCtor();
     } catch (error) {
       if (AUDIO_DEBUG) {
-        console.warn("[Audio] Context creation failed", error);
+        console.warn('[Audio] Context creation failed', error);
       }
       return null;
     }
@@ -869,7 +870,7 @@ export class AudioManager {
         MAX_FOOTSTEP_FILE_GAIN,
       );
       if (AUDIO_DEBUG) {
-        console.info("[Audio] Footstep loaded", {
+        console.info('[Audio] Footstep loaded', {
           variant,
           url: footstep.url,
           duration: Number(footstep.buffer.duration.toFixed(3)),
@@ -879,17 +880,17 @@ export class AudioManager {
         });
       }
     } else if (AUDIO_DEBUG) {
-      console.warn("[Audio] Footstep file not found.", { variant });
+      console.warn('[Audio] Footstep file not found.', { variant });
     }
 
     if (AUDIO_DEBUG) {
-      console.info("[Audio] Weapon buffers", {
+      console.info('[Audio] Weapon buffers', {
         rifleShot: this.sourceUrls.rifleShot,
         sniperShot: this.sourceUrls.sniperShot,
         sniperShell: this.sourceUrls.sniperShell,
         kill: this.sourceUrls.kill,
       });
-      console.info("[Audio] Buffer sources", this.sourceUrls);
+      console.info('[Audio] Buffer sources', this.sourceUrls);
     }
   }
 
@@ -902,7 +903,7 @@ export class AudioManager {
         MAX_FOOTSTEP_FILE_GAIN,
       );
       if (AUDIO_DEBUG) {
-        console.info("[Audio] Crouch enter loaded", {
+        console.info('[Audio] Crouch enter loaded', {
           url: crouchEnter.url,
           duration: Number(crouchEnter.buffer.duration.toFixed(3)),
           peak: Number(analysis.peak.toFixed(4)),
@@ -911,7 +912,7 @@ export class AudioManager {
         });
       }
     } else if (AUDIO_DEBUG) {
-      console.warn("[Audio] Crouch enter file not found.");
+      console.warn('[Audio] Crouch enter file not found.');
     }
   }
 
@@ -919,7 +920,11 @@ export class AudioManager {
     variant: FootstepVariant,
     filePlaybackRate?: number,
   ) {
-    if (!this.context || this.context.state !== "running" || !this.footstepGain) {
+    if (
+      !this.context ||
+      this.context.state !== 'running' ||
+      !this.footstepGain
+    ) {
       return;
     }
 
@@ -935,7 +940,7 @@ export class AudioManager {
       source.playbackRate.value = fileRate;
       const gain = this.context.createGain();
       const tone = this.context.createBiquadFilter();
-      tone.type = "lowpass";
+      tone.type = 'lowpass';
       tone.frequency.value = 2100 + rateMix * 1100;
       gain.gain.value =
         (0.88 + rateMix * 0.2) * this.footstepFileGains[variant];
@@ -947,7 +952,7 @@ export class AudioManager {
       if (AUDIO_DEBUG) {
         this.footstepDebugCounter += 1;
         if (this.footstepDebugCounter % 8 === 0) {
-          console.debug("[Audio] Footstep trigger", {
+          console.debug('[Audio] Footstep trigger', {
             variant,
             source: this.sourceUrls[key],
             fileGain: Number(this.footstepFileGains[variant].toFixed(2)),
@@ -959,13 +964,13 @@ export class AudioManager {
       return;
     }
     if (AUDIO_DEBUG) {
-      console.warn("[Audio] Footstep file buffer unavailable.", { variant });
+      console.warn('[Audio] Footstep file buffer unavailable.', { variant });
     }
     void this.prepareBuffer(key);
   }
 
   private playUiSound(
-    key: "uiHover" | "uiPress",
+    key: 'uiHover' | 'uiPress',
     gainValue: number,
     playbackRateRange: readonly [number, number],
   ) {
@@ -975,7 +980,7 @@ export class AudioManager {
     }
 
     const playLoadedBuffer = () => {
-      if (context.state !== "running" || !this.uiGain) {
+      if (context.state !== 'running' || !this.uiGain) {
         return;
       }
 
@@ -998,18 +1003,21 @@ export class AudioManager {
     };
 
     const playWhenReady = () => {
-      if (context.state === "running") {
+      if (context.state === 'running') {
         playLoadedBuffer();
         return;
       }
 
-      void context.resume().then(() => {
-        playLoadedBuffer();
-      }).catch((error: unknown) => {
-        if (AUDIO_DEBUG) {
-          console.warn("[Audio] UI sound resume failed", { key, error });
-        }
-      });
+      void context
+        .resume()
+        .then(() => {
+          playLoadedBuffer();
+        })
+        .catch((error: unknown) => {
+          if (AUDIO_DEBUG) {
+            console.warn('[Audio] UI sound resume failed', { key, error });
+          }
+        });
     };
 
     if (this.buffers[key]) {
@@ -1045,16 +1053,24 @@ export class AudioManager {
 }
 
 function getAudioContextConstructor(): typeof AudioContext | null {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return null;
   }
 
-  const maybeWindow = window as Window & { webkitAudioContext?: typeof AudioContext };
+  const maybeWindow = window as Window & {
+    webkitAudioContext?: typeof AudioContext;
+  };
   return globalThis.AudioContext ?? maybeWindow.webkitAudioContext ?? null;
 }
 
-function createWhiteNoiseBuffer(context: AudioContext, lengthSeconds: number): AudioBuffer {
-  const frameCount = Math.max(1, Math.floor(context.sampleRate * lengthSeconds));
+function createWhiteNoiseBuffer(
+  context: AudioContext,
+  lengthSeconds: number,
+): AudioBuffer {
+  const frameCount = Math.max(
+    1,
+    Math.floor(context.sampleRate * lengthSeconds),
+  );
   const buffer = context.createBuffer(1, frameCount, context.sampleRate);
   const data = buffer.getChannelData(0);
 

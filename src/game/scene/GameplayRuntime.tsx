@@ -3423,7 +3423,7 @@ export const GameplayRuntime = forwardRef<
       : nextAnimState === "rifleRun" ||
         nextAnimState === "rifleRunStart" ||
         nextAnimState === "rifleRunStop";
-    weapon.setMovementState(movementActive, weaponSprinting);
+    weapon.setMovementState(movementActive, weaponSprinting, crouched);
     syncWeaponAmmoFromInventory();
     const preUpdateLoadout = weapon.getLoadoutState();
     const shots = weapon.update(clampedDelta, nowMs, camera);
@@ -3650,6 +3650,7 @@ export const GameplayRuntime = forwardRef<
           resolvedDamage,
           nowMs,
         );
+        audio.playHit(hitType === "head" ? "head" : "body");
         const markerKind: HitMarkerKind = killed
           ? "kill"
           : hitType === "head"
@@ -4152,6 +4153,21 @@ export const GameplayRuntime = forwardRef<
                 </mesh>
               </>
             )}
+          {sightModels.sniperSight
+            ? (
+              <group
+                position={SIGHT_MOUNT_TRANSFORMS.sniper.position}
+                rotation={SIGHT_MOUNT_TRANSFORMS.sniper.rotation}
+                scale={[
+                  SIGHT_MOUNT_TRANSFORMS.sniper.scale,
+                  SIGHT_MOUNT_TRANSFORMS.sniper.scale,
+                  SIGHT_MOUNT_TRANSFORMS.sniper.scale,
+                ]}
+              >
+                <primitive object={sightModels.sniperSight} />
+              </group>
+            )
+            : null}
         </group>
         <mesh ref={characterMuzzleRef} position={[0, 0, 0]} visible={false}>
           <sphereGeometry args={[0.05, 8, 8]} />
