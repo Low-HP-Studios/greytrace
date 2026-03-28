@@ -1533,7 +1533,7 @@ export function GameRoot({
     ? "Rifle"
     : "Item";
   const pickupPromptLabel = player.controllerConnected
-    ? "X"
+    ? formatControllerButtonIndex(settings.controllerBindings.pickup)
     : formatKeyCode(settings.keybinds.pickup);
   const interactPromptLabel = player.canInteract
     ? `Press ${pickupPromptLabel} to loot ${

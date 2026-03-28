@@ -19,7 +19,7 @@ export const DEFAULT_CHARACTER_ID = 'stylish-man';
 export const CHARACTER_REGISTRY: CharacterDefinition[] = [
   {
     id: 'trooper',
-    displayName: 'Trooper',
+    displayName: 'Thulla',
     modelUrl: `${CHARACTER_BASE}/Trooper/tactical guy.fbx`,
     textureBasePath: `${CHARACTER_BASE}/Trooper/tactical guy.fbm/`,
     textures: [
@@ -62,7 +62,7 @@ export const CHARACTER_REGISTRY: CharacterDefinition[] = [
   },
   {
     id: 'chinese-girl',
-    displayName: 'Chinese Girl',
+    displayName: 'Chingari',
     modelUrl: `${CHARACTER_BASE}/Chinese Girl/chinese girl animated.fbx`,
     textureBasePath: `${CHARACTER_BASE}/Chinese Girl/chinese girl animated.fbm/`,
     textures: [
@@ -75,7 +75,7 @@ export const CHARACTER_REGISTRY: CharacterDefinition[] = [
   },
   {
     id: 'elder-monty',
-    displayName: 'Elder Monty',
+    displayName: 'ICU Uncle',
     modelUrl: `${CHARACTER_BASE}/Elder Monty/dr monty.fbx`,
     textureBasePath: `${CHARACTER_BASE}/Elder Monty/dr monty.fbm/`,
     textures: [
@@ -104,7 +104,7 @@ export const CHARACTER_REGISTRY: CharacterDefinition[] = [
   },
   {
     id: 'indian-girl',
-    displayName: 'Indian Girl',
+    displayName: 'Bawaal',
     modelUrl: `${CHARACTER_BASE}/Indian Girl/india girl.fbx`,
     textureBasePath: `${CHARACTER_BASE}/Indian Girl/india girl.fbm/`,
     textures: [
@@ -117,7 +117,7 @@ export const CHARACTER_REGISTRY: CharacterDefinition[] = [
   },
   {
     id: 'katherine',
-    displayName: 'Katherine Langford',
+    displayName: 'Red Flag',
     modelUrl: `${CHARACTER_BASE}/Katherine Langford/Katherine Langford.fbx`,
     textureBasePath: `${CHARACTER_BASE}/Katherine Langford/Katherine Langford.fbm/`,
     textures: [
@@ -130,7 +130,7 @@ export const CHARACTER_REGISTRY: CharacterDefinition[] = [
   },
   {
     id: 'stylish-man',
-    displayName: 'Stylish Man',
+    displayName: 'EMI Don',
     modelUrl: `${CHARACTER_BASE}/Stylish Man/undercover cop.fbx`,
     textureBasePath: `${CHARACTER_BASE}/Stylish Man/undercover cop.fbm/`,
     textures: [
@@ -167,7 +167,7 @@ export const CHARACTER_REGISTRY: CharacterDefinition[] = [
   },
   {
     id: 'terrorist',
-    displayName: 'Terrorist',
+    displayName: 'Final Notice',
     modelUrl: `${CHARACTER_BASE}/Terrorist/Terrorist.fbx`,
     textureBasePath: `${CHARACTER_BASE}/Terrorist/Terrorist.fbm/`,
     textures: [

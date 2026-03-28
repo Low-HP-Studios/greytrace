@@ -80,6 +80,24 @@ const LEGACY_STICK_CLICK_CONTROLLER_BINDINGS = {
   equipSniper: 15,
 } as const;
 
+const PRE_BUMPER_PEEK_CONTROLLER_BINDINGS = {
+  fire: 7,
+  ads: 6,
+  jump: 0,
+  crouch: 1,
+  peekLeft: 10,
+  peekRight: 11,
+  pickup: 2,
+  reload: 3,
+  inventory: 8,
+  pause: 9,
+  sprint: 4,
+  toggleView: 5,
+  drop: 13,
+  equipRifle: 14,
+  equipSniper: 15,
+} as const;
+
 const CROSSHAIR_COLORS: CrosshairColor[] = [
   "white",
   "green",
@@ -420,6 +438,18 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
     !hasPeekRightBinding &&
     isLegacyStickClickLayout
   ) {
+    parsedControllerBindings.sprint = DEFAULT_CONTROLLER_BINDINGS.sprint;
+    parsedControllerBindings.toggleView =
+      DEFAULT_CONTROLLER_BINDINGS.toggleView;
+    parsedControllerBindings.peekLeft = DEFAULT_CONTROLLER_BINDINGS.peekLeft;
+    parsedControllerBindings.peekRight = DEFAULT_CONTROLLER_BINDINGS.peekRight;
+  }
+  const usesPreBumperPeekDefaults = (
+    Object.entries(PRE_BUMPER_PEEK_CONTROLLER_BINDINGS) as Array<
+      [keyof typeof PRE_BUMPER_PEEK_CONTROLLER_BINDINGS, number]
+    >
+  ).every(([key, value]) => parsedControllerBindings[key] === value);
+  if (usesPreBumperPeekDefaults) {
     parsedControllerBindings.sprint = DEFAULT_CONTROLLER_BINDINGS.sprint;
     parsedControllerBindings.toggleView =
       DEFAULT_CONTROLLER_BINDINGS.toggleView;
