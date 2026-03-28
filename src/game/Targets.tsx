@@ -12,6 +12,7 @@ import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 import { loadFbxAnimation, loadFbxAsset } from "./AssetLoader";
 import {
   TARGET_CHARACTER_MODEL_URL,
+  TARGET_DEATH_ANIMATION_URL,
   TARGET_IDLE_ANIMATION_URL,
 } from "./boot-assets";
 import type { TargetState } from "./types";
@@ -195,6 +196,7 @@ function resolveTargetVisualHandle(
 type TargetCharacterAsset = {
   model: THREE.Group | null;
   idleClip: THREE.AnimationClip | null;
+  deathClip: THREE.AnimationClip | null;
   ready: boolean;
 };
 
@@ -395,6 +397,23 @@ function prepareTargetCharacterModel(model: THREE.Group): void {
   });
 }
 
+function sanitizeTargetAnimationClip(
+  clip: THREE.AnimationClip | null,
+  modelBoneNames: Set<string>,
+): THREE.AnimationClip | null {
+  if (!clip) {
+    return null;
+  }
+
+  const remappedClip = remapAnimationClip(clip, modelBoneNames).clone();
+  removeRootMotion(remappedClip);
+  remappedClip.tracks = remappedClip.tracks.filter((track) =>
+    modelBoneNames.has(getTrackNodeName(track.name)) &&
+    getTrackProperty(track.name) !== ".position"
+  );
+  return remappedClip;
+}
+
 function useTargetCharacterAsset(
   enabled: boolean,
   characterOverride?: CharacterModelOverride,
@@ -402,6 +421,7 @@ function useTargetCharacterAsset(
   const [asset, setAsset] = useState<TargetCharacterAsset>({
     model: null,
     idleClip: null,
+    deathClip: null,
     ready: false,
   });
 
@@ -416,14 +436,15 @@ function useTargetCharacterAsset(
 
     (async () => {
       try {
-        const [fbxModel, idleClip] = await Promise.all([
+        const [fbxModel, idleClip, deathClip] = await Promise.all([
           loadFbxAsset(modelUrl),
           loadFbxAnimation(TARGET_IDLE_ANIMATION_URL, "idle"),
+          loadFbxAnimation(TARGET_DEATH_ANIMATION_URL, "death"),
         ]);
         if (disposed) return;
         if (!fbxModel) {
           console.warn("[Targets] FBX model is null for URL:", modelUrl);
-          setAsset({ model: null, idleClip: null, ready: true });
+          setAsset({ model: null, idleClip: null, deathClip: null, ready: true });
           return;
         }
 
@@ -446,24 +467,24 @@ function useTargetCharacterAsset(
           }
         });
 
-        const remappedIdle = idleClip
-          ? remapAnimationClip(idleClip, modelBoneNames).clone()
-          : null;
-        if (remappedIdle) {
-          removeRootMotion(remappedIdle);
-          remappedIdle.tracks = remappedIdle.tracks.filter((track) =>
-            modelBoneNames.has(getTrackNodeName(track.name)) &&
-            getTrackProperty(track.name) !== ".position"
-          );
-        }
+        const remappedIdle = sanitizeTargetAnimationClip(idleClip, modelBoneNames);
+        const remappedDeath = sanitizeTargetAnimationClip(
+          deathClip,
+          modelBoneNames,
+        );
 
         if (!disposed) {
-          setAsset({ model: preparedModel, idleClip: remappedIdle, ready: true });
+          setAsset({
+            model: preparedModel,
+            idleClip: remappedIdle,
+            deathClip: remappedDeath,
+            ready: true,
+          });
         }
       } catch (error) {
         console.warn("[Targets] Target asset warm-up failed", error);
         if (!disposed) {
-          setAsset({ model: null, idleClip: null, ready: true });
+          setAsset({ model: null, idleClip: null, deathClip: null, ready: true });
         }
       }
     })();
@@ -540,10 +561,12 @@ const TargetDummy = memo(function TargetDummy({
   visualRegistryRef?: TargetVisualRegistryRef;
 }) {
   const [x, baseY, z] = target.position;
-  const now = performance.now();
-  const isHit = target.hitUntil > now;
   const characterMixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const idleActionRef = useRef<THREE.AnimationAction | null>(null);
+  const deathActionRef = useRef<THREE.AnimationAction | null>(null);
   const groupRef = useRef<THREE.Group>(null);
+  const previousDisabledRef = useRef(target.disabled);
+  const [showDeathPose, setShowDeathPose] = useState(false);
   const characterInstance = useMemo(
     () => (characterAsset.model
       ? (SkeletonUtils.clone(characterAsset.model) as THREE.Group)
@@ -556,19 +579,68 @@ const TargetDummy = memo(function TargetDummy({
 
     if (characterAsset.idleClip) {
       const mixer = new THREE.AnimationMixer(characterInstance);
-      const action = mixer.clipAction(characterAsset.idleClip);
-      action.setLoop(THREE.LoopRepeat, Infinity);
-      action.play();
+      const idleAction = mixer.clipAction(characterAsset.idleClip);
+      idleAction.setLoop(THREE.LoopRepeat, Infinity);
+      idleAction.play();
+      idleActionRef.current = idleAction;
+
+      if (characterAsset.deathClip) {
+        const deathAction = mixer.clipAction(characterAsset.deathClip);
+        deathAction.setLoop(THREE.LoopOnce, 1);
+        deathAction.clampWhenFinished = true;
+        deathAction.enabled = true;
+        deathActionRef.current = deathAction;
+      }
+
       characterMixerRef.current = mixer;
 
       return () => {
         mixer.stopAllAction();
         characterMixerRef.current = null;
+        idleActionRef.current = null;
+        deathActionRef.current = null;
       };
     }
 
     return undefined;
-  }, [characterAsset.idleClip, characterInstance]);
+  }, [characterAsset.deathClip, characterAsset.idleClip, characterInstance]);
+
+  useEffect(() => {
+    const wasDisabled = previousDisabledRef.current;
+    previousDisabledRef.current = target.disabled;
+
+    if (target.disabled) {
+      if (!wasDisabled) {
+        const deathAction = deathActionRef.current;
+        if (deathAction) {
+          idleActionRef.current?.fadeOut(0.08);
+          deathAction.reset();
+          deathAction.paused = false;
+          deathAction.timeScale = 1;
+          deathAction.play();
+          setShowDeathPose(true);
+        }
+      }
+      return;
+    }
+
+    if (wasDisabled) {
+      const deathAction = deathActionRef.current;
+      if (deathAction) {
+        deathAction.stop();
+      }
+      const idleAction = idleActionRef.current;
+      if (idleAction) {
+        idleAction.reset();
+        idleAction.enabled = true;
+        idleAction.setEffectiveTimeScale(1);
+        idleAction.setEffectiveWeight(1);
+        idleAction.fadeIn(0.08);
+        idleAction.play();
+      }
+      setShowDeathPose(false);
+    }
+  }, [target.disabled]);
 
   useEffect(() => {
     if (!characterInstance) return;
@@ -585,12 +657,12 @@ const TargetDummy = memo(function TargetDummy({
         litMaterial.transparent = reveal < 0.999;
         litMaterial.opacity = reveal;
         if ("emissive" in litMaterial) {
-          litMaterial.emissive.set(isHit ? "#5a1111" : "#000000");
-          litMaterial.emissiveIntensity = isHit ? 0.85 : 0;
+          litMaterial.emissive.set("#000000");
+          litMaterial.emissiveIntensity = 0;
         }
       }
     });
-  }, [characterInstance, isHit, reveal, shadows]);
+  }, [characterInstance, reveal, shadows]);
 
   useEffect(() => {
     const registry = visualRegistryRef?.current;
@@ -620,12 +692,12 @@ const TargetDummy = memo(function TargetDummy({
   }, [characterInstance, target.id, visualRegistryRef]);
 
   useFrame((_, delta) => {
-    if (reveal <= 0.01 || target.disabled) return;
+    if (reveal <= 0.01 || (target.disabled && !showDeathPose)) return;
     characterMixerRef.current?.update(delta);
   });
 
   const scale = targetDummyGroupScale(reveal);
-  const visible = !target.disabled && reveal > 0.01;
+  const visible = reveal > 0.01 && (!target.disabled || showDeathPose);
 
   return (
     <group
@@ -646,13 +718,13 @@ const TargetDummy = memo(function TargetDummy({
           >
             <sphereGeometry args={[0.085 * T, 12, 12]} />
             <meshStandardMaterial
-              color={isHit ? "#ff5555" : "#e8d5b7"}
+              color="#e8d5b7"
               transparent={reveal < 0.999}
               opacity={reveal}
             />
           </mesh>
         )}
-      {reveal >= 0.55 && target.hp < target.maxHp
+      {!target.disabled && reveal >= 0.55 && target.hp < target.maxHp
         ? <HPBar hp={target.hp} maxHp={target.maxHp} />
         : null}
     </group>

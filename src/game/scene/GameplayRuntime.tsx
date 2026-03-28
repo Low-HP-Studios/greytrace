@@ -3423,7 +3423,7 @@ export const GameplayRuntime = forwardRef<
       : nextAnimState === "rifleRun" ||
         nextAnimState === "rifleRunStart" ||
         nextAnimState === "rifleRunStop";
-    weapon.setMovementState(movementActive, weaponSprinting);
+    weapon.setMovementState(movementActive, weaponSprinting, crouched);
     syncWeaponAmmoFromInventory();
     const preUpdateLoadout = weapon.getLoadoutState();
     const shots = weapon.update(clampedDelta, nowMs, camera);
@@ -3650,6 +3650,7 @@ export const GameplayRuntime = forwardRef<
           resolvedDamage,
           nowMs,
         );
+        audio.playHit(hitType === "head" ? "head" : "body");
         const markerKind: HitMarkerKind = killed
           ? "kill"
           : hitType === "head"

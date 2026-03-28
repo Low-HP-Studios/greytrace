@@ -22,6 +22,8 @@ export const TARGET_CHARACTER_MODEL_URL =
   "/assets/models/character/Trooper/tactical guy.fbx";
 export const TARGET_IDLE_ANIMATION_URL =
   "/assets/animations/movement/standing/idle.fbx";
+export const TARGET_DEATH_ANIMATION_URL =
+  "/assets/animations/common/death.fbx";
 const PRACTICE_GRASS_TEXTURE_URL = "/assets/grass-texture.jpg";
 
 export const TARGET_TEXTURE_URLS: string[] = [];
@@ -115,6 +117,13 @@ export function createDeferredBootPreloadManifest(
       weight: 2,
       bucket: "asset",
       load: () => loadFbxAnimation(TARGET_IDLE_ANIMATION_URL, "idle"),
+    },
+    {
+      id: "target:death",
+      label: "Target death animation",
+      weight: 2,
+      bucket: "asset",
+      load: () => loadFbxAnimation(TARGET_DEATH_ANIMATION_URL, "death"),
     },
     ...TARGET_TEXTURE_URLS.map((url) => ({
       id: `texture:${url}`,
