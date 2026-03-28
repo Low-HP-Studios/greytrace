@@ -69,8 +69,6 @@ const T = PRACTICE_TARGET_HEIGHT;
 const TARGET_HP_BAR_Y = 1.32 * T;
 export const TARGET_DUMMY_GROUP_SCALE_MIN = 0.82;
 export const TARGET_DUMMY_GROUP_SCALE_REVEAL = 0.18;
-const TARGET_VISUAL_SKINNED_BOUND_RADIUS_SCALE = 1.5;
-
 export function targetDummyGroupScale(reveal: number) {
   return TARGET_DUMMY_GROUP_SCALE_MIN + reveal * TARGET_DUMMY_GROUP_SCALE_REVEAL;
 }
@@ -136,10 +134,17 @@ function resolveTargetVisualHandle(
       if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) {
         const skinnedMesh = mesh as THREE.SkinnedMesh;
         skinnedMesh.frustumCulled = false;
-        skinnedMesh.computeBoundingSphere();
-        if (skinnedMesh.boundingSphere) {
-          skinnedMesh.boundingSphere.radius *=
-            TARGET_VISUAL_SKINNED_BOUND_RADIUS_SCALE;
+        // Use geometry AABB diagonal for the bounding sphere radius instead of
+        // computeBoundingSphere(), which relies on bone transforms that may not
+        // be in their final animated pose when this runs (before useFrame/mixer).
+        const geo = skinnedMesh.geometry;
+        if (!geo.boundingBox) geo.computeBoundingBox();
+        if (geo.boundingBox) {
+          if (!skinnedMesh.boundingSphere) skinnedMesh.boundingSphere = new THREE.Sphere();
+          geo.boundingBox.getCenter(skinnedMesh.boundingSphere.center);
+          const _bboxSize = new THREE.Vector3();
+          geo.boundingBox.getSize(_bboxSize);
+          skinnedMesh.boundingSphere.radius = _bboxSize.length();
         }
       }
       shootableMeshes.push(mesh);
@@ -159,6 +164,7 @@ function resolveTargetVisualHandle(
   });
 
   if (shootableMeshes.length === 0) {
+    console.warn(`[Targets] resolveTargetVisualHandle: no meshes for target ${targetId}`);
     return null;
   }
 
@@ -416,6 +422,7 @@ function useTargetCharacterAsset(
         ]);
         if (disposed) return;
         if (!fbxModel) {
+          console.warn("[Targets] FBX model is null for URL:", modelUrl);
           setAsset({ model: null, idleClip: null, ready: true });
           return;
         }
