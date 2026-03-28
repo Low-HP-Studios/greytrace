@@ -50,6 +50,13 @@ function cloneDefaultCrosshairSettings() {
     dynamic: { ...DEFAULT_CROSSHAIR_SETTINGS.dynamic },
     weaponModifiers: { ...DEFAULT_CROSSHAIR_SETTINGS.weaponModifiers },
     ads: { ...DEFAULT_CROSSHAIR_SETTINGS.ads },
+    redDot: {
+      ...DEFAULT_CROSSHAIR_SETTINGS.redDot,
+      centerDot: { ...DEFAULT_CROSSHAIR_SETTINGS.redDot.centerDot },
+      innerLines: { ...DEFAULT_CROSSHAIR_SETTINGS.redDot.innerLines },
+      outerLines: { ...DEFAULT_CROSSHAIR_SETTINGS.redDot.outerLines },
+      outline: { ...DEFAULT_CROSSHAIR_SETTINGS.redDot.outline },
+    },
   };
 }
 
@@ -297,6 +304,11 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
     ? crosshair.weaponModifiers
     : {};
   const crosshairAds = isRecord(crosshair.ads) ? crosshair.ads : {};
+  const redDot = isRecord(crosshair.redDot) ? crosshair.redDot : {};
+  const redDotCenterDot = isRecord(redDot.centerDot) ? redDot.centerDot : {};
+  const redDotInnerLines = isRecord(redDot.innerLines) ? redDot.innerLines : {};
+  const redDotOuterLines = isRecord(redDot.outerLines) ? redDot.outerLines : {};
+  const redDotOutline = isRecord(redDot.outline) ? redDot.outline : {};
   const movement = isRecord(settings.movement) ? settings.movement : {};
   const weaponRecoilProfiles = isRecord(settings.weaponRecoilProfiles)
     ? settings.weaponRecoilProfiles
@@ -743,16 +755,6 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
           ),
         },
         ads: {
-          rifleDotSize: readClampedNumber(
-            crosshairAds.rifleDotSize,
-            1,
-            16,
-            defaults.settings.crosshair.ads.rifleDotSize,
-          ),
-          rifleDotColor: readCrosshairColor(
-            crosshairAds.rifleDotColor,
-            defaults.settings.crosshair.ads.rifleDotColor,
-          ),
           sniperDotSize: readClampedNumber(
             crosshairAds.sniperDotSize,
             1,
@@ -763,6 +765,96 @@ export function parsePersistedSettings(value: unknown): PersistedSettings {
             crosshairAds.sniperDotColor,
             defaults.settings.crosshair.ads.sniperDotColor,
           ),
+        },
+        redDot: {
+          color: readCrosshairColor(
+            redDot.color,
+            defaults.settings.crosshair.redDot.color,
+          ),
+          centerDot: {
+            enabled: readBoolean(
+              redDotCenterDot.enabled,
+              defaults.settings.crosshair.redDot.centerDot.enabled,
+            ),
+            size: readClampedNumber(
+              redDotCenterDot.size,
+              1,
+              18,
+              defaults.settings.crosshair.redDot.centerDot.size,
+            ),
+            thickness: readClampedNumber(
+              redDotCenterDot.thickness,
+              1,
+              12,
+              defaults.settings.crosshair.redDot.centerDot.thickness,
+            ),
+          },
+          innerLines: {
+            enabled: readBoolean(
+              redDotInnerLines.enabled,
+              defaults.settings.crosshair.redDot.innerLines.enabled,
+            ),
+            length: readClampedNumber(
+              redDotInnerLines.length,
+              1,
+              28,
+              defaults.settings.crosshair.redDot.innerLines.length,
+            ),
+            thickness: readClampedNumber(
+              redDotInnerLines.thickness,
+              1,
+              10,
+              defaults.settings.crosshair.redDot.innerLines.thickness,
+            ),
+            gap: readClampedNumber(
+              redDotInnerLines.gap,
+              0,
+              28,
+              defaults.settings.crosshair.redDot.innerLines.gap,
+            ),
+          },
+          outerLines: {
+            enabled: readBoolean(
+              redDotOuterLines.enabled,
+              defaults.settings.crosshair.redDot.outerLines.enabled,
+            ),
+            length: readClampedNumber(
+              redDotOuterLines.length,
+              1,
+              28,
+              defaults.settings.crosshair.redDot.outerLines.length,
+            ),
+            thickness: readClampedNumber(
+              redDotOuterLines.thickness,
+              1,
+              10,
+              defaults.settings.crosshair.redDot.outerLines.thickness,
+            ),
+            gap: readClampedNumber(
+              redDotOuterLines.gap,
+              0,
+              36,
+              defaults.settings.crosshair.redDot.outerLines.gap,
+            ),
+          },
+          outline: {
+            enabled: readBoolean(
+              redDotOutline.enabled,
+              defaults.settings.crosshair.redDot.outline.enabled,
+            ),
+            thickness: readClampedNumber(
+              redDotOutline.thickness,
+              0,
+              4,
+              defaults.settings.crosshair.redDot.outline.thickness,
+            ),
+            opacity: readClampedNumber(
+              redDotOutline.opacity,
+              0,
+              1,
+              defaults.settings.crosshair.redDot.outline.opacity,
+            ),
+          },
         },
       },
       movement: {

@@ -195,10 +195,16 @@ export type CrosshairWeaponModifierSettings = {
 };
 
 export type CrosshairAdsSettings = {
-  rifleDotSize: number;
-  rifleDotColor: CrosshairColor;
   sniperDotSize: number;
   sniperDotColor: CrosshairColor;
+};
+
+export type RedDotCrosshairSettings = {
+  color: CrosshairColor;
+  centerDot: CrosshairCenterDotSettings;
+  innerLines: CrosshairLineSettings;
+  outerLines: CrosshairLineSettings;
+  outline: CrosshairOutlineSettings;
 };
 
 export type CrosshairSettings = {
@@ -210,6 +216,7 @@ export type CrosshairSettings = {
   dynamic: CrosshairDynamicSettings;
   weaponModifiers: CrosshairWeaponModifierSettings;
   ads: CrosshairAdsSettings;
+  redDot: RedDotCrosshairSettings;
 };
 
 export type WeaponRecoilProfile = {
@@ -237,17 +244,17 @@ export type MovementProfileSettings = {
 };
 
 export const DEFAULT_CROSSHAIR_SETTINGS: CrosshairSettings = {
-  color: 'white',
+  color: 'green',
   centerDot: {
     enabled: true,
     size: 3.5,
     thickness: 3,
   },
   innerLines: {
-    enabled: false,
+    enabled: true,
     length: 6.5,
     thickness: 1.5,
-    gap: 8.5,
+    gap: 3.5,
   },
   outerLines: {
     enabled: false,
@@ -273,10 +280,33 @@ export const DEFAULT_CROSSHAIR_SETTINGS: CrosshairSettings = {
     sniperGapMultiplier: 1.25,
   },
   ads: {
-    rifleDotSize: 5,
-    rifleDotColor: 'red',
     sniperDotSize: 6,
     sniperDotColor: 'red',
+  },
+  redDot: {
+    color: 'red',
+    centerDot: {
+      enabled: true,
+      size: 3.5,
+      thickness: 3,
+    },
+    innerLines: {
+      enabled: false,
+      length: 6.5,
+      thickness: 1.5,
+      gap: 8.5,
+    },
+    outerLines: {
+      enabled: false,
+      length: 7,
+      thickness: 2,
+      gap: 13,
+    },
+    outline: {
+      enabled: true,
+      thickness: 1,
+      opacity: 0.85,
+    },
   },
 };
 
