@@ -292,8 +292,8 @@ export const ANIM_CLIPS: { name: string; url: string }[] = [
 ];
 
 export const WEAPON_MODEL_URLS: Record<WeaponKind, string> = {
-  rifle: '/assets/weapons/pack/FBX/AssaultRifle_01.fbx',
-  sniper: '/assets/weapons/pack/FBX/SniperRifle_01.fbx',
+  rifle: '/assets/weapons/gold-skin/aug.fbx',
+  sniper: '/assets/weapons/gold-skin/sniper.fbx',
 };
 
 export type WeaponModelTransform = {
@@ -310,7 +310,7 @@ export const WEAPON_MODEL_TRANSFORMS: {
   character: {
     rifle: {
       position: [0.02, -0.03, 0],
-      rotation: [0, -Math.PI / 2, 0],
+      rotation: [0, Math.PI / 2, 0],
       scale: 0.0013,
     },
     sniper: {
@@ -322,7 +322,7 @@ export const WEAPON_MODEL_TRANSFORMS: {
   back: {
     rifle: {
       position: [-0.0, -0.1, -0.2],
-      rotation: [-1.5, -Math.PI * -0.08, 1],
+      rotation: [-1.5, Math.PI * 1.08, 1],
       scale: 0.0013,
     },
     sniper: {
@@ -334,7 +334,7 @@ export const WEAPON_MODEL_TRANSFORMS: {
   world: {
     rifle: {
       position: [0, 0.02, 0],
-      rotation: [0, -Math.PI / 2, 0],
+      rotation: [0, Math.PI / 2, 0],
       scale: 0.0013,
     },
     sniper: {
@@ -345,6 +345,13 @@ export const WEAPON_MODEL_TRANSFORMS: {
   },
 };
 
+// Mesh name substrings (case-insensitive) to hide on loaded weapon models.
+// Used to suppress built-in scope/optic meshes when we mount our own sight.
+// Open the browser console after loading to see all mesh names logged by useWeaponModels.
+export const WEAPON_HIDDEN_MESH_SUBSTRINGS: Partial<
+  Record<WeaponKind, string[]>
+> = {};
+
 // ── Sight / scope assets ──
 export const SIGHT_FBX_URL = '/assets/weapons/sights/source/Scopes Part 1.fbx';
 export const SIGHT_TEXTURE_BASE = '/assets/weapons/sights/textures/';
@@ -354,10 +361,10 @@ export const SIGHT_TEXTURE_MAP: Record<
   { base: string; metallic: string; normal?: string; roughness: string }
 > = {
   rifle: {
-    base: 'Sight1_Base_color.png',
-    metallic: 'Sight1_Metallic.png',
-    normal: 'Sight1_Normal_DirectX.png',
-    roughness: 'Sight1_Roughness.png',
+    base: 'Sight2_Base_color.png',
+    metallic: 'Sight2_Metallic.png',
+    normal: 'Sight2_Normal_DirectX.png',
+    roughness: 'Sight2_Roughness.png',
   },
   sniper: {
     base: 'Sight5_Base_color.png',
@@ -371,7 +378,7 @@ export const SIGHT_TEXTURE_MAP: Record<
 // These will be matched via child.name.includes(). If the loaded FBX uses different
 // names, inspect the children via console.log and update these values.
 export const SIGHT_MESH_NAMES: Record<string, string> = {
-  rifle: 'Sight1',
+  rifle: 'Sight2',
   sniper: 'Sight5',
 };
 
@@ -383,14 +390,14 @@ export const SIGHT_MESH_NAMES: Record<string, string> = {
 export const SIGHT_MOUNT_TRANSFORMS: Record<WeaponKind, WeaponModelTransform> =
   {
     rifle: {
-      position: [-0.04, 0.04, 0],
+      position: [-0.08, 0.035, 0],
       rotation: [0, -Math.PI / 2, 0],
       scale: 0.0013,
     },
     sniper: {
-      position: [-0.04, 0.04, 0],
+      position: [0.04, -0.03, -0.01],
       rotation: [0, -Math.PI / 2, 0],
-      scale: 0.0018,
+      scale: 0.0013,
     },
   };
 

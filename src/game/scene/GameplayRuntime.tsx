@@ -4152,6 +4152,21 @@ export const GameplayRuntime = forwardRef<
                 </mesh>
               </>
             )}
+          {sightModels.sniperSight
+            ? (
+              <group
+                position={SIGHT_MOUNT_TRANSFORMS.sniper.position}
+                rotation={SIGHT_MOUNT_TRANSFORMS.sniper.rotation}
+                scale={[
+                  SIGHT_MOUNT_TRANSFORMS.sniper.scale,
+                  SIGHT_MOUNT_TRANSFORMS.sniper.scale,
+                  SIGHT_MOUNT_TRANSFORMS.sniper.scale,
+                ]}
+              >
+                <primitive object={sightModels.sniperSight} />
+              </group>
+            )
+            : null}
         </group>
         <mesh ref={characterMuzzleRef} position={[0, 0, 0]} visible={false}>
           <sphereGeometry args={[0.05, 8, 8]} />

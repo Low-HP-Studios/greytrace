@@ -6,6 +6,7 @@ import {
   SIGHT_MESH_NAMES,
   SIGHT_TEXTURE_BASE,
   SIGHT_TEXTURE_MAP,
+  WEAPON_HIDDEN_MESH_SUBSTRINGS,
   WEAPON_MODEL_URLS,
   type WeaponModelTransform,
 } from "./scene-constants";
@@ -15,6 +16,18 @@ export type WeaponModelResult = {
   sniper: THREE.Group | null;
   ready: boolean;
 };
+
+function applyHiddenMeshes(model: THREE.Group | null, kind: string): void {
+  if (!model) return;
+  const substrings = WEAPON_HIDDEN_MESH_SUBSTRINGS[kind as keyof typeof WEAPON_HIDDEN_MESH_SUBSTRINGS] ?? [];
+  model.traverse((child) => {
+    if (!(child as THREE.Mesh).isMesh) return;
+    console.log(`[Weapons:${kind}] mesh:`, child.name);
+    if (substrings.some((s) => child.name.toLowerCase().includes(s.toLowerCase()))) {
+      child.visible = false;
+    }
+  });
+}
 
 export function useWeaponModels(): WeaponModelResult {
   const [models, setModels] = useState<WeaponModelResult>({
@@ -33,6 +46,9 @@ export function useWeaponModels(): WeaponModelResult {
           loadFbxAsset(WEAPON_MODEL_URLS.sniper),
         ]);
         if (disposed) return;
+
+        applyHiddenMeshes(rifle, 'rifle');
+        applyHiddenMeshes(sniper, 'sniper');
 
         setModels({
           rifle,
@@ -161,10 +177,16 @@ export function useSightModels(enabled = true): SightModelResult {
         const rifleMesh = extractSightMesh(fbx, SIGHT_MESH_NAMES.rifle);
         console.log("[Sights] rifle mesh:", rifleMesh?.name ?? "not found");
 
+        const sniperMesh = extractSightMesh(fbx, SIGHT_MESH_NAMES.sniper);
+        console.log("[Sights] sniper mesh:", sniperMesh?.name ?? "not found");
+
         // Apply PBR textures in parallel
         const textureWork: Promise<void>[] = [];
         if (rifleMesh) {
           textureWork.push(applySightTextures(rifleMesh, SIGHT_TEXTURE_MAP.rifle));
+        }
+        if (sniperMesh) {
+          textureWork.push(applySightTextures(sniperMesh, SIGHT_TEXTURE_MAP.sniper));
         }
         await Promise.all(textureWork);
         if (disposed) return;
@@ -209,7 +231,7 @@ export function useSightModels(enabled = true): SightModelResult {
 
         setResult({
           rifleSight: wrapInGroup(rifleMesh, "rifle-reddot"),
-          sniperSight: null,
+          sniperSight: wrapInGroup(sniperMesh, "sniper-scope"),
           ready: true,
         });
       } catch (error) {
