@@ -20,7 +20,6 @@ import {
 } from "../PlayerController";
 import {
   raycastVisibleTargets,
-  targetDummyGroupScale,
   type TargetRaycastHit,
   type TargetVisualHandle,
 } from "../Targets";
@@ -3504,7 +3503,6 @@ export const GameplayRuntime = forwardRef<
         controller.addRecoil(shot.recoilPitchRadians, shot.recoilYawRadians);
       }
 
-      const targetVisualScale = targetDummyGroupScale(targetRevealRef.current);
       const cameraTargetHit = raycastVisibleTargets(
         shot.origin,
         shot.direction,
@@ -3512,7 +3510,6 @@ export const GameplayRuntime = forwardRef<
         targetVisualRegistryRef.current,
         raycasterRef.current,
         Number.POSITIVE_INFINITY,
-        targetVisualScale,
       );
       const cameraWorldHit = raycastBulletWorld(
         bulletHittableMeshesRef.current,
@@ -3582,7 +3579,6 @@ export const GameplayRuntime = forwardRef<
         targetVisualRegistryRef.current,
         raycasterRef.current,
         maxFireDistance,
-        targetVisualScale,
       );
       const worldHit = raycastBulletWorld(
         bulletHittableMeshesRef.current,
