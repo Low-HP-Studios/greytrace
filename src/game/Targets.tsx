@@ -56,7 +56,7 @@ export type TargetVisualHandle = {
   targetId: string;
   root: THREE.Group;
   shootableMeshes: THREE.Mesh[];
-  landmarks: TargetLandmarks;
+  landmarks: TargetLandmarks | null;
 };
 
 export type TargetVisualRegistryRef = MutableRefObject<
@@ -74,150 +74,7 @@ const TARGET_VISUAL_SKINNED_BOUND_RADIUS_SCALE = 1.5;
 export function targetDummyGroupScale(reveal: number) {
   return TARGET_DUMMY_GROUP_SCALE_MIN + reveal * TARGET_DUMMY_GROUP_SCALE_REVEAL;
 }
-const Y_AXIS = new THREE.Vector3(0, 1, 0);
-
-type TargetSphereHitbox = {
-  zone: TargetHitZone;
-  center: [number, number, number];
-  radius: number;
-};
-
-type TargetBoxHitbox = {
-  zone: TargetHitZone;
-  center: [number, number, number];
-  halfSize: [number, number, number];
-};
-
-type TargetHitboxPart =
-  | { kind: "sphere"; hitbox: TargetSphereHitbox }
-  | { kind: "box"; hitbox: TargetBoxHitbox };
-
 const TARGET_COLLISION_RADIUS = 0.35;
-
-const TARGET_HITBOX_PARTS: TargetHitboxPart[] = [
-  // ── Head (3 parts) ──
-  // The Trooper FBX head sits lower than the old sphere expected, so keep
-  // face/jaw coverage slightly lower and wider to match the visible mask.
-  // Helmet / upper skull
-  {
-    kind: "sphere",
-    hitbox: {
-      zone: "head",
-      center: [0, 0.915 * T, 0.015 * T],
-      radius: 0.095 * T,
-    },
-  },
-  // Face / visor
-  {
-    kind: "box",
-    hitbox: {
-      zone: "head",
-      center: [0, 0.875 * T, 0.01 * T],
-      halfSize: [0.075 * T, 0.055 * T, 0.08 * T],
-    },
-  },
-  // Neck / jaw bridge
-  {
-    kind: "box",
-    hitbox: {
-      zone: "head",
-      center: [0, 0.81 * T, 0.015 * T],
-      halfSize: [0.055 * T, 0.03 * T, 0.06 * T],
-    },
-  },
-  // ── Body (4 parts) – tight torso, no arm-gap overshoot ──
-  // Upper torso (chest + shoulders)
-  {
-    kind: "box",
-    hitbox: {
-      zone: "body",
-      center: [0, 0.715 * T, -0.008 * T],
-      halfSize: [0.115 * T, 0.085 * T, 0.065 * T],
-    },
-  },
-  // Lower torso (belly + hips)
-  {
-    kind: "box",
-    hitbox: {
-      zone: "body",
-      center: [0, 0.54 * T, -0.01 * T],
-      halfSize: [0.095 * T, 0.075 * T, 0.055 * T],
-    },
-  },
-  // Left upper arm
-  {
-    kind: "box",
-    hitbox: {
-      zone: "body",
-      center: [-0.165 * T, 0.68 * T, 0.005 * T],
-      halfSize: [0.04 * T, 0.09 * T, 0.04 * T],
-    },
-  },
-  // Right upper arm
-  {
-    kind: "box",
-    hitbox: {
-      zone: "body",
-      center: [0.165 * T, 0.68 * T, 0.005 * T],
-      halfSize: [0.04 * T, 0.09 * T, 0.04 * T],
-    },
-  },
-  // ── Legs (6 parts) – boxes overlap at the centerline so nothing passes through ──
-  // Left thigh  (inner edge at +0.02·T → overlaps right thigh)
-  {
-    kind: "box",
-    hitbox: {
-      zone: "leg",
-      center: [-0.045 * T, 0.32 * T, 0],
-      halfSize: [0.065 * T, 0.135 * T, 0.06 * T],
-    },
-  },
-  // Right thigh (inner edge at -0.02·T → overlaps left thigh)
-  {
-    kind: "box",
-    hitbox: {
-      zone: "leg",
-      center: [0.045 * T, 0.32 * T, 0],
-      halfSize: [0.065 * T, 0.135 * T, 0.06 * T],
-    },
-  },
-  // Left shin  (inner edge at +0.01·T → overlaps right shin)
-  {
-    kind: "box",
-    hitbox: {
-      zone: "leg",
-      center: [-0.045 * T, 0.11 * T, 0],
-      halfSize: [0.055 * T, 0.11 * T, 0.055 * T],
-    },
-  },
-  // Right shin (inner edge at -0.01·T → overlaps left shin)
-  {
-    kind: "box",
-    hitbox: {
-      zone: "leg",
-      center: [0.045 * T, 0.11 * T, 0],
-      halfSize: [0.055 * T, 0.11 * T, 0.055 * T],
-    },
-  },
-  // Left foot
-  {
-    kind: "sphere",
-    hitbox: {
-      zone: "leg",
-      center: [-0.045 * T, 0.015 * T, 0.01 * T],
-      radius: 0.055 * T,
-    },
-  },
-  // Right foot
-  {
-    kind: "sphere",
-    hitbox: {
-      zone: "leg",
-      center: [0.045 * T, 0.015 * T, 0.01 * T],
-      radius: 0.055 * T,
-    },
-  },
-];
 
 function resolveTargetFacingYaw(id: string) {
   const hash = id.split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
@@ -301,28 +158,31 @@ function resolveTargetVisualHandle(
     landmarks[key] = child as THREE.Bone;
   });
 
-  if (
-    shootableMeshes.length === 0 ||
-    !landmarks.head ||
-    !landmarks.neck ||
-    !landmarks.hips ||
-    !landmarks.leftUpperLeg ||
-    !landmarks.rightUpperLeg
-  ) {
+  if (shootableMeshes.length === 0) {
     return null;
   }
+
+  const hasAllLandmarks = !!(
+    landmarks.head &&
+    landmarks.neck &&
+    landmarks.hips &&
+    landmarks.leftUpperLeg &&
+    landmarks.rightUpperLeg
+  );
 
   return {
     targetId,
     root,
     shootableMeshes,
-    landmarks: {
-      head: landmarks.head,
-      neck: landmarks.neck,
-      hips: landmarks.hips,
-      leftUpperLeg: landmarks.leftUpperLeg,
-      rightUpperLeg: landmarks.rightUpperLeg,
-    },
+    landmarks: hasAllLandmarks
+      ? {
+          head: landmarks.head!,
+          neck: landmarks.neck!,
+          hips: landmarks.hips!,
+          leftUpperLeg: landmarks.leftUpperLeg!,
+          rightUpperLeg: landmarks.rightUpperLeg!,
+        }
+      : null,
   };
 }
 
@@ -387,13 +247,6 @@ export function resetTargets(targets: TargetState[]): TargetState[] {
 
 export { DAMAGE_PER_SHOT, RESPAWN_DELAY_MS, TARGET_COLLISION_RADIUS };
 
-const _tempSpherePoint = new THREE.Vector3();
-const _tempSphereNormal = new THREE.Vector3();
-const _tempAabbNearNormal = new THREE.Vector3();
-const _tempAabbFarNormal = new THREE.Vector3();
-const _tempAabbPoint = new THREE.Vector3();
-const _tempTargetLocalOrigin = new THREE.Vector3();
-const _tempTargetLocalDirection = new THREE.Vector3();
 const _tempVisualPointLocal = new THREE.Vector3();
 const _tempVisualHeadLocal = new THREE.Vector3();
 const _tempVisualNeckLocal = new THREE.Vector3();
@@ -403,134 +256,42 @@ const _tempVisualRightUpperLegLocal = new THREE.Vector3();
 const _tempVisualHitNormal = new THREE.Vector3();
 const _tempVisualHitNormalMatrix = new THREE.Matrix3();
 
-function transformTargetHit(
-  hit: TargetRaycastHit,
-  target: TargetState,
-): TargetRaycastHit {
-  const [x, baseY, z] = target.position;
-  const point = hit.point
-    .clone()
-    .applyAxisAngle(Y_AXIS, target.facingYaw)
-    .add(new THREE.Vector3(x, baseY, z));
-  const normal = hit.normal
-    .clone()
-    .applyAxisAngle(Y_AXIS, target.facingYaw)
-    .normalize();
-
-  return {
-    ...hit,
-    point,
-    normal,
-  };
-}
-
-export function raycastTargets(
-  origin: THREE.Vector3,
-  direction: THREE.Vector3,
-  targets: TargetState[],
-  maxDistance = Number.POSITIVE_INFINITY,
-  targetVisualScale = 1,
-): TargetRaycastHit | null {
-  let closestHit: TargetRaycastHit | null = null;
-
-  for (const target of targets) {
-    if (target.disabled) {
-      continue;
-    }
-
-    const [x, baseY, z] = target.position;
-    const localOrigin = _tempTargetLocalOrigin
-      .set(origin.x - x, origin.y - baseY, origin.z - z)
-      .applyAxisAngle(Y_AXIS, -target.facingYaw);
-    const localDirection = _tempTargetLocalDirection
-      .copy(direction)
-      .applyAxisAngle(Y_AXIS, -target.facingYaw)
-      .normalize();
-
-    const s = targetVisualScale;
-    let targetClosestHit: TargetRaycastHit | null = null;
-    for (const part of TARGET_HITBOX_PARTS) {
-      const partHit = part.kind === "sphere"
-        ? raycastSpherePart(
-          target.id,
-          part.hitbox.zone,
-          localOrigin,
-          localDirection,
-          part.hitbox.center[0] * s,
-          part.hitbox.center[1] * s,
-          part.hitbox.center[2] * s,
-          part.hitbox.radius * s,
-        )
-        : raycastAabbPart(
-          target.id,
-          part.hitbox.zone,
-          localOrigin,
-          localDirection,
-          part.hitbox.center[0] * s,
-          part.hitbox.center[1] * s,
-          part.hitbox.center[2] * s,
-          part.hitbox.halfSize[0] * s,
-          part.hitbox.halfSize[1] * s,
-          part.hitbox.halfSize[2] * s,
-        );
-      if (!partHit) {
-        continue;
-      }
-      const worldPartHit = transformTargetHit(partHit, target);
-      if (worldPartHit.distance > maxDistance) {
-        continue;
-      }
-      if (
-        !targetClosestHit || worldPartHit.distance < targetClosestHit.distance
-      ) {
-        targetClosestHit = worldPartHit;
-      }
-    }
-
-    if (
-      targetClosestHit &&
-      (!closestHit || targetClosestHit.distance < closestHit.distance)
-    ) {
-      closestHit = targetClosestHit;
-    }
-  }
-
-  return closestHit;
-}
 
 function classifyTargetVisualZone(
   handle: TargetVisualHandle,
   pointWorld: THREE.Vector3,
 ): TargetHitZone {
   handle.root.updateWorldMatrix(true, true);
-
   const pointLocal = handle.root.worldToLocal(_tempVisualPointLocal.copy(pointWorld));
-  const headLocal = handle.root.worldToLocal(
-    handle.landmarks.head.getWorldPosition(_tempVisualHeadLocal),
-  );
-  const neckLocal = handle.root.worldToLocal(
-    handle.landmarks.neck.getWorldPosition(_tempVisualNeckLocal),
-  );
-  const hipsLocal = handle.root.worldToLocal(
-    handle.landmarks.hips.getWorldPosition(_tempVisualHipsLocal),
-  );
-  const leftUpperLegLocal = handle.root.worldToLocal(
-    handle.landmarks.leftUpperLeg.getWorldPosition(_tempVisualLeftUpperLegLocal),
-  );
-  const rightUpperLegLocal = handle.root.worldToLocal(
-    handle.landmarks.rightUpperLeg.getWorldPosition(_tempVisualRightUpperLegLocal),
-  );
 
-  const headThresholdY = (neckLocal.y + headLocal.y) * 0.5;
-  const upperLegAverageY = (leftUpperLegLocal.y + rightUpperLegLocal.y) * 0.5;
-  const legThresholdY = (hipsLocal.y + upperLegAverageY) * 0.5;
+  if (handle.landmarks) {
+    const headLocal = handle.root.worldToLocal(
+      handle.landmarks.head.getWorldPosition(_tempVisualHeadLocal),
+    );
+    const neckLocal = handle.root.worldToLocal(
+      handle.landmarks.neck.getWorldPosition(_tempVisualNeckLocal),
+    );
+    const hipsLocal = handle.root.worldToLocal(
+      handle.landmarks.hips.getWorldPosition(_tempVisualHipsLocal),
+    );
+    const leftUpperLegLocal = handle.root.worldToLocal(
+      handle.landmarks.leftUpperLeg.getWorldPosition(_tempVisualLeftUpperLegLocal),
+    );
+    const rightUpperLegLocal = handle.root.worldToLocal(
+      handle.landmarks.rightUpperLeg.getWorldPosition(_tempVisualRightUpperLegLocal),
+    );
+    const headThresholdY = (neckLocal.y + headLocal.y) * 0.5;
+    const upperLegAverageY = (leftUpperLegLocal.y + rightUpperLegLocal.y) * 0.5;
+    const legThresholdY = (hipsLocal.y + upperLegAverageY) * 0.5;
+    if (pointLocal.y >= headThresholdY) return "head";
+    if (pointLocal.y <= legThresholdY) return "leg";
+    return "body";
+  }
 
-  if (pointLocal.y >= headThresholdY) {
-    return "head";
-  }
-  if (pointLocal.y <= legThresholdY) {
-    return "leg";
-  }
+  // Fallback: classify by Y-height fraction when landmark bones aren't resolved.
+  // pointLocal.y is in the group's local space where feet ≈ 0 and head ≈ T.
+  if (pointLocal.y > T * 0.78) return "head";
+  if (pointLocal.y < T * 0.40) return "leg";
   return "body";
 }
 
@@ -541,7 +302,6 @@ export function raycastVisibleTargets(
   visualRegistry: Map<string, TargetVisualHandle>,
   raycaster: THREE.Raycaster,
   maxDistance = Number.POSITIVE_INFINITY,
-  targetVisualScale = 1,
 ): TargetRaycastHit | null {
   if (maxDistance <= 0) {
     return null;
@@ -606,132 +366,9 @@ export function raycastVisibleTargets(
     }
   }
 
-  if (visualHit) {
-    return visualHit;
-  }
-
-  return raycastTargets(
-    origin,
-    direction,
-    targets,
-    maxDistance,
-    targetVisualScale,
-  );
+  return visualHit;
 }
 
-function raycastSpherePart(
-  id: string,
-  zone: TargetHitZone,
-  origin: THREE.Vector3,
-  direction: THREE.Vector3,
-  cx: number,
-  cy: number,
-  cz: number,
-  radius: number,
-): TargetRaycastHit | null {
-  const ox = origin.x - cx;
-  const oy = origin.y - cy;
-  const oz = origin.z - cz;
-
-  const b = ox * direction.x + oy * direction.y + oz * direction.z;
-  const c = ox * ox + oy * oy + oz * oz - radius * radius;
-  const discriminant = b * b - c;
-  if (discriminant < 0) {
-    return null;
-  }
-
-  const sqrtDisc = Math.sqrt(discriminant);
-  const nearT = -b - sqrtDisc;
-  const farT = -b + sqrtDisc;
-  const distance = nearT > 0 ? nearT : farT > 0 ? farT : -1;
-  if (distance <= 0) {
-    return null;
-  }
-
-  const point = _tempSpherePoint.set(
-    origin.x + direction.x * distance,
-    origin.y + direction.y * distance,
-    origin.z + direction.z * distance,
-  );
-  const normal = _tempSphereNormal.set(point.x - cx, point.y - cy, point.z - cz)
-    .normalize();
-
-  return { id, zone, point: point.clone(), normal: normal.clone(), distance };
-}
-
-function raycastAabbPart(
-  id: string,
-  zone: TargetHitZone,
-  origin: THREE.Vector3,
-  direction: THREE.Vector3,
-  cx: number,
-  cy: number,
-  cz: number,
-  hx: number,
-  hy: number,
-  hz: number,
-): TargetRaycastHit | null {
-  let tMin = -Infinity;
-  let tMax = Infinity;
-  _tempAabbNearNormal.set(0, 0, 0);
-  _tempAabbFarNormal.set(0, 0, 0);
-
-  const hitAxis = (
-    originCoord: number,
-    dirCoord: number,
-    min: number,
-    max: number,
-    minNormal: [number, number, number],
-    maxNormal: [number, number, number],
-  ): boolean => {
-    if (Math.abs(dirCoord) < 1e-8) {
-      return originCoord >= min && originCoord <= max;
-    }
-
-    let t1 = (min - originCoord) / dirCoord;
-    let t2 = (max - originCoord) / dirCoord;
-    let n1 = minNormal;
-    let n2 = maxNormal;
-
-    if (t1 > t2) {
-      [t1, t2] = [t2, t1];
-      [n1, n2] = [n2, n1];
-    }
-
-    if (t1 > tMin) {
-      tMin = t1;
-      _tempAabbNearNormal.set(n1[0], n1[1], n1[2]);
-    }
-    if (t2 < tMax) {
-      tMax = t2;
-      _tempAabbFarNormal.set(n2[0], n2[1], n2[2]);
-    }
-
-    return tMin <= tMax;
-  };
-
-  if (
-    !hitAxis(origin.x, direction.x, cx - hx, cx + hx, [-1, 0, 0], [1, 0, 0]) ||
-    !hitAxis(origin.y, direction.y, cy - hy, cy + hy, [0, -1, 0], [0, 1, 0]) ||
-    !hitAxis(origin.z, direction.z, cz - hz, cz + hz, [0, 0, -1], [0, 0, 1])
-  ) {
-    return null;
-  }
-
-  const distance = tMin > 0 ? tMin : tMax > 0 ? tMax : -1;
-  if (distance <= 0) {
-    return null;
-  }
-
-  const point = _tempAabbPoint.set(
-    origin.x + direction.x * distance,
-    origin.y + direction.y * distance,
-    origin.z + direction.z * distance,
-  );
-  const normal = tMin > 0 ? _tempAabbNearNormal : _tempAabbFarNormal;
-
-  return { id, zone, point: point.clone(), normal: normal.clone(), distance };
-}
 
 function prepareTargetCharacterModel(model: THREE.Group): void {
   const box = new THREE.Box3().setFromObject(model);
