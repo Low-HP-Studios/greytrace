@@ -1,4 +1,4 @@
-import type { BlockingVolume, WalkableSurface } from '../map-layout';
+import type { BlockingVolume, JumpPad, WalkableSurface } from '../map-layout';
 import type { CollisionRect, MapId, TargetState, WorldBounds } from '../types';
 import { createDefaultTargets } from '../Targets';
 import type { StaticGroundSpawn } from '../inventory/inventory-data';
@@ -9,12 +9,8 @@ export type OccluderVolume = {
 };
 
 export type PracticeMapEnvironment =
-  | {
-      kind: 'range-procedural';
-    }
-  | {
-      kind: 'school-blockout';
-    }
+  | { kind: 'range-procedural' }
+  | { kind: 'school-blockout' }
   | {
       kind: 'school-glb';
       modelUrl: string;
@@ -24,9 +20,7 @@ export type PracticeMapEnvironment =
       doubleSideMeshNameIncludes?: readonly string[];
       wallFallbackTextureUrl?: string;
     }
-  | {
-      kind: 'tdm-procedural';
-    };
+  | { kind: 'tdm-procedural' };
 
 export type PracticeMapDefinition = {
   id: MapId;
@@ -34,6 +28,7 @@ export type PracticeMapDefinition = {
   description: string;
   supportsStressMode: boolean;
   worldBounds: WorldBounds;
+  playerBounds?: WorldBounds;
   collisionRects: readonly CollisionRect[];
   occluderVolumes: readonly OccluderVolume[];
   playerSpawn: {
@@ -45,12 +40,15 @@ export type PracticeMapDefinition = {
   groundSpawns: readonly StaticGroundSpawn[];
   walkableSurfaces?: readonly WalkableSurface[];
   blockingVolumes?: readonly BlockingVolume[];
+  jumpPads?: readonly JumpPad[];
   infiniteAmmo?: boolean;
   spawnWithRifle?: boolean;
   environment: PracticeMapEnvironment;
 };
 
 const DEFAULT_PLAYER_PITCH = -0.05;
+
+// ── Practice Range ─────────────────────────────────────────
 
 const RANGE_WORLD_BOUNDS: WorldBounds = {
   minX: -80,
@@ -71,18 +69,31 @@ const RANGE_GROUND_SPAWNS: readonly StaticGroundSpawn[] = [
   { itemId: 'ammo_sniper', quantity: 30, position: [2.35, 0.14, 3.85] },
 ];
 
+// ═══════════════════════════════════════════════════════════
+// TDM — PUBG-style arena
+//
+// Play area :  84 wide  (x: −42 … +42)
+//             110 deep  (z: −55 … +55)
+//
+// Zones:
+//   BLUE SPAWN  z ∈ [−55, −32]   (23 deep)
+//   MID         z ∈ [−32, +32]   (64 deep)
+//   RED SPAWN   z ∈ [+32, +55]   (23 deep)
+// ═══════════════════════════════════════════════════════════
+
 const TDM_WORLD_BOUNDS: WorldBounds = {
-  minX: -32,
-  maxX: 32,
-  minZ: -22,
-  maxZ: 22,
+  minX: -44,
+  maxX: 44,
+  minZ: -57,
+  maxZ: 57,
 };
 
-const W = 0.3; // wall thickness
-const WH = 3.8; // wall height
-const COVER_H = 1.3; // cover box height
-const CH = COVER_H / 2;
+// ── Geometry helpers ──────────────────────────────────────
 
+const W = 0.3; // wall panel thickness
+const WH = 3.8; // standard wall height
+
+/** Full-height wall panel centered at (cx, cz). */
 function wall(
   cx: number,
   cz: number,
@@ -92,86 +103,209 @@ function wall(
 ): BlockingVolume {
   return { center: [cx, h / 2, cz], size: [sx, h, sz], material: 'wall' };
 }
-function cover(
+
+/** Tall climbable crate/container — height `h` (default 2.6). */
+function crate(
   cx: number,
   cz: number,
   sx: number,
   sz: number,
+  h = 2.6,
 ): BlockingVolume {
-  return { center: [cx, CH, cz], size: [sx, COVER_H, sz], material: 'cover' };
+  return { center: [cx, h / 2, cz], size: [sx, h, sz], material: 'cover' };
 }
 
-// ── TDM map geometry ───────────────────────────────────────
-// Arena: 60 wide (x ±30) × 40 deep (z ±20)
-const TDM_BLOCKING_VOLUMES: readonly BlockingVolume[] = [
-  // ── outer boundary ──
-  wall(0, -20, 60, W),        // north
-  wall(0, 20, 60, W),         // south
-  wall(-30, 0, W, 40),        // west
-  wall(30, 0, W, 40),         // east
-
-  // ── building A (NW corner) ──
-  wall(-22, -16, 8, W),       // north wall
-  wall(-26, -13.5, W, 5),     // west wall
-  wall(-18, -16.5, W, 3),     // east wall (partial – doorway south)
-
-  // ── building B (NE corner) ──
-  wall(22, -16, 8, W),        // north wall
-  wall(26, -13.5, W, 5),      // east wall
-  wall(18, -16.5, W, 3),      // west wall (partial – doorway south)
-
-  // ── building C (SW corner) ──
-  wall(-22, 16, 8, W),        // south wall
-  wall(-26, 13.5, W, 5),      // west wall
-  wall(-18, 16.5, W, 3),      // east wall (partial – doorway north)
-
-  // ── building D (SE corner) ──
-  wall(22, 16, 8, W),         // south wall
-  wall(26, 13.5, W, 5),       // east wall
-  wall(18, 16.5, W, 3),       // west wall (partial – doorway north)
-
-  // ── center structure (cross-shaped divider) ──
-  wall(0, -6, W, 8),          // north arm
-  wall(0, 6, W, 8),           // south arm
-  wall(-5, 0, 6, W),          // west arm
-  wall(5, 0, 6, W),           // east arm
-
-  // ── mid-field walls ──
-  wall(-12, -6, 6, W),        // NW mid
-  wall(12, -6, 6, W),         // NE mid
-  wall(-12, 6, 6, W),         // SW mid
-  wall(12, 6, 6, W),          // SE mid
-
-  // ── scattered cover boxes ──
-  cover(-8, 0, 2, 2),
-  cover(8, 0, 2, 2),
-  cover(0, -14, 3, 1.2),
-  cover(0, 14, 3, 1.2),
-  cover(-20, 0, 1.5, 3),
-  cover(20, 0, 1.5, 3),
-  cover(-14, -14, 1.5, 1.5),
-  cover(14, -14, 1.5, 1.5),
-  cover(-14, 14, 1.5, 1.5),
-  cover(14, 14, 1.5, 1.5),
+// ── Outer boundary ─────────────────────────────────────────
+const BOUNDARY: readonly BlockingVolume[] = [
+  wall(0, -55, 84, W), // north
+  wall(0, 55, 84, W), // south
+  wall(-42, 0, W, 110), // west
+  wall(42, 0, W, 110), // east
 ];
 
+const TDM_PLAYER_BOUNDS: WorldBounds = {
+  minX: -42 + W / 2,
+  maxX: 42 - W / 2,
+  minZ: -55 + W / 2,
+  maxZ: 55 - W / 2,
+};
+
+// ═══════════════════════════════════════════════════════════
+// BLUE SPAWN  (z: −55 … −32)
+//
+//  z=−55  ████████████████████████████████████████  back wall
+//         [  open spawn area — no obstacles      ]
+//  z=−33  [left gap]  ████████████  [right gap]
+//              single wall blocks view from mid
+//  z=−32  ────────────────────────────────────────  mid boundary
+// ═══════════════════════════════════════════════════════════
+//
+// One wall at z=−33 spans x=−20…+20, blocking direct fire from mid.
+// Players exit left (x < −20) or right (x > +20) to reach mid.
+
+const BLUE_SPAWN: readonly BlockingVolume[] = [
+  wall(0, -33, 40, W), // single wall — blocks line-of-sight from mid
+];
+
+// RED SPAWN is the exact z-mirror of blue.
+const RED_SPAWN: readonly BlockingVolume[] = BLUE_SPAWN.map((vol) => ({
+  ...vol,
+  center: [vol.center[0], vol.center[1], -vol.center[2]] as [
+    number,
+    number,
+    number,
+  ],
+}));
+
+// ═══════════════════════════════════════════════════════════
+// MID  (z: −32 … +32)
+//
+//  Single warehouse centered at origin — 48 wide × 36 deep.
+//  One doorway on each of the 4 sides (8-unit gap at center).
+//  Roof slab sits flush on top of the walls (y = WH).
+// ═══════════════════════════════════════════════════════════
+
+// Warehouse  (x: −24…+24, z: −18…+18)
+const WAREHOUSE: readonly BlockingVolume[] = [
+  // ── north wall (z = −18) — doorway x −4…+4 ──
+  wall(-14, -18, 20, W), // west half  (x −24 to −4)
+  wall(14, -18, 20, W), // east half  (x +4 to +24)
+
+  // ── south wall (z = +18) ──
+  wall(-14, 18, 20, W),
+  wall(14, 18, 20, W),
+
+  // ── west wall (x = −24) — doorway z −4…+4 ──
+  wall(-24, -11, W, 14), // north half  (z −18 to −4)
+  wall(-24, 11, W, 14), // south half  (z +4 to +18)
+
+  // ── east wall (x = +24) ──
+  wall(24, -11, W, 14),
+  wall(24, 11, W, 14),
+
+  // ── roof slab (sits flush on top of walls at y = WH) ──
+  {
+    center: [0, WH + W / 2, 0] as [number, number, number],
+    size: [48, W, 36] as [number, number, number],
+    material: 'wall',
+  },
+
+  // ── interior crates ──
+  crate(-12, -6, 6, 6, 2.6),
+  crate(12, 6, 6, 6, 2.6),
+];
+
+// Flank crates — one per open corridor outside the warehouse walls.
+// Offset from the direct sightline so players coming from spawn have cover
+// before peeking into mid, and campers at the warehouse doorways are blocked.
+//
+//  blue side (z < 0):  left flank x=−33  |  right flank x=+33  at z=−24
+//  red  side (z > 0):  mirrored at z=+24
+const FLANK_CRATES: readonly BlockingVolume[] = [
+  crate(-33, -24, 5, 5, 2.6), // left-blue
+  crate(33, -24, 5, 5, 2.6), // right-blue
+  crate(-33, 24, 5, 5, 2.6), // left-red
+  crate(33, 24, 5, 5, 2.6), // right-red
+];
+
+const TDM_BLOCKING_VOLUMES: readonly BlockingVolume[] = [
+  ...BOUNDARY,
+  ...BLUE_SPAWN,
+  ...RED_SPAWN,
+  ...WAREHOUSE,
+  ...FLANK_CRATES,
+];
+
+// ── Walkable surfaces ──────────────────────────────────────
 const TDM_WALKABLE_SURFACES: readonly WalkableSurface[] = [
+  // Ground floor — full play area
   {
     kind: 'slab',
-    minX: -30,
-    maxX: 30,
-    minZ: -20,
-    maxZ: 20,
+    minX: -42,
+    maxX: 42,
+    minZ: -55,
+    maxZ: 55,
     y: 0,
     material: 'yard',
   },
+
+  // Warehouse interior crate tops  (matches crate(-12,-6,6,6) and crate(12,6,6,6))
+  {
+    kind: 'slab',
+    minX: -15,
+    maxX: -9,
+    minZ: -9,
+    maxZ: -3,
+    y: 2.6,
+    material: 'upper',
+  },
+  {
+    kind: 'slab',
+    minX: 9,
+    maxX: 15,
+    minZ: 3,
+    maxZ: 9,
+    y: 2.6,
+    material: 'upper',
+  },
 ];
 
+// ── Jump pads ─────────────────────────────────────────────
+// Two pads per spawn side (left + right of the spawn wall gap), 4 total.
+// Placed at z=±29 — just inside mid after crossing the spawn wall at z=±33.
+const TDM_JUMP_PAD_BOOST = 50;
+const TDM_JUMP_PAD_LAUNCH_SPEED = 30;
+
+const TDM_JUMP_PADS: readonly JumpPad[] = [
+  // blue side
+  {
+    minX: -35,
+    maxX: -27,
+    minZ: -31,
+    maxZ: -25,
+    y: 0,
+    boostVelocity: TDM_JUMP_PAD_BOOST,
+    launchPlanarSpeed: TDM_JUMP_PAD_LAUNCH_SPEED,
+  },
+  {
+    minX: 27,
+    maxX: 35,
+    minZ: -31,
+    maxZ: -25,
+    y: 0,
+    boostVelocity: TDM_JUMP_PAD_BOOST,
+    launchPlanarSpeed: TDM_JUMP_PAD_LAUNCH_SPEED,
+  },
+  // red side (z-mirrored)
+  {
+    minX: -35,
+    maxX: -27,
+    minZ: 25,
+    maxZ: 31,
+    y: 0,
+    boostVelocity: TDM_JUMP_PAD_BOOST,
+    launchPlanarSpeed: TDM_JUMP_PAD_LAUNCH_SPEED,
+  },
+  {
+    minX: 27,
+    maxX: 35,
+    minZ: 25,
+    maxZ: 31,
+    y: 0,
+    boostVelocity: TDM_JUMP_PAD_BOOST,
+    launchPlanarSpeed: TDM_JUMP_PAD_LAUNCH_SPEED,
+  },
+];
+
+// ── Spawn ─────────────────────────────────────────────────
+// Player spawns in blue base (z = −50), between the truck and first sandbag row.
 const MAP1_PLAYER_SPAWN = {
-  position: [0, 0.5, -10] as [number, number, number],
-  yaw: Math.PI,
+  position: [0, 0.5, -50] as [number, number, number],
+  yaw: Math.PI, // facing south → toward mid
   pitch: DEFAULT_PLAYER_PITCH,
 };
+
+// ── Map definitions ────────────────────────────────────────
 
 export const RANGE_PRACTICE_MAP: PracticeMapDefinition = {
   id: 'range',
@@ -189,17 +323,17 @@ export const RANGE_PRACTICE_MAP: PracticeMapDefinition = {
   },
   targets: createDefaultTargets(),
   groundSpawns: RANGE_GROUND_SPAWNS,
-  environment: {
-    kind: 'range-procedural',
-  },
+  environment: { kind: 'range-procedural' },
 };
 
 export const MAP1_PRACTICE_MAP: PracticeMapDefinition = {
   id: 'map1',
   label: 'TDM',
-  description: 'Procedural TDM arena with four corner rooms and a center cross.',
+  description:
+    'PUBG-style Team Deathmatch — mirrored bases, buildings, and center lane.',
   supportsStressMode: false,
   worldBounds: TDM_WORLD_BOUNDS,
+  playerBounds: TDM_PLAYER_BOUNDS,
   collisionRects: [],
   occluderVolumes: [],
   playerSpawn: MAP1_PLAYER_SPAWN,
@@ -207,11 +341,10 @@ export const MAP1_PRACTICE_MAP: PracticeMapDefinition = {
   groundSpawns: [],
   walkableSurfaces: TDM_WALKABLE_SURFACES,
   blockingVolumes: TDM_BLOCKING_VOLUMES,
+  jumpPads: TDM_JUMP_PADS,
   infiniteAmmo: true,
   spawnWithRifle: true,
-  environment: {
-    kind: 'tdm-procedural',
-  },
+  environment: { kind: 'tdm-procedural' },
 };
 
 export const PRACTICE_MAPS: Record<MapId, PracticeMapDefinition> = {

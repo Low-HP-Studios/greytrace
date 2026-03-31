@@ -1373,10 +1373,37 @@ export function StressBoxes(
 }
 
 // ── Procedural TDM environment ──────────────────────────────
-const TDM_FLOOR_COLOR = new THREE.Color("#4a5568");
-const TDM_WALL_COLOR = new THREE.Color("#718096");
-const TDM_COVER_COLOR = new THREE.Color("#a0816c");
-const TDM_BOUNDARY_COLOR = new THREE.Color("#2d3748");
+
+// Floor zone colours
+const TDM_FLOOR_BLUE  = new THREE.Color("#3b4f6b");
+const TDM_FLOOR_RED   = new THREE.Color("#6b3b3b");
+const TDM_FLOOR_MID   = new THREE.Color("#4a5568");
+const TDM_MIDLINE     = new THREE.Color("#e8d44d");
+
+// Volume colours per zone
+const TDM_WALL_BLUE   = new THREE.Color("#4e6180");
+const TDM_WALL_RED    = new THREE.Color("#804e4e");
+const TDM_WALL_MID    = new THREE.Color("#5a5a6a");
+const TDM_COVER_BLUE  = new THREE.Color("#7a9ab8");
+const TDM_COVER_RED   = new THREE.Color("#b87a7a");
+const TDM_COVER_MID   = new THREE.Color("#a0816c");
+const TDM_BOUNDARY    = new THREE.Color("#2d3748");
+
+// z split between spawn zones and mid
+const TDM_SPAWN_Z = 32;
+
+function tdmVolumeColor(vol: BlockingVolume): THREE.Color {
+  if (vol.size[0] >= 80 || vol.size[2] >= 100) return TDM_BOUNDARY;
+  const z = vol.center[2];
+  if (vol.material === "cover") {
+    if (z < -TDM_SPAWN_Z) return TDM_COVER_BLUE;
+    if (z >  TDM_SPAWN_Z) return TDM_COVER_RED;
+    return TDM_COVER_MID;
+  }
+  if (z < -TDM_SPAWN_Z) return TDM_WALL_BLUE;
+  if (z >  TDM_SPAWN_Z) return TDM_WALL_RED;
+  return TDM_WALL_MID;
+}
 
 function TdmProceduralEnvironment({
   practiceMap,
@@ -1391,11 +1418,16 @@ function TdmProceduralEnvironment({
   showSkyBackdrop: boolean;
   skyAssetUrl: string;
 }) {
-  const { worldBounds, blockingVolumes = [] } = practiceMap;
-  const floorW = worldBounds.maxX - worldBounds.minX;
-  const floorD = worldBounds.maxZ - worldBounds.minZ;
-  const floorCx = (worldBounds.minX + worldBounds.maxX) / 2;
-  const floorCz = (worldBounds.minZ + worldBounds.maxZ) / 2;
+  const { worldBounds, blockingVolumes = [], jumpPads = [] } = practiceMap;
+  const mapW  = worldBounds.maxX - worldBounds.minX;
+  const mapCx = (worldBounds.minX + worldBounds.maxX) / 2;
+
+  // Hard floor zones matching the map geometry
+  const blueMinZ = -55, blueMaxZ = -TDM_SPAWN_Z;
+  const redMinZ  =  TDM_SPAWN_Z, redMaxZ = 55;
+  const midDepth = TDM_SPAWN_Z * 2;
+
+  const shadowR = Math.max(worldBounds.maxX, worldBounds.maxZ) + 6;
 
   return (
     <group>
@@ -1408,53 +1440,97 @@ function TdmProceduralEnvironment({
         surfaceBlend={theme}
       />
 
-      {/* floor */}
+      {/* ── Blue base floor ── */}
       <mesh
-        position={[floorCx, -0.05, floorCz]}
+        position={[mapCx, -0.05, (blueMinZ + blueMaxZ) / 2]}
         rotation={[-Math.PI / 2, 0, 0]}
         receiveShadow={shadows}
         userData={{ bulletHittable: true }}
       >
-        <planeGeometry args={[floorW, floorD]} />
-        <meshStandardMaterial color={TDM_FLOOR_COLOR} roughness={0.85} />
+        <planeGeometry args={[mapW, blueMaxZ - blueMinZ]} />
+        <meshStandardMaterial color={TDM_FLOOR_BLUE} roughness={0.85} />
       </mesh>
 
-      {/* walls & cover */}
-      {blockingVolumes.map((vol, i) => {
-        const isBoundary =
-          vol.size[0] >= 40 || vol.size[2] >= 40;
-        const color =
-          vol.material === "cover"
-            ? TDM_COVER_COLOR
-            : isBoundary
-              ? TDM_BOUNDARY_COLOR
-              : TDM_WALL_COLOR;
+      {/* ── Neutral mid floor ── */}
+      <mesh
+        position={[mapCx, -0.05, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow={shadows}
+        userData={{ bulletHittable: true }}
+      >
+        <planeGeometry args={[mapW, midDepth]} />
+        <meshStandardMaterial color={TDM_FLOOR_MID} roughness={0.85} />
+      </mesh>
+
+      {/* ── Red base floor ── */}
+      <mesh
+        position={[mapCx, -0.05, (redMinZ + redMaxZ) / 2]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow={shadows}
+        userData={{ bulletHittable: true }}
+      >
+        <planeGeometry args={[mapW, redMaxZ - redMinZ]} />
+        <meshStandardMaterial color={TDM_FLOOR_RED} roughness={0.85} />
+      </mesh>
+
+      {/* ── Midfield warning strips ── */}
+      <mesh position={[mapCx, -0.04, -TDM_SPAWN_Z]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[mapW, 0.4]} />
+        <meshStandardMaterial color={TDM_MIDLINE} emissive={TDM_MIDLINE} emissiveIntensity={0.3} roughness={0.6} />
+      </mesh>
+      <mesh position={[mapCx, -0.04, TDM_SPAWN_Z]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[mapW, 0.4]} />
+        <meshStandardMaterial color={TDM_MIDLINE} emissive={TDM_MIDLINE} emissiveIntensity={0.3} roughness={0.6} />
+      </mesh>
+
+      {/* ── Blocking volumes ── */}
+      {blockingVolumes.map((vol, i) => (
+        <mesh
+          key={i}
+          position={vol.center}
+          castShadow={shadows}
+          receiveShadow={shadows}
+          userData={{ bulletHittable: true }}
+        >
+          <boxGeometry args={vol.size as [number, number, number]} />
+          <meshStandardMaterial color={tdmVolumeColor(vol)} roughness={0.75} />
+        </mesh>
+      ))}
+
+      {/* ── Jump pads ── */}
+      {jumpPads.map((pad, i) => {
+        const pw = pad.maxX - pad.minX;
+        const pd = pad.maxZ - pad.minZ;
+        const cx = (pad.minX + pad.maxX) / 2;
+        const cz = (pad.minZ + pad.maxZ) / 2;
+        const isBlue = cz < 0;
+        const padColor = isBlue ? '#38bdf8' : '#f87171';
         return (
-          <mesh
-            key={i}
-            position={vol.center}
-            castShadow={shadows}
-            receiveShadow={shadows}
-            userData={{ bulletHittable: true }}
-          >
-            <boxGeometry args={vol.size as [number, number, number]} />
-            <meshStandardMaterial color={color} roughness={0.75} />
+          <mesh key={i} position={[cx, pad.y + 0.05, cz]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[pw, pd]} />
+            <meshStandardMaterial color={padColor} emissive={padColor} emissiveIntensity={0.6} roughness={0.4} />
           </mesh>
         );
       })}
 
-      {/* ambient + directional light for the arena */}
+      {/* ── Team banners ── */}
+      <mesh position={[-15, 3.5, -52]}><boxGeometry args={[0.25, 7, 0.08]} /><meshStandardMaterial color="#2563eb" emissive="#2563eb" emissiveIntensity={0.6} /></mesh>
+      <mesh position={[ 15, 3.5, -52]}><boxGeometry args={[0.25, 7, 0.08]} /><meshStandardMaterial color="#2563eb" emissive="#2563eb" emissiveIntensity={0.6} /></mesh>
+      <mesh position={[-15, 3.5,  52]}><boxGeometry args={[0.25, 7, 0.08]} /><meshStandardMaterial color="#dc2626" emissive="#dc2626" emissiveIntensity={0.6} /></mesh>
+      <mesh position={[ 15, 3.5,  52]}><boxGeometry args={[0.25, 7, 0.08]} /><meshStandardMaterial color="#dc2626" emissive="#dc2626" emissiveIntensity={0.6} /></mesh>
+
+      {/* ── Lighting ── */}
       <ambientLight intensity={0.5} />
       <directionalLight
-        position={[20, 30, 10]}
+        position={[25, 40, 15]}
         intensity={1.2}
         castShadow={shadows}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
-        shadow-camera-left={-35}
-        shadow-camera-right={35}
-        shadow-camera-top={25}
-        shadow-camera-bottom={-25}
+        shadow-camera-left={-shadowR}
+        shadow-camera-right={shadowR}
+        shadow-camera-top={shadowR}
+        shadow-camera-bottom={-shadowR}
       />
     </group>
   );

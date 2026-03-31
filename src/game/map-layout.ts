@@ -33,6 +33,16 @@ export type WalkableSurface = WalkableSlab | WalkableRamp;
 
 export type BlockingVolumeMaterial = "wall" | "railing" | "cover";
 
+export type JumpPad = {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  y: number;            // floor Y the pad sits on (usually 0)
+  boostVelocity: number;
+  launchPlanarSpeed?: number;
+};
+
 export type BlockingVolume = {
   center: [number, number, number];
   size: [number, number, number];

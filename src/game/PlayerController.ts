@@ -5,6 +5,7 @@ import { GamepadManager, type GamepadFrameState } from './GamepadManager';
 import {
   sampleWalkableSurfaceHeight,
   type BlockingVolume,
+  type JumpPad,
   type WalkableSurface,
 } from './map-layout';
 import type { WeaponKind } from './Weapon';
@@ -51,6 +52,7 @@ type UsePlayerControllerOptions = {
   collisionRects: CollisionRect[];
   collisionCircles: CollisionCircle[];
   blockingVolumes?: readonly BlockingVolume[];
+  jumpPads?: readonly JumpPad[];
   worldBounds: WorldBounds;
   spawnPosition: [number, number, number];
   groundLevelY?: number;
@@ -153,6 +155,26 @@ const GROUND_STEP_UP_HEIGHT = 0.9;
 const GROUND_STEP_DOWN_HEIGHT = 1.8;
 const BLOCKING_TOP_EPSILON = 0.001;
 const BLOCKING_TOP_MIN_WIDTH = 1.1;
+
+function getJumpPadAt(
+  pads: readonly JumpPad[],
+  x: number,
+  z: number,
+  groundY: number,
+): JumpPad | null {
+  for (const pad of pads) {
+    if (
+      x >= pad.minX &&
+      x <= pad.maxX &&
+      z >= pad.minZ &&
+      z <= pad.maxZ &&
+      Math.abs(groundY - pad.y) < 0.15
+    ) {
+      return pad;
+    }
+  }
+  return null;
+}
 
 const CAMERA_ARM_LENGTH = 2.25;
 const CAMERA_ARM_LENGTH_ADS = 0.0;
@@ -310,6 +332,7 @@ export function usePlayerController({
   collisionRects,
   collisionCircles,
   blockingVolumes,
+  jumpPads,
   worldBounds,
   spawnPosition,
   groundLevelY,
@@ -375,6 +398,9 @@ export function usePlayerController({
   const sprintMomentumRef = useRef(false);
   const jumpQueuedRef = useRef(false);
   const lastLandedAtRef = useRef(0);
+  const lastJumpPadAtRef = useRef(0);
+  const jumpPadFlightRef = useRef(false);
+  const jumpPadLaunchYawRef = useRef(0);
   const consecutiveJumpsRef = useRef(0);
   const yawRef = useRef(spawnYaw);
   const bodyYawRef = useRef(spawnYaw);
@@ -456,6 +482,7 @@ export function usePlayerController({
   const groundLevelYRef = useRef(initialGroundY);
   const walkableSurfacesRef = useRef(walkableSurfaces ?? []);
   const blockingVolumesRef = useRef(blockingVolumes ?? []);
+  const jumpPadsRef = useRef(jumpPads ?? []);
   const onPauseMenuToggleRef = useRef(onPauseMenuToggle);
   const gamepadManagerRef = useRef(new GamepadManager());
   const gamepadFrameStateRef = useRef<GamepadFrameState>({
@@ -827,6 +854,10 @@ export function usePlayerController({
   useEffect(() => {
     blockingVolumesRef.current = blockingVolumes ?? [];
   }, [blockingVolumes]);
+
+  useEffect(() => {
+    jumpPadsRef.current = jumpPads ?? [];
+  }, [jumpPads]);
 
   useEffect(() => {
     const element = gl.domElement;
@@ -1530,12 +1561,31 @@ export function usePlayerController({
       airborneMomentumSpeedRef.current = 0;
       sprintMomentumRef.current = false;
     } else {
-      const desiredHeadingYaw = hasDirectionalInput
+      let desiredHeadingYaw = hasDirectionalInput
         ? Math.atan2(
             -desiredPlanarVelocityRef.current.x,
             -desiredPlanarVelocityRef.current.y,
           )
         : yawRef.current;
+
+      // Jump pad flight: allow forward/back freely, drastically limit left/right strafe.
+      if (jumpPadFlightRef.current && hasDirectionalInput) {
+        const launchYaw = jumpPadLaunchYawRef.current;
+        const fwdX = -Math.sin(launchYaw);
+        const fwdZ = -Math.cos(launchYaw);
+        const rightX = Math.cos(launchYaw);
+        const rightZ = -Math.sin(launchYaw);
+        const dx = desiredPlanarVelocityRef.current.x;
+        const dz = desiredPlanarVelocityRef.current.y;
+        const fwdComp  = dx * fwdX + dz * fwdZ;
+        const rightComp = (dx * rightX + dz * rightZ) * 0.04; // 4% strafe allowed
+        const adjX = fwdComp * fwdX + rightComp * rightX;
+        const adjZ = fwdComp * fwdZ + rightComp * rightZ;
+        if (adjX * adjX + adjZ * adjZ > 0.001) {
+          desiredHeadingYaw = Math.atan2(-adjX, -adjZ);
+        }
+      }
+
       stepAirbornePlanarVelocity(velocityRef.current, delta, {
         hasDirectionalInput,
         desiredHeadingYaw,
@@ -1774,10 +1824,32 @@ export function usePlayerController({
         positionRef.current.y <= groundSample
       ) {
         positionRef.current.y = groundSample;
-        verticalVelocityRef.current = 0;
-        groundedRef.current = true;
-        airborneMomentumSpeedRef.current = 0;
-        lastLandedAtRef.current = nowJumpMs;
+        const jumpPad = getJumpPadAt(
+          jumpPadsRef.current,
+          positionRef.current.x,
+          positionRef.current.z,
+          groundSample,
+        );
+        const padCooldownOk = nowJumpMs - lastJumpPadAtRef.current > 1500;
+        if (jumpPad !== null && padCooldownOk) {
+          const launchPlanarSpeed = jumpPad.launchPlanarSpeed ?? 6;
+          groundedRef.current = false;
+          verticalVelocityRef.current = jumpPad.boostVelocity;
+          airborneMomentumSpeedRef.current = launchPlanarSpeed;
+          velocityRef.current.set(
+            -Math.sin(yawRef.current) * launchPlanarSpeed,
+            -Math.cos(yawRef.current) * launchPlanarSpeed,
+          );
+          jumpPadFlightRef.current = true;
+          jumpPadLaunchYawRef.current = yawRef.current;
+          lastJumpPadAtRef.current = nowJumpMs;
+        } else {
+          verticalVelocityRef.current = 0;
+          groundedRef.current = true;
+          airborneMomentumSpeedRef.current = 0;
+          jumpPadFlightRef.current = false;
+          lastLandedAtRef.current = nowJumpMs;
+        }
       } else if (
         walkableSurfacesRef.current.length === 0 &&
         positionRef.current.y <= groundLevelYRef.current
@@ -1797,9 +1869,31 @@ export function usePlayerController({
           deltaToGround <= GROUND_STEP_UP_HEIGHT &&
           deltaToGround >= -GROUND_STEP_DOWN_HEIGHT
         ) {
-          groundedRef.current = true;
           positionRef.current.y = groundSample;
-          airborneMomentumSpeedRef.current = 0;
+          const jumpPad = getJumpPadAt(
+            jumpPadsRef.current,
+            positionRef.current.x,
+            positionRef.current.z,
+            groundSample,
+          );
+          const padCooldownOk = nowJumpMs - lastJumpPadAtRef.current > 1500;
+          if (jumpPad !== null && padCooldownOk) {
+            const launchPlanarSpeed = jumpPad.launchPlanarSpeed ?? 6;
+            groundedRef.current = false;
+            verticalVelocityRef.current = jumpPad.boostVelocity;
+            airborneMomentumSpeedRef.current = launchPlanarSpeed;
+            velocityRef.current.set(
+              -Math.sin(yawRef.current) * launchPlanarSpeed,
+              -Math.cos(yawRef.current) * launchPlanarSpeed,
+            );
+            jumpPadFlightRef.current = true;
+            jumpPadLaunchYawRef.current = yawRef.current;
+            lastJumpPadAtRef.current = nowJumpMs;
+          } else {
+            groundedRef.current = true;
+            airborneMomentumSpeedRef.current = 0;
+            jumpPadFlightRef.current = false;
+          }
         } else if (deltaToGround < -GROUND_STEP_DOWN_HEIGHT) {
           groundedRef.current = false;
         }
