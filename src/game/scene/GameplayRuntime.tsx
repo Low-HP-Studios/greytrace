@@ -433,7 +433,7 @@ function resolveCrouchTransitionTargetPose(
 type RifleRunVisualState = "idle" | "start" | "running" | "stop";
 type UnarmedWalkVisualState = "idle" | "start" | "moving" | "stop";
 type CrouchTransitionState = "idle" | "enter" | "exit";
-type CharacterVisibilityCategory = "glove" | "shoe" | "hidden";
+type CharacterVisibilityCategory = "glove" | "shoe" | "headpart" | "hidden";
 type CharacterVisibilityMaterialEntry = {
   material: THREE.Material;
   category: CharacterVisibilityCategory;
@@ -910,6 +910,24 @@ function resolveFirstPersonVisibilityCategory(
   if (normalized.includes("shoe")) {
     return "shoe";
   }
+  // Head and upper-body parts that clip through the camera in FPP — hide them
+  if (
+    normalized.includes("head") ||
+    normalized.includes("eye") ||
+    normalized.includes("hair") ||
+    normalized.includes("face") ||
+    normalized.includes("teeth") ||
+    normalized.includes("glass") ||
+    normalized.includes("mask") ||
+    normalized.includes("neck") ||
+    normalized.includes("ear") ||
+    normalized.includes("body") ||
+    normalized.includes("torso") ||
+    normalized.includes("collar") ||
+    normalized.includes("chest")
+  ) {
+    return "headpart";
+  }
   return "hidden";
 }
 
@@ -962,6 +980,7 @@ function applyCharacterFirstPersonMask(
   maskBlend: number,
   gloveVisibility: number,
   shoeVisibility: number,
+  headVisibility: number,
 ): void {
   const clampedMaskBlend = THREE.MathUtils.clamp(maskBlend, 0, 1);
   if (clampedMaskBlend <= 0.001) {
@@ -982,7 +1001,9 @@ function applyCharacterFirstPersonMask(
       ? gloveVisibility
       : entry.category === "shoe"
       ? shoeVisibility
-      : 0;
+      : entry.category === "headpart"
+      ? headVisibility
+      : 0; // "hidden" — any unrecognized material is invisible in FPP
     const nextOpacity = entry.baseOpacity * THREE.MathUtils.clamp(
       categoryVisibility,
       0,
@@ -1517,6 +1538,11 @@ export const GameplayRuntime = forwardRef<
   const lastImpactCleanupAtRef = useRef(0);
   const lastSniperRechamberActiveRef = useRef<boolean | null>(null);
   const lastSniperRechamberProgressStepRef = useRef(-1);
+  const characterOutlineMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  const characterMeshOriginalMaterialsRef = useRef(
+    new Map<THREE.Mesh, THREE.Material | THREE.Material[]>(),
+  );
+  const characterGloveMeshesRef = useRef(new Set<THREE.Mesh>());
   const lastReloadActiveRef = useRef<boolean | null>(null);
   const lastReloadWeaponKindRef = useRef<WeaponKind | null>(null);
   const characterWeaponAttachBoneRef = useRef<THREE.Bone | null>(null);
@@ -1730,11 +1756,61 @@ export const GameplayRuntime = forwardRef<
       characterModel,
     );
     characterVisibilityMaterialsRef.current = visibilityMaterials;
-    applyCharacterFirstPersonMask(visibilityMaterials, 0, 1, 1);
+    applyCharacterFirstPersonMask(visibilityMaterials, 0, 1, 1, 1);
 
     return () => {
-      applyCharacterFirstPersonMask(visibilityMaterials, 0, 1, 1);
+      applyCharacterFirstPersonMask(visibilityMaterials, 0, 1, 1, 1);
       characterVisibilityMaterialsRef.current = [];
+    };
+  }, [characterModel]);
+
+  // Create a white DoubleSide material used for the Mirage-style body silhouette
+  // when the player looks down in FPP instead of seeing inner mesh faces.
+  useEffect(() => {
+    if (!characterModel) {
+      characterOutlineMaterialRef.current?.dispose();
+      characterOutlineMaterialRef.current = null;
+      characterMeshOriginalMaterialsRef.current = new Map();
+      return;
+    }
+
+    const outlineMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    characterOutlineMaterialRef.current = outlineMaterial;
+
+    const originalMaterials = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
+    const gloveMeshes = new Set<THREE.Mesh>();
+    characterModel.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        originalMaterials.set(mesh, mesh.material);
+        // Track glove meshes so they keep their textures during the outline pass
+        const mats = ([] as THREE.Material[]).concat(
+          mesh.material as THREE.Material | THREE.Material[],
+        );
+        if (mats.some((m) =>
+          m.name.trim().toLowerCase().includes("glove"),
+        )) {
+          gloveMeshes.add(mesh);
+        }
+      }
+    });
+    characterMeshOriginalMaterialsRef.current = originalMaterials;
+    characterGloveMeshesRef.current = gloveMeshes;
+
+    return () => {
+      originalMaterials.forEach((original, mesh) => {
+        mesh.material = original;
+      });
+      outlineMaterial.dispose();
+      characterOutlineMaterialRef.current = null;
+      characterMeshOriginalMaterialsRef.current = new Map();
+      characterGloveMeshesRef.current = new Set();
     };
   }, [characterModel]);
 
@@ -3422,25 +3498,52 @@ export const GameplayRuntime = forwardRef<
     const firstPersonBodyMaskBlend = presentation.phase === "playing"
       ? THREE.MathUtils.smoothstep(viewLerp, 0.68, 0.9)
       : 0;
+    // Head fades earlier than body to prevent camera clipping through face geometry
+    const headPartMaskBlend = presentation.phase === "playing"
+      ? THREE.MathUtils.smoothstep(viewLerp, 0.2, 0.5)
+      : 0;
+    const overallMaskBlend = Math.max(firstPersonBodyMaskBlend, headPartMaskBlend);
     const downLookAmount = THREE.MathUtils.smoothstep(
       -controller.getPitch(),
       0.58,
       1.04,
     );
-    const adsLerp = controller.getAdsLerp();
     const shoeVisibility = firstPersonBodyMaskBlend *
       downLookAmount *
       (controller.isGrounded() ? 1 : 0);
-    // During ADS, fade out gloves so they don't float detached from the weapon
-    const gloveVisibility = firstPersonBodyMaskBlend *
-      THREE.MathUtils.lerp(1, 0.88, downLookAmount) *
-      (1 - adsLerp);
+    const gloveVisibility = 1;
+    const headVisibility = 1 - headPartMaskBlend;
     applyCharacterFirstPersonMask(
       characterVisibilityMaterialsRef.current,
-      firstPersonBodyMaskBlend,
+      overallMaskBlend,
       gloveVisibility,
       shoeVisibility,
+      headVisibility,
     );
+
+    // When looking down in FPP, swap to a white Mirage-style silhouette so the
+    // player sees an outer body shape instead of the hollow inner mesh faces.
+    // Glove meshes are excluded so hands keep their original textures.
+    const outlineBlend = overallMaskBlend * downLookAmount;
+    const outlineMaterial = characterOutlineMaterialRef.current;
+    const originalMaterialsMap = characterMeshOriginalMaterialsRef.current;
+    const gloveMeshes = characterGloveMeshesRef.current;
+    if (outlineMaterial && originalMaterialsMap.size > 0) {
+      if (outlineBlend > 0.001) {
+        outlineMaterial.opacity = Math.min(outlineBlend * 0.5, 0.4);
+        originalMaterialsMap.forEach((_orig, mesh) => {
+          if (!gloveMeshes.has(mesh) && mesh.material !== outlineMaterial) {
+            mesh.material = outlineMaterial;
+          }
+        });
+      } else {
+        originalMaterialsMap.forEach((original, mesh) => {
+          if (mesh.material !== original) {
+            mesh.material = original;
+          }
+        });
+      }
+    }
 
     const playerChar = playerCharacterRef.current;
     if (playerChar) {
@@ -3524,13 +3627,7 @@ export const GameplayRuntime = forwardRef<
 
     const headBone = characterHeadBoneRef.current;
     if (headBone) {
-      if (presentation.phase === "playing") {
-        const viewLerp = controller.getViewModeLerp();
-        const headScale = 1 - THREE.MathUtils.smoothstep(viewLerp, 0.2, 0.5);
-        headBone.scale.setScalar(headScale);
-      } else {
-        headBone.scale.setScalar(1);
-      }
+      headBone.scale.setScalar(1);
       if (presentation.phase === "playing" && !firstPerson) {
         const headYawOffset = controller.getHeadYawOffset();
         if (Math.abs(headYawOffset) > 0.001) {

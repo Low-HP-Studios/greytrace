@@ -1497,11 +1497,6 @@ function TdmProceduralEnvironment({
         </mesh>
       ))}
 
-      {/* ── Team banners ── */}
-      <mesh position={[-15, 3.5, -52]}><boxGeometry args={[0.25, 7, 0.08]} /><meshStandardMaterial color="#2563eb" emissive="#2563eb" emissiveIntensity={0.6} /></mesh>
-      <mesh position={[ 15, 3.5, -52]}><boxGeometry args={[0.25, 7, 0.08]} /><meshStandardMaterial color="#2563eb" emissive="#2563eb" emissiveIntensity={0.6} /></mesh>
-      <mesh position={[-15, 3.5,  52]}><boxGeometry args={[0.25, 7, 0.08]} /><meshStandardMaterial color="#dc2626" emissive="#dc2626" emissiveIntensity={0.6} /></mesh>
-      <mesh position={[ 15, 3.5,  52]}><boxGeometry args={[0.25, 7, 0.08]} /><meshStandardMaterial color="#dc2626" emissive="#dc2626" emissiveIntensity={0.6} /></mesh>
 
       {/* ── Lighting ── */}
       <ambientLight intensity={0.5} />
