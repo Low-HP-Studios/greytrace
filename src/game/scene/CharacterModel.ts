@@ -423,22 +423,69 @@ export function remapAnimationClip(
   return remapped;
 }
 
+/**
+ * Extract the Y-axis twist component from a quaternion using swing-twist
+ * decomposition. Returns a unit quaternion representing only the Y rotation.
+ */
+function extractYTwist(_x: number, y: number, _z: number, w: number): [number, number, number, number] {
+  const len = Math.sqrt(y * y + w * w);
+  if (len < 1e-6) return [0, 0, 0, 1];
+  return [0, y / len, 0, w / len];
+}
+
+/**
+ * Multiply two quaternions: a * b.
+ */
+function mulQ(
+  ax: number, ay: number, az: number, aw: number,
+  bx: number, by: number, bz: number, bw: number,
+): [number, number, number, number] {
+  return [
+    aw * bx + ax * bw + ay * bz - az * by,
+    aw * by - ax * bz + ay * bw + az * bx,
+    aw * bz + ax * by - ay * bx + az * bw,
+    aw * bw - ax * bx - ay * by - az * bz,
+  ];
+}
+
 export function removeRootMotion(clip: THREE.AnimationClip): void {
   for (const track of clip.tracks) {
     const { nodeName, property } = splitTrackName(track.name);
-    if (property !== ".position") continue;
-
     const normalized = normalizeBoneName(nodeName).toLowerCase();
     if (!normalized.includes("hips")) continue;
 
     const values = track.values;
-    if (values.length < 3) continue;
 
-    const baseX = values[0];
-    const baseZ = values[2];
-    for (let i = 0; i < values.length; i += 3) {
-      values[i] = baseX;
-      values[i + 2] = baseZ;
+    if (property === ".position") {
+      if (values.length < 3) continue;
+      const baseX = values[0];
+      const baseZ = values[2];
+      for (let i = 0; i < values.length; i += 3) {
+        values[i] = baseX;
+        values[i + 2] = baseZ;
+      }
+    } else if (property === ".quaternion") {
+      // Lock Y-axis rotation (yaw) to the first keyframe's value so
+      // animations cannot rotate the character — body facing is handled
+      // by the model root rotation. Preserves X/Z rotation (pitch/roll)
+      // for natural gait motion.
+      if (values.length < 4) continue;
+      const [, baseTy, , baseTw] = extractYTwist(
+        values[0], values[1], values[2], values[3],
+      );
+      for (let i = 0; i < values.length; i += 4) {
+        const qx = values[i], qy = values[i + 1], qz = values[i + 2], qw = values[i + 3];
+        // Current twist
+        const [, ty, , tw] = extractYTwist(qx, qy, qz, qw);
+        // Swing = q * twistInverse  (twist inverse = conjugate since unit quat: (0, -ty, 0, tw))
+        const [sx, sy, sz, sw] = mulQ(qx, qy, qz, qw, 0, -ty, 0, tw);
+        // Locked = swing * baseTwist
+        const [rx, ry, rz, rw] = mulQ(sx, sy, sz, sw, 0, baseTy, 0, baseTw);
+        values[i] = rx;
+        values[i + 1] = ry;
+        values[i + 2] = rz;
+        values[i + 3] = rw;
+      }
     }
   }
 }

@@ -40,6 +40,7 @@ import type {
   ScenePresentation,
   StressModeCount,
   TargetState,
+  WeaponAlignmentOffset,
 } from "../types";
 import type { SniperRechamberState, WeaponKind } from "../Weapon";
 import {
@@ -68,7 +69,6 @@ import {
   CANVAS_GL,
   TARGET_FLASH_MS,
   WEAPON_MODEL_TRANSFORMS,
-  type CharacterAnimState,
 } from "./scene-constants";
 
 export type { HitMarkerKind, AimingState, ShotFiredState };
@@ -219,9 +219,15 @@ function isRightHandBoneName(name: string) {
     normalized.includes("hand_r");
 }
 
-function createRemoteRifleAnchor(source: THREE.Group | null) {
-  const anchor = new THREE.Group();
-  anchor.name = "remote-rifle-anchor";
+function clearObjectChildren(group: THREE.Group) {
+  while (group.children.length > 0) {
+    group.remove(group.children[0]!);
+  }
+}
+
+function createRemoteRifleModel(source: THREE.Group | null) {
+  const rifleGroup = new THREE.Group();
+  rifleGroup.name = "remote-rifle-model";
 
   if (source) {
     const transform = WEAPON_MODEL_TRANSFORMS.character.rifle;
@@ -229,8 +235,8 @@ function createRemoteRifleAnchor(source: THREE.Group | null) {
     clone.position.set(...transform.position);
     clone.rotation.set(...transform.rotation);
     clone.scale.setScalar(transform.scale);
-    anchor.add(clone);
-    return anchor;
+    rifleGroup.add(clone);
+    return rifleGroup;
   }
 
   const rifleBody = new THREE.Mesh(
@@ -262,41 +268,26 @@ function createRemoteRifleAnchor(source: THREE.Group | null) {
   barrel.position.set(-0.24, 0.015, 0);
   barrel.rotation.set(0, 0, Math.PI / 2);
 
-  anchor.add(rifleBody, grip, barrel);
-  return anchor;
+  rifleGroup.add(rifleBody, grip, barrel);
+  return rifleGroup;
 }
 
-function resolveRemoteAnimState(state: OnlineRealtimePlayerState): CharacterAnimState {
-  if (!state.alive) {
-    return "rifleIdle";
-  }
-  if (state.crouched && state.moving) {
-    return "rifleCrouchWalk";
-  }
-  if (state.crouched) {
-    return "rifleCrouchIdle";
-  }
-  if (state.sprinting && state.moving) {
-    return "rifleRun";
-  }
-  if (state.moving && state.ads) {
-    return "rifleAimWalk";
-  }
-  if (state.moving) {
-    return "rifleJog";
-  }
-  if (state.ads) {
-    return "rifleAimHold";
-  }
-  return "rifleIdle";
+function dampAngle(current: number, target: number, blend: number) {
+  const delta = Math.atan2(
+    Math.sin(target - current),
+    Math.cos(target - current),
+  );
+  return current + delta * blend;
 }
 
 function RemotePlayerAvatar({
   state,
   characterOverride,
+  weaponAlignment,
 }: {
   state: OnlineRealtimePlayerState;
   characterOverride: CharacterModelOverride;
+  weaponAlignment: WeaponAlignmentOffset;
 }) {
   const { model, setAnimState } = useCharacterModel(characterOverride);
   const weaponModels = useWeaponModels();
@@ -306,20 +297,34 @@ function RemotePlayerAvatar({
   const targetPositionRef = useRef(
     new THREE.Vector3(state.x, state.y, state.z),
   );
-  const yawRef = useRef(state.yaw);
-  const targetYawRef = useRef(state.yaw);
+  const bodyYawRef = useRef(state.bodyYaw);
+  const targetBodyYawRef = useRef(state.bodyYaw);
   const rightHandBoneRef = useRef<THREE.Bone | null>(null);
-  const weaponAnchorRef = useRef<THREE.Group | null>(null);
+  const weaponGroupRef = useRef(new THREE.Group());
+  const weaponWorldPositionRef = useRef(new THREE.Vector3());
+  const weaponWorldQuaternionRef = useRef(new THREE.Quaternion());
 
   useEffect(() => {
     targetPositionRef.current.set(state.x, state.y, state.z);
-    targetYawRef.current = state.yaw;
-    setAnimState(resolveRemoteAnimState(state), {
-      locomotionScale: state.sprinting ? 1.12 : 1,
+    targetBodyYawRef.current = state.bodyYaw;
+    setAnimState(state.animState, {
+      locomotionScale: state.locomotionScale,
+      lowerBodyState: state.lowerBodyState,
+      lowerBodyLocomotionScale: state.lowerBodyLocomotionScale,
+      upperBodyState: state.upperBodyState,
+      upperBodyLocomotionScale: state.locomotionScale,
     });
   }, [
     setAnimState,
-    state,
+    state.animState,
+    state.bodyYaw,
+    state.locomotionScale,
+    state.lowerBodyLocomotionScale,
+    state.lowerBodyState,
+    state.upperBodyState,
+    state.x,
+    state.y,
+    state.z,
   ]);
 
   useEffect(() => {
@@ -342,21 +347,10 @@ function RemotePlayerAvatar({
   }, [model]);
 
   useEffect(() => {
-    const rightHandBone = rightHandBoneRef.current;
-    if (!rightHandBone || !state.alive) {
-      return;
-    }
-
-    const anchor = createRemoteRifleAnchor(weaponModels.rifle);
-    rightHandBone.add(anchor);
-    weaponAnchorRef.current = anchor;
-    return () => {
-      rightHandBone.remove(anchor);
-      if (weaponAnchorRef.current === anchor) {
-        weaponAnchorRef.current = null;
-      }
-    };
-  }, [model, state.alive, weaponModels.rifle]);
+    const weaponGroup = weaponGroupRef.current;
+    clearObjectChildren(weaponGroup);
+    weaponGroup.add(createRemoteRifleModel(weaponModels.rifle));
+  }, [weaponModels.rifle]);
 
   useFrame((_state, delta) => {
     const mixer = model?.userData.__mixer as THREE.AnimationMixer | undefined;
@@ -368,23 +362,47 @@ function RemotePlayerAvatar({
       targetPositionRef.current,
       1 - Math.exp(-Math.min(delta, 1 / 15) * 14),
     );
-    yawRef.current = THREE.MathUtils.lerp(
-      yawRef.current,
-      targetYawRef.current,
+    bodyYawRef.current = dampAngle(
+      bodyYawRef.current,
+      targetBodyYawRef.current,
       1 - Math.exp(-Math.min(delta, 1 / 15) * 16),
     );
 
     if (model) {
       model.position.copy(positionRef.current);
-      model.rotation.set(0, yawRef.current + CHARACTER_YAW_OFFSET, 0);
+      model.rotation.set(0, bodyYawRef.current + CHARACTER_YAW_OFFSET, 0);
+      model.updateMatrixWorld(true);
     }
+
+    const weaponGroup = weaponGroupRef.current;
+    const rightHandBone = rightHandBoneRef.current;
+    weaponGroup.visible = Boolean(model && state.alive && rightHandBone);
+    if (!model || !state.alive || !rightHandBone) {
+      return;
+    }
+
+    rightHandBone.getWorldPosition(weaponWorldPositionRef.current);
+    rightHandBone.getWorldQuaternion(weaponWorldQuaternionRef.current);
+    weaponGroup.position.copy(weaponWorldPositionRef.current);
+    weaponGroup.quaternion.copy(weaponWorldQuaternionRef.current);
+    weaponGroup.translateX(weaponAlignment.posX);
+    weaponGroup.translateY(weaponAlignment.posY);
+    weaponGroup.translateZ(weaponAlignment.posZ);
+    weaponGroup.rotateX(weaponAlignment.rotX);
+    weaponGroup.rotateY(weaponAlignment.rotY);
+    weaponGroup.rotateZ(weaponAlignment.rotZ);
   });
 
   if (!model || !state.alive) {
     return null;
   }
 
-  return <primitive object={model} />;
+  return (
+    <>
+      <primitive object={model} />
+      <primitive object={weaponGroupRef.current} />
+    </>
+  );
 }
 
 function waitForAnimationFrame() {
@@ -851,6 +869,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
           <RemotePlayerAvatar
             state={remotePlayer.state}
             characterOverride={remotePlayer.characterOverride}
+            weaponAlignment={settings.weaponAlignment}
           />
         )
         : null}

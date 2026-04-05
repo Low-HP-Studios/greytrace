@@ -1,4 +1,5 @@
 import type { MapId } from "../types";
+import type { CharacterAnimState } from "../scene/scene-constants";
 
 export type LobbySize = 2 | 4 | 8;
 
@@ -44,12 +45,18 @@ export type OnlineRealtimePlayerState = {
   y: number;
   z: number;
   yaw: number;
+  bodyYaw: number;
   pitch: number;
   moving: boolean;
   sprinting: boolean;
   crouched: boolean;
   grounded: boolean;
   ads: boolean;
+  animState: CharacterAnimState;
+  locomotionScale: number;
+  lowerBodyState: CharacterAnimState | null;
+  lowerBodyLocomotionScale: number;
+  upperBodyState: CharacterAnimState | null;
   alive: boolean;
 };
 

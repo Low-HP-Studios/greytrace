@@ -637,7 +637,6 @@ const FIRST_PERSON_UPPER_BODY_FALLBACK_HEIGHT = 1.02;
 const PLAYER_WALK_SPEED = 5.3;
 const PLAYER_SPRINT_SPEED = 8.2;
 const UNARMED_WALK_SPEED_SCALE = 0.68;
-const MULTIPLAYER_STATE_SEND_INTERVAL_MS = 50;
 const MULTIPLAYER_STATE_HEARTBEAT_MS = 250;
 const MULTIPLAYER_POSITION_EPSILON_SQ = 0.0025;
 const MULTIPLAYER_ANGLE_EPSILON = 0.01;
@@ -1089,7 +1088,10 @@ function shouldSendMultiplayerState(
     previous.sprinting !== next.sprinting ||
     previous.crouched !== next.crouched ||
     previous.grounded !== next.grounded ||
-    previous.ads !== next.ads
+    previous.ads !== next.ads ||
+    previous.animState !== next.animState ||
+    previous.lowerBodyState !== next.lowerBodyState ||
+    previous.upperBodyState !== next.upperBodyState
   ) {
     return true;
   }
@@ -1102,7 +1104,10 @@ function shouldSendMultiplayerState(
   }
 
   return Math.abs(normalizeAngle(next.yaw - previous.yaw)) >= MULTIPLAYER_ANGLE_EPSILON ||
-    Math.abs(next.pitch - previous.pitch) >= MULTIPLAYER_ANGLE_EPSILON;
+    Math.abs(normalizeAngle(next.bodyYaw - previous.bodyYaw)) >= MULTIPLAYER_ANGLE_EPSILON ||
+    Math.abs(next.pitch - previous.pitch) >= MULTIPLAYER_ANGLE_EPSILON ||
+    Math.abs(next.locomotionScale - previous.locomotionScale) >= 0.03 ||
+    Math.abs(next.lowerBodyLocomotionScale - previous.lowerBodyLocomotionScale) >= 0.03;
 }
 
 function resolveFirstPersonVisibilityCategory(
@@ -3401,40 +3406,6 @@ export const GameplayRuntime = forwardRef<
       : null;
     const adsActive = controller.isADS();
     const firstPerson = controller.isFirstPerson();
-    if (
-      multiplayerEnabledRef.current &&
-      localAuthoritativeAliveRef.current !== false &&
-      nowMs - lastMultiplayerStateSentAtRef.current >= MULTIPLAYER_STATE_SEND_INTERVAL_MS
-    ) {
-      const nextMultiplayerState: OutgoingMultiplayerState = {
-        x: playerPosition.x,
-        y: playerPosition.y,
-        z: playerPosition.z,
-        yaw: controller.getAimYaw(),
-        pitch: controller.getPitch(),
-        moving,
-        sprinting,
-        crouched,
-        grounded,
-        ads: adsActive,
-      };
-      if (
-        shouldSendMultiplayerState(
-          lastSentMultiplayerStateRef.current,
-          nextMultiplayerState,
-          nowMs,
-          lastMultiplayerStateSentAtRef.current,
-        )
-      ) {
-        lastMultiplayerStateSentAtRef.current = nowMs;
-        lastSentMultiplayerStateRef.current = nextMultiplayerState;
-        multiplayerStateSeqRef.current += 1;
-        matchPlayerStateCallbackRef.current?.({
-          seq: multiplayerStateSeqRef.current,
-          ...nextMultiplayerState,
-        });
-      }
-    }
     const moveInput = controller.getMoveInput();
     const planarVelocity = controller.getPlanarVelocity();
     const planarSpeed = controller.getPlanarSpeed();
@@ -4156,6 +4127,49 @@ export const GameplayRuntime = forwardRef<
       upperBodyFadeDurationSeconds: reloadVisible ? 0.08 : undefined,
     });
     lastCharacterAnimStateRef.current = nextAnimState;
+
+    if (
+      multiplayerEnabled &&
+      presentation.phase === "playing" &&
+      matchPlayerStateCallbackRef.current
+    ) {
+      const nextMultiplayerState: OutgoingMultiplayerState = {
+        x: playerPosition.x,
+        y: playerPosition.y,
+        z: playerPosition.z,
+        yaw: controller.getAimYaw(),
+        bodyYaw: controller.getBodyYaw(),
+        pitch: controller.getPitch(),
+        moving,
+        sprinting,
+        crouched,
+        grounded,
+        ads: adsActive,
+        animState: nextAnimState,
+        locomotionScale: characterLocomotionScale,
+        lowerBodyState: lowerBodyOverlayState,
+        lowerBodyLocomotionScale: lowerBodyOverlayLocomotionScale,
+        upperBodyState: upperBodyOverlayState,
+      };
+
+      if (
+        shouldSendMultiplayerState(
+          lastSentMultiplayerStateRef.current,
+          nextMultiplayerState,
+          nowMs,
+          lastMultiplayerStateSentAtRef.current,
+        )
+      ) {
+        multiplayerStateSeqRef.current += 1;
+        lastSentMultiplayerStateRef.current = nextMultiplayerState;
+        lastMultiplayerStateSentAtRef.current = nowMs;
+        matchPlayerStateCallbackRef.current({
+          seq: multiplayerStateSeqRef.current,
+          ...nextMultiplayerState,
+        });
+      }
+    }
+
     const footstepPlaybackRate = resolveFootstepPlaybackRate(
       audioAnimState,
       {
