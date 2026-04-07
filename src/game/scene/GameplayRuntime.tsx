@@ -3515,7 +3515,8 @@ export const GameplayRuntime = forwardRef<
     const shoeVisibility = firstPersonBodyMaskBlend *
       downLookAmount *
       (controller.isGrounded() ? 1 : 0);
-    const gloveVisibility = 1;
+    // Fade hands out during ADS so they do not clip beside the optic in FPP.
+    const gloveVisibility = 1 - controller.getAdsLerp();
     const headVisibility = 1 - headPartMaskBlend;
     applyCharacterFirstPersonMask(
       characterVisibilityMaterialsRef.current,
