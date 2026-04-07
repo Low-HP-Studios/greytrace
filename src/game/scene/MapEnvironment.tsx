@@ -21,6 +21,9 @@ import {
   createNightSkyTexture,
   createSkyTexture,
   createSpaceFloorTexture,
+  createTdmCoverTexture,
+  createTdmFloorTexture,
+  createTdmWallTexture,
   createTundraTexture,
 } from "./Textures";
 import { loadGlbAsset, preloadTextureAsset } from "../AssetLoader";
@@ -1388,6 +1391,9 @@ const TDM_COVER_BLUE  = new THREE.Color("#7a9ab8");
 const TDM_COVER_RED   = new THREE.Color("#b87a7a");
 const TDM_COVER_MID   = new THREE.Color("#a0816c");
 const TDM_BOUNDARY    = new THREE.Color("#2d3748");
+const TDM_FLOOR_TILE_UNITS = 11;
+const TDM_WALL_TILE_UNITS = 7;
+const TDM_COVER_TILE_UNITS = 5;
 
 // z split between spawn zones and mid
 const TDM_SPAWN_Z = 32;
@@ -1403,6 +1409,186 @@ function tdmVolumeColor(vol: BlockingVolume): THREE.Color {
   if (z < -TDM_SPAWN_Z) return TDM_WALL_BLUE;
   if (z >  TDM_SPAWN_Z) return TDM_WALL_RED;
   return TDM_WALL_MID;
+}
+
+function wrapTextureOffset(value: number) {
+  const wrapped = value % 1;
+  return wrapped < 0 ? wrapped + 1 : wrapped;
+}
+
+function useRepeatedTextureMap(
+  source: THREE.Texture | null,
+  repeatX: number,
+  repeatY: number,
+  offsetX = 0,
+  offsetY = 0,
+) {
+  const texture = useMemo(() => {
+    if (!source) {
+      return undefined;
+    }
+
+    const clone = source.clone();
+    clone.colorSpace = THREE.SRGBColorSpace;
+    clone.wrapS = THREE.RepeatWrapping;
+    clone.wrapT = THREE.RepeatWrapping;
+    clone.repeat.set(Math.max(repeatX, 1), Math.max(repeatY, 1));
+    clone.offset.set(
+      wrapTextureOffset(offsetX),
+      wrapTextureOffset(offsetY),
+    );
+    clone.needsUpdate = true;
+    return clone;
+  }, [offsetX, offsetY, repeatX, repeatY, source]);
+
+  useEffect(() => {
+    return () => {
+      texture?.dispose();
+    };
+  }, [texture]);
+
+  return texture;
+}
+
+function TdmFloorBand({
+  position,
+  size,
+  color,
+  textureSource,
+  roughness,
+  metalness,
+  shadows,
+}: {
+  position: [number, number, number];
+  size: [number, number];
+  color: THREE.ColorRepresentation;
+  textureSource: THREE.Texture | null;
+  roughness: number;
+  metalness: number;
+  shadows: boolean;
+}) {
+  const minX = position[0] - size[0] / 2;
+  const minZ = position[2] - size[1] / 2;
+  const texture = useRepeatedTextureMap(
+    textureSource,
+    size[0] / TDM_FLOOR_TILE_UNITS,
+    size[1] / TDM_FLOOR_TILE_UNITS,
+    minX / TDM_FLOOR_TILE_UNITS,
+    minZ / TDM_FLOOR_TILE_UNITS,
+  );
+
+  return (
+    <mesh
+      position={position}
+      rotation={[-Math.PI / 2, 0, 0]}
+      receiveShadow={shadows}
+      userData={{ bulletHittable: true }}
+    >
+      <planeGeometry args={size} />
+      <meshStandardMaterial
+        color={color}
+        map={texture}
+        roughness={roughness}
+        metalness={metalness}
+      />
+    </mesh>
+  );
+}
+
+function TdmBlockingVolume({
+  volume,
+  color,
+  textureSource,
+  tileUnits,
+  roughness,
+  metalness,
+  shadows,
+}: {
+  volume: BlockingVolume;
+  color: THREE.ColorRepresentation;
+  textureSource: THREE.Texture | null;
+  tileUnits: number;
+  roughness: number;
+  metalness: number;
+  shadows: boolean;
+}) {
+  const minX = volume.center[0] - volume.size[0] / 2;
+  const minY = volume.center[1] - volume.size[1] / 2;
+  const minZ = volume.center[2] - volume.size[2] / 2;
+  const sideTexture = useRepeatedTextureMap(
+    textureSource,
+    volume.size[2] / tileUnits,
+    volume.size[1] / tileUnits,
+    minZ / tileUnits,
+    minY / tileUnits,
+  );
+  const topTexture = useRepeatedTextureMap(
+    textureSource,
+    volume.size[0] / tileUnits,
+    volume.size[2] / tileUnits,
+    minX / tileUnits,
+    minZ / tileUnits,
+  );
+  const frontTexture = useRepeatedTextureMap(
+    textureSource,
+    volume.size[0] / tileUnits,
+    volume.size[1] / tileUnits,
+    minX / tileUnits,
+    minY / tileUnits,
+  );
+
+  return (
+    <mesh
+      position={volume.center}
+      castShadow={shadows}
+      receiveShadow={shadows}
+      userData={{ bulletHittable: true }}
+    >
+      <boxGeometry args={volume.size as [number, number, number]} />
+      <meshStandardMaterial
+        attach="material-0"
+        color={color}
+        map={sideTexture}
+        roughness={roughness}
+        metalness={metalness}
+      />
+      <meshStandardMaterial
+        attach="material-1"
+        color={color}
+        map={sideTexture}
+        roughness={roughness}
+        metalness={metalness}
+      />
+      <meshStandardMaterial
+        attach="material-2"
+        color={color}
+        map={topTexture}
+        roughness={roughness}
+        metalness={metalness}
+      />
+      <meshStandardMaterial
+        attach="material-3"
+        color={color}
+        map={topTexture}
+        roughness={roughness}
+        metalness={metalness}
+      />
+      <meshStandardMaterial
+        attach="material-4"
+        color={color}
+        map={frontTexture}
+        roughness={roughness}
+        metalness={metalness}
+      />
+      <meshStandardMaterial
+        attach="material-5"
+        color={color}
+        map={frontTexture}
+        roughness={roughness}
+        metalness={metalness}
+      />
+    </mesh>
+  );
 }
 
 function TdmProceduralEnvironment({
@@ -1421,6 +1607,9 @@ function TdmProceduralEnvironment({
   const { worldBounds, blockingVolumes = [] } = practiceMap;
   const mapW  = worldBounds.maxX - worldBounds.minX;
   const mapCx = (worldBounds.minX + worldBounds.maxX) / 2;
+  const floorTexture = useMemo(() => createTdmFloorTexture(), []);
+  const wallTexture = useMemo(() => createTdmWallTexture(), []);
+  const coverTexture = useMemo(() => createTdmCoverTexture(), []);
 
   // Hard floor zones matching the map geometry
   const blueMinZ = -55, blueMaxZ = -TDM_SPAWN_Z;
@@ -1428,6 +1617,14 @@ function TdmProceduralEnvironment({
   const midDepth = TDM_SPAWN_Z * 2;
 
   const shadowR = Math.max(worldBounds.maxX, worldBounds.maxZ) + 6;
+
+  useEffect(() => {
+    return () => {
+      floorTexture?.dispose();
+      wallTexture?.dispose();
+      coverTexture?.dispose();
+    };
+  }, [coverTexture, floorTexture, wallTexture]);
 
   return (
     <group>
@@ -1441,37 +1638,37 @@ function TdmProceduralEnvironment({
       />
 
       {/* ── Blue base floor ── */}
-      <mesh
+      <TdmFloorBand
         position={[mapCx, -0.05, (blueMinZ + blueMaxZ) / 2]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        receiveShadow={shadows}
-        userData={{ bulletHittable: true }}
-      >
-        <planeGeometry args={[mapW, blueMaxZ - blueMinZ]} />
-        <meshStandardMaterial color={TDM_FLOOR_BLUE} roughness={0.85} />
-      </mesh>
+        size={[mapW, blueMaxZ - blueMinZ]}
+        color={TDM_FLOOR_BLUE}
+        textureSource={floorTexture}
+        roughness={0.84}
+        metalness={0.04}
+        shadows={shadows}
+      />
 
       {/* ── Neutral mid floor ── */}
-      <mesh
+      <TdmFloorBand
         position={[mapCx, -0.05, 0]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        receiveShadow={shadows}
-        userData={{ bulletHittable: true }}
-      >
-        <planeGeometry args={[mapW, midDepth]} />
-        <meshStandardMaterial color={TDM_FLOOR_MID} roughness={0.85} />
-      </mesh>
+        size={[mapW, midDepth]}
+        color={TDM_FLOOR_MID}
+        textureSource={floorTexture}
+        roughness={0.84}
+        metalness={0.04}
+        shadows={shadows}
+      />
 
       {/* ── Red base floor ── */}
-      <mesh
+      <TdmFloorBand
         position={[mapCx, -0.05, (redMinZ + redMaxZ) / 2]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        receiveShadow={shadows}
-        userData={{ bulletHittable: true }}
-      >
-        <planeGeometry args={[mapW, redMaxZ - redMinZ]} />
-        <meshStandardMaterial color={TDM_FLOOR_RED} roughness={0.85} />
-      </mesh>
+        size={[mapW, redMaxZ - redMinZ]}
+        color={TDM_FLOOR_RED}
+        textureSource={floorTexture}
+        roughness={0.84}
+        metalness={0.04}
+        shadows={shadows}
+      />
 
       {/* ── Midfield warning strips ── */}
       <mesh position={[mapCx, -0.04, -TDM_SPAWN_Z]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -1484,25 +1681,34 @@ function TdmProceduralEnvironment({
       </mesh>
 
       {/* ── Blocking volumes ── */}
-      {blockingVolumes.map((vol, i) => (
-        <mesh
-          key={i}
-          position={vol.center}
-          castShadow={shadows}
-          receiveShadow={shadows}
-          userData={{ bulletHittable: true }}
-        >
-          <boxGeometry args={vol.size as [number, number, number]} />
-          <meshStandardMaterial color={tdmVolumeColor(vol)} roughness={0.75} />
-        </mesh>
-      ))}
+      {blockingVolumes.map((vol, i) => {
+        const isCover = vol.material === "cover";
+        return (
+          <TdmBlockingVolume
+            key={i}
+            volume={vol}
+            color={tdmVolumeColor(vol)}
+            textureSource={isCover ? coverTexture : wallTexture}
+            tileUnits={isCover ? TDM_COVER_TILE_UNITS : TDM_WALL_TILE_UNITS}
+            roughness={isCover ? 0.72 : 0.78}
+            metalness={isCover ? 0.05 : 0.04}
+            shadows={shadows}
+          />
+        );
+      })}
 
 
       {/* ── Lighting ── */}
-      <ambientLight intensity={0.5} />
+      <ambientLight intensity={0.72} color="#f4f8ff" />
+      <hemisphereLight
+        color="#dceaff"
+        groundColor="#5f6d82"
+        intensity={0.58}
+      />
       <directionalLight
-        position={[25, 40, 15]}
-        intensity={1.2}
+        position={[28, 46, 18]}
+        intensity={1.5}
+        color="#fff6e8"
         castShadow={shadows}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
@@ -1510,6 +1716,11 @@ function TdmProceduralEnvironment({
         shadow-camera-right={shadowR}
         shadow-camera-top={shadowR}
         shadow-camera-bottom={-shadowR}
+      />
+      <directionalLight
+        position={[-24, 22, -16]}
+        intensity={0.42}
+        color="#cfe2ff"
       />
     </group>
   );

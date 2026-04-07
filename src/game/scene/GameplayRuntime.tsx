@@ -106,6 +106,7 @@ export type ShotFiredState = {
 export type GameplayRuntimeHandle = {
   requestPointerLock: () => void;
   releasePointerLock: () => void;
+  hasPointerLock: () => boolean;
   dropWeaponForReturn: () => void;
   moveInventoryItem: (request: InventoryMoveRequest) => InventoryMoveResult;
   quickMoveInventoryItem: (
@@ -2594,6 +2595,9 @@ export const GameplayRuntime = forwardRef<
     releasePointerLock: () => {
       controllerRef.current?.releasePointerLock();
     },
+    hasPointerLock: () => {
+      return controllerRef.current?.hasPointerLock() ?? false;
+    },
     dropWeaponForReturn: () => {
       const playerPosition = controllerRef.current?.getPosition();
       if (!playerPosition) {
@@ -3511,7 +3515,8 @@ export const GameplayRuntime = forwardRef<
     const shoeVisibility = firstPersonBodyMaskBlend *
       downLookAmount *
       (controller.isGrounded() ? 1 : 0);
-    const gloveVisibility = 1;
+    // Fade hands out during ADS so they do not clip beside the optic in FPP.
+    const gloveVisibility = 1 - controller.getAdsLerp();
     const headVisibility = 1 - headPartMaskBlend;
     applyCharacterFirstPersonMask(
       characterVisibilityMaterialsRef.current,
