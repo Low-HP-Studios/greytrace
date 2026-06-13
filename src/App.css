@@ -4759,16 +4759,16 @@ code {
   background:
     radial-gradient(
       circle at 74% 42%,
-      rgba(255, 243, 226, 0.12),
-      transparent 18%
+      rgba(255, 243, 226, 0.1),
+      transparent 22%
     ),
     linear-gradient(
       90deg,
-      rgba(4, 4, 5, 0.12) 0%,
-      rgba(4, 4, 5, 0.26) 16%,
-      rgba(4, 4, 5, 0.82) 46%,
-      rgba(4, 4, 5, 0.42) 72%,
-      rgba(4, 4, 5, 0.16) 100%
+      rgba(4, 4, 5, 0.18) 0%,
+      rgba(4, 4, 5, 0.24) 18%,
+      rgba(4, 4, 5, 0.2) 42%,
+      rgba(4, 4, 5, 0.12) 58%,
+      rgba(4, 4, 5, 0.18) 100%
     );
 }
 
@@ -4776,8 +4776,8 @@ code {
   background:
     radial-gradient(
       circle at center,
-      transparent 48%,
-      rgba(0, 0, 0, 0.62) 100%
+      transparent 56%,
+      rgba(0, 0, 0, 0.42) 100%
     ),
     repeating-linear-gradient(
       90deg,
@@ -4786,7 +4786,7 @@ code {
       transparent 1px,
       transparent 120px
     );
-  opacity: 0.6;
+  opacity: 0.46;
 }
 
 .lobby-layout-v3 .lobby-topbar-v2,

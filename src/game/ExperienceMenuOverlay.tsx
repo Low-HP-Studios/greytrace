@@ -225,7 +225,7 @@ export function ExperienceMenuOverlay({
   }, [updaterStatus.phase, updaterStatus.progress]);
 
   const showOnlineToast = useCallback(() => {
-    toast.warning("Online Deployment is in alpha", {
+    toast.warning("Online Deployment is in beta development", {
       description:
         "This lane is still under development. Practice is the only live module in the current build.",
       duration: 4200,
@@ -263,7 +263,7 @@ export function ExperienceMenuOverlay({
       <header className="lobby-topbar-v2">
         <div className="lobby-brand-v2">
           <h1 className="lobby-logo-v2">GrayTrace</h1>
-          <span className="lobby-alpha-chip-v2">α</span>
+          <span className="lobby-alpha-chip-v2">β</span>
           {updateReadyToInstall && (
             <button
               type="button"
