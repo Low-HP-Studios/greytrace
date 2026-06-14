@@ -6,7 +6,7 @@ export type MapId = "range" | "map1";
 export const DEFAULT_PRACTICE_MAP_ID: MapId = "range";
 export const PRACTICE_MAP_IDS: readonly MapId[] = ["range", "map1"];
 
-export type ExperiencePhase = 'menu' | 'entering' | 'playing' | 'returning';
+export type ExperiencePhase = 'bootReveal' | 'menu' | 'entering' | 'playing' | 'returning';
 
 export type AimSensitivitySettings = {
   look: number;

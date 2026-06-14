@@ -79,6 +79,9 @@ const DEFAULT_UPDATER_STATUS: UpdaterStatusPayload = {
   message: "Updater is idle.",
 };
 
+const BOOT_REVEAL_MS = 2_500;
+const REDUCED_MOTION_BOOT_REVEAL_MS = 450;
+const BOOT_REVEAL_WORLD_START = 0.84;
 const ENTER_TRANSITION_MS = 1800;
 const RETURN_TRANSITION_MS = 1350;
 const RETURN_RESET_PROGRESS = 0.58;
@@ -235,6 +238,22 @@ const BOOT_PRESENTATION: ScenePresentation = {
   killPulse: 0,
 };
 
+function resolveBootRevealPresentation(progress: number): ScenePresentation {
+  const phaseProgress = clamp01(progress);
+  return {
+    phase: "bootReveal",
+    phaseProgress,
+    worldTheme: easeInOutCubic(
+      clamp01((phaseProgress - BOOT_REVEAL_WORLD_START) /
+        (1 - BOOT_REVEAL_WORLD_START)),
+    ),
+    pickupReveal: 0,
+    targetReveal: 0,
+    inputEnabled: false,
+    killPulse: 0,
+  };
+}
+
 const INITIAL_PRACTICE_MAP_READY_STATE: Record<MapId, boolean> = {
   range: true,
   map1: false,
@@ -366,6 +385,7 @@ export function GameRoot({
   });
   const [phase, setPhase] = useState<ExperiencePhase>("menu");
   const [phaseProgress, setPhaseProgress] = useState(0);
+  const [bootRevealComplete, setBootRevealComplete] = useState(false);
   const [menuSettingsOpen, setMenuSettingsOpen] = useState(false);
   const [pauseMenuOpen, setPauseMenuOpen] = useState(false);
   const pauseMenuOpenRef = useRef(false);
@@ -406,6 +426,7 @@ export function GameRoot({
   const pointerLockFallbackVerifyFrameRef = useRef<number | null>(null);
   const previousPointerLockedRef = useRef(player.pointerLocked);
   const previousInventoryPanelOpenRef = useRef(player.inventoryPanelOpen);
+  const bootRevealStartedRef = useRef(false);
   const isGameplayPaused =
     booting ||
     phase !== "playing" ||
@@ -543,7 +564,9 @@ export function GameRoot({
 
   useEffect(() => {
     if (phase !== "entering" && phase !== "returning") {
-      setPhaseProgress(phase === "playing" ? 1 : 0);
+      if (phase !== "bootReveal") {
+        setPhaseProgress(phase === "playing" ? 1 : 0);
+      }
       return;
     }
 
@@ -589,6 +612,49 @@ export function GameRoot({
     rafId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(rafId);
   }, [attemptGameplayResume, phase]);
+
+  useEffect(() => {
+    if (
+      booting ||
+      !deferredAssetsEnabled ||
+      bootRevealComplete ||
+      bootRevealStartedRef.current
+    ) {
+      return;
+    }
+
+    bootRevealStartedRef.current = true;
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")
+      .matches ?? false;
+    const duration = reducedMotion
+      ? REDUCED_MOTION_BOOT_REVEAL_MS
+      : BOOT_REVEAL_MS;
+    const startProgress = reducedMotion ? BOOT_REVEAL_WORLD_START : 0;
+    const startedAt = performance.now();
+    let rafId = 0;
+
+    setPhase("bootReveal");
+    setPhaseProgress(startProgress);
+
+    const tick = (now: number) => {
+      const elapsedProgress = clamp01((now - startedAt) / duration);
+      const nextProgress = startProgress +
+        elapsedProgress * (1 - startProgress);
+      setPhaseProgress(nextProgress);
+
+      if (elapsedProgress >= 1) {
+        setPhaseProgress(0);
+        setPhase("menu");
+        setBootRevealComplete(true);
+        return;
+      }
+
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(rafId);
+  }, [bootRevealComplete, booting, deferredAssetsEnabled]);
 
   useEffect(() => {
     window.electronAPI?.setGameplayActive(phase === "playing");
@@ -1480,6 +1546,8 @@ export function GameRoot({
           inputEnabled: false,
           killPulse: 0,
         };
+      case "bootReveal":
+        return resolveBootRevealPresentation(progress);
       case "entering":
         return {
           phase,
@@ -1514,7 +1582,12 @@ export function GameRoot({
     }
   }, [killPulseAmount, phase, phaseProgress]);
 
-  const renderedPresentation = booting ? BOOT_PRESENTATION : scenePresentation;
+  const bootRevealPending = !booting && !bootRevealComplete;
+  const renderedPresentation = booting
+    ? BOOT_PRESENTATION
+    : bootRevealPending
+    ? resolveBootRevealPresentation(phase === "bootReveal" ? phaseProgress : 0)
+    : scenePresentation;
 
   const hitMarkerVisible = hitMarker.until > performance.now();
   const isAimingDownSight = aimingState.ads && phase === "playing" && !isGameplayPaused;
@@ -1744,7 +1817,7 @@ export function GameRoot({
         onPauseMenuToggle={handlePauseMenuToggle}
       />
 
-      {phase === "menu"
+      {phase === "menu" && bootRevealComplete
         ? (
           <ExperienceMenuOverlay
             onEnterPractice={handleEnterPractice}
