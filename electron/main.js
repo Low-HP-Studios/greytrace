@@ -5,6 +5,7 @@ import {
   ipcMain,
   protocol,
   net,
+  shell,
 } from 'electron';
 import { createRequire } from 'module';
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -102,6 +103,28 @@ function createWindow() {
   } else {
     mainWindow.loadURL('app://game/index.html');
   }
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      void shell.openExternal(url);
+      return { action: 'deny' };
+    }
+
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const allowedOrigin = isDev ? 'http://localhost:1420' : 'app://game';
+    if (url.startsWith(allowedOrigin)) {
+      return;
+    }
+
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      event.preventDefault();
+      void shell.openExternal(url);
+    }
+  });
+
   applyGameplayFrameRate(false);
 
   mainWindow.on('closed', () => {

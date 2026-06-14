@@ -27,7 +27,7 @@ type ExperienceMenuOverlayProps = {
   onCheckForUpdates: () => void;
 };
 
-type LobbyTab = "play" | "collection" | "store" | "updates";
+type LobbyTab = "play" | "collection" | "updates";
 type CollectionTab = "characters" | "skies";
 
 type NavItem = {
@@ -38,12 +38,12 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { id: "play", label: "Play" },
   { id: "collection", label: "Collection" },
-  { id: "store", label: "Store" },
   { id: "updates", label: "Updates" },
 ];
 
 // Ring buffer of speed samples for the download graph
 const SPEED_SAMPLES = 40;
+const MANUAL_RELEASES_URL = "https://github.com/Low-HP-Studios/greytrace/releases";
 
 function SettingsIcon() {
   return (
@@ -243,6 +243,9 @@ export function ExperienceMenuOverlay({
 
   const isDownloading = updaterStatus.phase === "downloading";
   const progress = typeof updaterStatus.progress === "number" ? updaterStatus.progress : null;
+  const platformLabel = window.electronAPI?.platform ?? "web";
+  const isMacPlatform = platformLabel === "darwin" ||
+    platformLabel.toLowerCase().includes("mac");
   const selectedCharacterMonogram = getCatalogMonogram(
     selectedCharacterDef.displayName,
   );
@@ -459,75 +462,21 @@ export function ExperienceMenuOverlay({
           </div>
         )}
 
-        {activeTab === "store" && (
-          <div className="lobby-store-v2 lobby-store-v3">
-            <div className="lobby-store-header-v2">
-              <div>
-                <h2 className="lobby-store-title-v2">Character Store</h2>
-                <p className="lobby-store-subtitle-v2">
-                  All operatives are available in Beta. Pick one and the live lobby updates.
-                </p>
-              </div>
-              <span className="lobby-store-balance-v2">Roster Open</span>
-            </div>
-            <div className="lobby-store-grid-v2">
-              {CHARACTER_REGISTRY.map((char, index) => {
-                const isEquipped = selectedCharacterId === char.id;
-                const monogram = getCatalogMonogram(char.displayName);
-                return (
-                  <div
-                    key={char.id}
-                    className={`lobby-store-item-v2 ${isEquipped ? "equipped" : ""}`.trim()}
-                  >
-                    <div className="lobby-store-item-art-v2" aria-hidden="true">
-                      <span className="lobby-store-item-seq-v3">{formatCatalogIndex(index)}</span>
-                      <span className="lobby-store-item-monogram-v3">{monogram}</span>
-                      <span className="lobby-store-item-owned-tag-v2">
-                        {isEquipped ? "Active" : "Owned"}
-                      </span>
-                    </div>
-                    <div className="lobby-store-item-info-v2">
-                      <span className="lobby-store-item-name-v2">{char.displayName}</span>
-                      <span className="lobby-store-item-price-v2">
-                        {isEquipped ? "ACTIVE" : "READY"}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className={`lobby-store-item-cta-v2 ${isEquipped ? "equipped" : ""}`.trim()}
-                      onClick={() => handleCharacterAction(char.id)}
-                    >
-                      {isEquipped ? "Equipped" : "Equip"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {activeTab === "updates" && (
           <div className="updates-page-v2 updates-page-v3">
-            <div className="updates-meta-row-v2">
-              <div className="updates-version-grid-v2">
-                <div className="updates-metric-v2">
-                  <span>Current build</span>
-                  <strong>{updaterStatus.currentVersion}</strong>
-                </div>
-                <div className="updates-metric-v2">
-                  <span>Latest known</span>
-                  <strong>{updaterStatus.targetVersion ?? "—"}</strong>
-                </div>
-                <div className="updates-metric-v2">
-                  <span>Platform</span>
-                  <strong>{window.electronAPI?.platform ?? "web"}</strong>
-                </div>
-                <div className="updates-metric-v2">
-                  <span>Status</span>
-                  <strong className={`updates-phase-label-v2 phase-${updaterStatus.phase}`}>
+            <section className="updates-shell-v3">
+              <div className="updates-hero-v3">
+                <span className="lobby-section-label-v3">Build Channel</span>
+                <div className="updates-title-row-v3">
+                  <h2 className="updates-title-v3">Updates</h2>
+                  <span className={`updates-status-pill-v3 phase-${updaterStatus.phase}`}>
                     {updaterStatus.phase}
-                  </strong>
+                  </span>
                 </div>
+                <p className="updates-copy-v3">
+                  Keep GreyTrace current. Auto-update stays available where the signed
+                  installer flow supports it.
+                </p>
               </div>
 
               <div className="updates-actions-v2">
@@ -556,26 +505,63 @@ export function ExperienceMenuOverlay({
                   Cancel download
                 </button>
               </div>
-            </div>
+            </section>
 
-            {/* Download progress + graph */}
-            <div className="updates-download-section-v2">
+            {isMacPlatform && (
+              <section className="updates-manual-card-v3">
+                <div>
+                  <span className="updates-manual-kicker-v3">macOS manual install</span>
+                  <p>
+                    Automatic updates can fail on macOS while the app is unsigned.
+                    Continue with manual installs from GitHub Releases.
+                  </p>
+                </div>
+                <a
+                  className="updates-manual-link-v3"
+                  href={MANUAL_RELEASES_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open releases
+                  <ArrowIcon />
+                </a>
+              </section>
+            )}
+
+            <section className="updates-version-grid-v2" aria-label="Update details">
+              <div className="updates-metric-v2">
+                <span>Current build</span>
+                <strong>{updaterStatus.currentVersion}</strong>
+              </div>
+              <div className="updates-metric-v2">
+                <span>Latest known</span>
+                <strong>{updaterStatus.targetVersion ?? "—"}</strong>
+              </div>
+              <div className="updates-metric-v2">
+                <span>Platform</span>
+                <strong>{platformLabel}</strong>
+              </div>
+              <div className="updates-metric-v2">
+                <span>Install state</span>
+                <strong className={`updates-phase-label-v2 phase-${updaterStatus.phase}`}>
+                  {updateReadyToInstall ? "Ready" : updaterStatus.phase}
+                </strong>
+              </div>
+            </section>
+
+            <section className="updates-download-section-v2">
               <div className="updates-download-header-v2">
                 <span className="updates-download-title-v2">Download progress</span>
-                {progress !== null && (
-                  <span className="updates-download-pct-v2">{progress.toFixed(1)}%</span>
-                )}
+                <span className="updates-download-pct-v2">
+                  {progress !== null ? `${progress.toFixed(1)}%` : "Idle"}
+                </span>
               </div>
-
-              {/* Progress bar */}
               <div className="updates-progress-bar-v2">
                 <div
                   className="updates-progress-fill-v2"
                   style={{ width: `${progress ?? 0}%` }}
                 />
               </div>
-
-              {/* Speed sparkline */}
               <DownloadSpeedGraph samples={speedSamples} />
 
               {isDownloading && (
@@ -583,9 +569,8 @@ export function ExperienceMenuOverlay({
                   Downloading update — do not quit the application.
                 </p>
               )}
-            </div>
+            </section>
 
-            {/* Status message */}
             {updaterStatus.message && (
               <p className="updates-message-v2">{updaterStatus.message}</p>
             )}
