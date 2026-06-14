@@ -68,6 +68,11 @@ const LIVE_SKY_LIGHT = new THREE.Color("#c8dce8");
 const VOID_GROUND_LIGHT = new THREE.Color("#080808");
 const LIVE_GROUND_LIGHT = new THREE.Color("#d4a862");
 const MENU_KEY_LIGHT = new THREE.Color("#f6e8d6");
+const LOBBY_STAGE_COLOR = "#000000";
+const LOBBY_STAGE_BG = new THREE.Color(LOBBY_STAGE_COLOR);
+const LOBBY_STAGE_FOG = new THREE.Color(LOBBY_STAGE_COLOR);
+const LOBBY_STAGE_SKY_LIGHT = new THREE.Color("#050505");
+const LOBBY_STAGE_GROUND_LIGHT = new THREE.Color("#000000");
 const MENU_FRAME_RATE = 30;
 const TRANSITION_FRAME_RATE = 60;
 const MENU_FRAME_INTERVAL_MS = 1000 / MENU_FRAME_RATE;
@@ -348,6 +353,8 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
   const frameIntervalMs = presentation.phase === "menu"
     ? MENU_FRAME_INTERVAL_MS
     : TRANSITION_FRAME_INTERVAL_MS;
+  const isBootReveal = presentation.phase === "bootReveal";
+  const isLobbyStage = presentation.phase === "menu";
   const [glbCollisionVolumes, setGlbCollisionVolumes] = useState<readonly BlockingVolume[]>([]);
 
   const handleCollisionReady = useCallback((volumes: readonly BlockingVolume[]) => {
@@ -378,7 +385,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
     ? practiceMap
     : RANGE_PRACTICE_MAP;
   const paceEnabled = lobbyFrameCapEnabled;
-  const showSkyBackdrop = true;
+  const showSkyBackdrop = !isBootReveal && !isLobbyStage;
   const selectedSky = useMemo(() => getSkyById(selectedSkyId), [selectedSkyId]);
   const selectedSkyAssetUrl = selectedSky.assetUrl;
   const selectedSkyTheme = selectedSky.environmentTheme;
@@ -414,40 +421,77 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
       ),
     [rangeThemeBlend, selectedSkyTheme],
   );
-  const backgroundColor = useRangeTheme
+  const backgroundColor = isLobbyStage
+    ? LOBBY_STAGE_BG
+    : isBootReveal
+    ? blendColor(VOID_BG, rangeLighting.background, worldTheme)
+    : useRangeTheme
     ? rangeLighting.background
     : blendColor(VOID_BG, LIVE_BG, worldTheme);
-  const fogColor = useRangeTheme
+  const fogColor = isLobbyStage
+    ? LOBBY_STAGE_FOG
+    : isBootReveal
+    ? blendColor(VOID_FOG, rangeLighting.fog, worldTheme)
+    : useRangeTheme
     ? rangeLighting.fog
     : blendColor(VOID_FOG, LIVE_FOG, worldTheme);
   const fogNear = useRangeTheme ? rangeLighting.fogNear : 60;
   const fogFar = useRangeTheme ? rangeLighting.fogFar : 420;
-  const skyLightColor = useRangeTheme
+  const skyLightColor = isLobbyStage
+    ? LOBBY_STAGE_SKY_LIGHT
+    : isBootReveal
+    ? blendColor(VOID_SKY_LIGHT, rangeLighting.skyLight, worldTheme)
+    : useRangeTheme
     ? rangeLighting.skyLight
     : blendColor(VOID_SKY_LIGHT, LIVE_SKY_LIGHT, worldTheme);
-  const groundLightColor = useRangeTheme
+  const groundLightColor = isLobbyStage
+    ? LOBBY_STAGE_GROUND_LIGHT
+    : isBootReveal
+    ? blendColor(VOID_GROUND_LIGHT, rangeLighting.groundLight, worldTheme)
+    : useRangeTheme
     ? rangeLighting.groundLight
     : blendColor(VOID_GROUND_LIGHT, LIVE_GROUND_LIGHT, worldTheme);
-  const ambientIntensity = useRangeTheme
+  const ambientIntensity = isLobbyStage
+    ? 0.08
+    : isBootReveal
+    ? THREE.MathUtils.lerp(0, rangeLighting.ambientIntensity, worldTheme)
+    : useRangeTheme
     ? rangeLighting.ambientIntensity
     : THREE.MathUtils.lerp(0.14, 0.5, worldTheme);
-  const hemisphereIntensity = useRangeTheme
+  const hemisphereIntensity = isLobbyStage
+    ? 0.16
+    : isBootReveal
+    ? THREE.MathUtils.lerp(0.02, rangeLighting.hemisphereIntensity, worldTheme)
+    : useRangeTheme
     ? rangeLighting.hemisphereIntensity
     : THREE.MathUtils.lerp(0.22, 0.95, worldTheme);
-  const sunIntensity = useRangeTheme
+  const sunIntensity = isLobbyStage
+    ? 0
+    : isBootReveal
+    ? THREE.MathUtils.lerp(0, rangeLighting.sunIntensity, worldTheme)
+    : useRangeTheme
     ? rangeLighting.sunIntensity
     : THREE.MathUtils.lerp(0.05, 0.8, worldTheme);
   const sunColor = useRangeTheme ? rangeLighting.sunColor : "#ffd2a2";
-  const fillIntensity = useRangeTheme
+  const fillIntensity = isLobbyStage
+    ? 0.42
+    : isBootReveal
+    ? THREE.MathUtils.lerp(0, rangeLighting.fillIntensity, worldTheme)
+    : useRangeTheme
     ? rangeLighting.fillIntensity
     : THREE.MathUtils.lerp(0.12, 0.6, worldTheme);
   const fillColor = useRangeTheme ? rangeLighting.fillColor : "#5ab8ff";
-  const voidCharacterLightIntensity = useRangeTheme
+  const voidCharacterLightIntensity = isBootReveal
+    ? 0
+    : isLobbyStage
+    ? 5.6
+    : useRangeTheme
     ? rangeLighting.menuKeyIntensity
     : THREE.MathUtils.lerp(4.4, 0.16, worldTheme);
   const menuKeyLightColor = useRangeTheme
     ? rangeLighting.menuKeyColor
     : MENU_KEY_LIGHT;
+  const stageFloorColor = isLobbyStage ? LOBBY_STAGE_COLOR : undefined;
 
   const handleTargetHit = useCallback(
     (targetId: string, damage: number, nowMs: number) => {
@@ -622,6 +666,7 @@ export const Scene = forwardRef<SceneHandle, SceneProps>(function Scene({
         skyAssetUrl={selectedSkyAssetUrl}
         skyTheme={selectedSkyTheme}
         surfaceBlend={rangeThemeBlend}
+        stageFloorColor={stageFloorColor}
       />
       <Targets
         targets={targets}

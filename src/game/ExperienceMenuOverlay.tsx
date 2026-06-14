@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import {
   CHARACTER_REGISTRY,
-  DEFAULT_CHARACTER_ID,
   getCharacterById,
   isCharacterSelectable,
 } from "./characters";
@@ -29,7 +27,7 @@ type ExperienceMenuOverlayProps = {
   onCheckForUpdates: () => void;
 };
 
-type LobbyTab = "play" | "collection" | "store" | "updates";
+type LobbyTab = "play" | "collection" | "updates";
 type CollectionTab = "characters" | "skies";
 
 type NavItem = {
@@ -40,12 +38,12 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { id: "play", label: "Play" },
   { id: "collection", label: "Collection" },
-  { id: "store", label: "Store" },
   { id: "updates", label: "Updates" },
 ];
 
 // Ring buffer of speed samples for the download graph
 const SPEED_SAMPLES = 40;
+const MANUAL_RELEASES_URL = "https://github.com/Low-HP-Studios/greytrace/releases";
 
 function SettingsIcon() {
   return (
@@ -224,14 +222,6 @@ export function ExperienceMenuOverlay({
     }
   }, [updaterStatus.phase, updaterStatus.progress]);
 
-  const showOnlineToast = useCallback(() => {
-    toast.warning("Online Deployment is in alpha", {
-      description:
-        "This lane is still under development. Practice is the only live module in the current build.",
-      duration: 4200,
-    });
-  }, []);
-
   const handleCharacterAction = useCallback((characterId: string) => {
     if (!isCharacterSelectable(characterId)) {
       return;
@@ -253,6 +243,9 @@ export function ExperienceMenuOverlay({
 
   const isDownloading = updaterStatus.phase === "downloading";
   const progress = typeof updaterStatus.progress === "number" ? updaterStatus.progress : null;
+  const platformLabel = window.electronAPI?.platform ?? "web";
+  const isMacPlatform = platformLabel === "darwin" ||
+    platformLabel.toLowerCase().includes("mac");
   const selectedCharacterMonogram = getCatalogMonogram(
     selectedCharacterDef.displayName,
   );
@@ -263,7 +256,7 @@ export function ExperienceMenuOverlay({
       <header className="lobby-topbar-v2">
         <div className="lobby-brand-v2">
           <h1 className="lobby-logo-v2">GrayTrace</h1>
-          <span className="lobby-alpha-chip-v2">α</span>
+          <span className="lobby-alpha-chip-v2">β</span>
           {updateReadyToInstall && (
             <button
               type="button"
@@ -311,48 +304,32 @@ export function ExperienceMenuOverlay({
         {activeTab === "play" && (
           <div className="lobby-play-stage-v3">
             <section className="lobby-panel-v3 lobby-play-hero-v3">
-              <div className="lobby-card-header-v2">
-                <h2 className="lobby-card-title-v2">Practice</h2>
-                <span className="lobby-card-badge-v2 ready">Ready</span>
-              </div>
-              <p className="lobby-hero-copy-v3">
-                Live targets. No stakes. Enough room to miss in private.
-              </p>
-              <div className="lobby-map-panel-v3">
-                <div className="lobby-map-selector-header-v2">
-                  <span className="lobby-map-selector-label-v2">Map</span>
-                  <span className="lobby-map-selector-value-v2">{selectedMap.label}</span>
-                </div>
-                <div className="segmented-row lobby-map-pills-v3">
-                  {PRACTICE_MAP_OPTIONS.map((option) => (
+              <div className="lobby-map-grid-v3" role="group" aria-label="Practice maps">
+                {PRACTICE_MAP_OPTIONS.map((option) => {
+                  const selected = selectedMapId === option.id;
+                  return (
                     <button
                       key={option.id}
                       type="button"
-                      className={`chip-btn ${selectedMapId === option.id ? "active" : ""}`}
+                      className={`lobby-map-card-v3 ${selected ? "selected" : ""}`}
+                      aria-pressed={selected}
+                      aria-label={`${option.label} map${selected ? ", selected" : ""}`}
                       onClick={() => onMapSelect(option.id)}
                     >
-                      {option.label}
+                      <span className="lobby-map-card-title-v3">{option.label}</span>
                     </button>
-                  ))}
-                </div>
-                <p className="lobby-map-selector-note-v2">
-                  {selectedMap.description}
-                </p>
+                  );
+                })}
               </div>
-              <div className="lobby-card-actions-v2 lobby-card-actions-v3">
-                <button
-                  type="button"
-                  className="lobby-play-btn-v2"
-                  data-controller-default-focus="true"
-                  onClick={onEnterPractice}
-                >
-                  <span>Enter Practice</span>
-                  <ArrowIcon />
-                </button>
-                <button type="button" className="lobby-play-btn-v2 secondary" onClick={showOnlineToast}>
-                  Online in Development
-                </button>
-              </div>
+              <button
+                type="button"
+                className="lobby-play-btn-v2 lobby-play-command-v3"
+                data-controller-default-focus="true"
+                onClick={onEnterPractice}
+              >
+                <span>Enter {selectedMap.label}</span>
+                <ArrowIcon />
+              </button>
             </section>
           </div>
         )}
@@ -388,23 +365,22 @@ export function ExperienceMenuOverlay({
               </div>
               <div className="lobby-collection-grid-v2">
                 {collectionTab === "characters"
-                  ? CHARACTER_REGISTRY.map((char) => {
-                    const isSelectable = isCharacterSelectable(char.id);
+                  ? CHARACTER_REGISTRY.map((char, index) => {
                     const isEquipped = selectedCharacterId === char.id;
                     return (
                       <button
                         key={char.id}
                         type="button"
-                        className={`lobby-char-card-v2 ${isEquipped ? "equipped" : ""} ${
-                          isSelectable ? "" : "locked"
-                        }`.trim()}
+                        className={`lobby-char-card-v2 ${isEquipped ? "equipped" : ""}`.trim()}
                         onClick={() => handleCharacterAction(char.id)}
-                        disabled={!isSelectable}
-                        aria-disabled={!isSelectable}
+                        aria-pressed={isEquipped}
                       >
+                        <span className="lobby-char-index-v3">
+                          {formatCatalogIndex(index)}
+                        </span>
                         <span className="lobby-char-name-v2">{char.displayName}</span>
-                        <span className={`lobby-char-equipped-v2 ${isSelectable ? "" : "locked"}`.trim()}>
-                          {isEquipped ? "Equipped" : "Locked"}
+                        <span className="lobby-char-equipped-v2">
+                          {isEquipped ? "Equipped" : "Equip"}
                         </span>
                       </button>
                     );
@@ -434,8 +410,7 @@ export function ExperienceMenuOverlay({
                   <span className="lobby-section-label-v3">Selected Operative</span>
                   <h2 className="lobby-character-title-v3">{selectedCharacterDef.displayName}</h2>
                   <p className="lobby-character-copy-v3">
-                    This selection drives the live lobby background now. One render,
-                    one rifle, and fewer fake preview boxes cluttering the crime scene.
+                    Select any operative for the lobby and practice targets.
                   </p>
                   <div className="lobby-character-facts-v3">
                     <article className="lobby-meta-card-v3">
@@ -487,83 +462,21 @@ export function ExperienceMenuOverlay({
           </div>
         )}
 
-        {activeTab === "store" && (
-          <div className="lobby-store-v2 lobby-store-v3">
-            <div className="lobby-store-header-v2">
-              <div>
-                <h2 className="lobby-store-title-v2">Character Store</h2>
-                <p className="lobby-store-subtitle-v2">
-                  Thulla is the active operative right now. The rest of the roster stays visible,
-                  but locked, because half-finished choice is still just half-finished.
-                </p>
-              </div>
-              <span className="lobby-store-balance-v2">Trooper Active</span>
-            </div>
-            <div className="lobby-store-grid-v2">
-              {CHARACTER_REGISTRY.map((char, index) => {
-                const isSelectable = isCharacterSelectable(char.id);
-                const isEquipped = selectedCharacterId === char.id;
-                const monogram = getCatalogMonogram(char.displayName);
-                return (
-                  <div
-                    key={char.id}
-                    className={`lobby-store-item-v2 ${isEquipped ? "equipped" : ""} ${
-                      isSelectable ? "" : "locked"
-                    }`.trim()}
-                  >
-                    <div className="lobby-store-item-art-v2" aria-hidden="true">
-                      <span className="lobby-store-item-seq-v3">{formatCatalogIndex(index)}</span>
-                      <span className="lobby-store-item-monogram-v3">{monogram}</span>
-                      <span className={`lobby-store-item-owned-tag-v2 ${isSelectable ? "" : "locked"}`.trim()}>
-                        {char.id === DEFAULT_CHARACTER_ID ? "Active" : "Locked"}
-                      </span>
-                    </div>
-                    <div className="lobby-store-item-info-v2">
-                      <span className="lobby-store-item-name-v2">{char.displayName}</span>
-                      <span className={`lobby-store-item-price-v2 ${isSelectable ? "" : "locked"}`.trim()}>
-                        {isSelectable ? "ACTIVE" : "LOCKED"}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className={`lobby-store-item-cta-v2 ${isEquipped ? "equipped" : ""} ${
-                        isSelectable ? "" : "locked"
-                      }`.trim()}
-                      onClick={() => handleCharacterAction(char.id)}
-                      disabled={!isSelectable}
-                      aria-disabled={!isSelectable}
-                    >
-                      {isEquipped ? "Equipped" : isSelectable ? "Equip" : "Locked"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {activeTab === "updates" && (
           <div className="updates-page-v2 updates-page-v3">
-            <div className="updates-meta-row-v2">
-              <div className="updates-version-grid-v2">
-                <div className="updates-metric-v2">
-                  <span>Current build</span>
-                  <strong>{updaterStatus.currentVersion}</strong>
-                </div>
-                <div className="updates-metric-v2">
-                  <span>Latest known</span>
-                  <strong>{updaterStatus.targetVersion ?? "—"}</strong>
-                </div>
-                <div className="updates-metric-v2">
-                  <span>Platform</span>
-                  <strong>{window.electronAPI?.platform ?? "web"}</strong>
-                </div>
-                <div className="updates-metric-v2">
-                  <span>Status</span>
-                  <strong className={`updates-phase-label-v2 phase-${updaterStatus.phase}`}>
+            <section className="updates-shell-v3">
+              <div className="updates-hero-v3">
+                <span className="lobby-section-label-v3">Build Channel</span>
+                <div className="updates-title-row-v3">
+                  <h2 className="updates-title-v3">Updates</h2>
+                  <span className={`updates-status-pill-v3 phase-${updaterStatus.phase}`}>
                     {updaterStatus.phase}
-                  </strong>
+                  </span>
                 </div>
+                <p className="updates-copy-v3">
+                  Keep GreyTrace current. Auto-update stays available where the signed
+                  installer flow supports it.
+                </p>
               </div>
 
               <div className="updates-actions-v2">
@@ -592,26 +505,63 @@ export function ExperienceMenuOverlay({
                   Cancel download
                 </button>
               </div>
-            </div>
+            </section>
 
-            {/* Download progress + graph */}
-            <div className="updates-download-section-v2">
+            {isMacPlatform && (
+              <section className="updates-manual-card-v3">
+                <div>
+                  <span className="updates-manual-kicker-v3">macOS manual install</span>
+                  <p>
+                    Automatic updates can fail on macOS while the app is unsigned.
+                    Continue with manual installs from GitHub Releases.
+                  </p>
+                </div>
+                <a
+                  className="updates-manual-link-v3"
+                  href={MANUAL_RELEASES_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open releases
+                  <ArrowIcon />
+                </a>
+              </section>
+            )}
+
+            <section className="updates-version-grid-v2" aria-label="Update details">
+              <div className="updates-metric-v2">
+                <span>Current build</span>
+                <strong>{updaterStatus.currentVersion}</strong>
+              </div>
+              <div className="updates-metric-v2">
+                <span>Latest known</span>
+                <strong>{updaterStatus.targetVersion ?? "—"}</strong>
+              </div>
+              <div className="updates-metric-v2">
+                <span>Platform</span>
+                <strong>{platformLabel}</strong>
+              </div>
+              <div className="updates-metric-v2">
+                <span>Install state</span>
+                <strong className={`updates-phase-label-v2 phase-${updaterStatus.phase}`}>
+                  {updateReadyToInstall ? "Ready" : updaterStatus.phase}
+                </strong>
+              </div>
+            </section>
+
+            <section className="updates-download-section-v2">
               <div className="updates-download-header-v2">
                 <span className="updates-download-title-v2">Download progress</span>
-                {progress !== null && (
-                  <span className="updates-download-pct-v2">{progress.toFixed(1)}%</span>
-                )}
+                <span className="updates-download-pct-v2">
+                  {progress !== null ? `${progress.toFixed(1)}%` : "Idle"}
+                </span>
               </div>
-
-              {/* Progress bar */}
               <div className="updates-progress-bar-v2">
                 <div
                   className="updates-progress-fill-v2"
                   style={{ width: `${progress ?? 0}%` }}
                 />
               </div>
-
-              {/* Speed sparkline */}
               <DownloadSpeedGraph samples={speedSamples} />
 
               {isDownloading && (
@@ -619,9 +569,8 @@ export function ExperienceMenuOverlay({
                   Downloading update — do not quit the application.
                 </p>
               )}
-            </div>
+            </section>
 
-            {/* Status message */}
             {updaterStatus.message && (
               <p className="updates-message-v2">{updaterStatus.message}</p>
             )}

@@ -149,13 +149,13 @@ type GameplayRuntimeProps = {
 };
 
 const MENU_LOOK_HEIGHT = 1.12;
-const MENU_FRONT_DISTANCE = 1.95;
-const MENU_FRONT_HEIGHT = 1.22;
+const MENU_FRONT_DISTANCE = 1.72;
+const MENU_FRONT_HEIGHT = 1.25;
 const MENU_SIDE_DRIFT = 0.08;
 const MENU_VERTICAL_DRIFT = 0.025;
 const MENU_LOOK_DRIFT = 0.05;
 const MENU_SHOULDER_OFFSET = 0.54;
-const MENU_LOOK_SHOULDER_OFFSET = 0.16;
+const MENU_LOOK_SHOULDER_OFFSET = 0.04;
 const MENU_FOV = 31;
 // Aligned with PlayerController: CAMERA_ARM_LENGTH=2.25, CAMERA_DEFAULT_ELEVATION=0.35
 // horizontalDist = 2.25 * cos(0.35) ≈ 2.11, verticalDist = 2.25 * sin(0.35) ≈ 0.77
@@ -164,6 +164,11 @@ const TRANSITION_BACK_DISTANCE = 2.11;
 const TRANSITION_BACK_HEIGHT = 1.97;
 const TRANSITION_SHOULDER = 0.5;
 const TRANSITION_LOOK_DISTANCE = 14;
+const BOOT_REVEAL_BACK_DISTANCE = 2.75;
+const BOOT_REVEAL_BACK_HEIGHT = 1.38;
+const BOOT_REVEAL_SHOULDER = 0.22;
+const BOOT_REVEAL_LOOK_HEIGHT = 0.86;
+const BOOT_REVEAL_LOOK_DISTANCE = 0.42;
 const HEAD_YAW_AXIS = new THREE.Vector3(0, 1, 0);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const HEAD_YAW_QUAT = new THREE.Quaternion();
@@ -1587,6 +1592,8 @@ export const GameplayRuntime = forwardRef<
   const transitionFrontLookRef = useRef(new THREE.Vector3());
   const transitionBackPosRef = useRef(new THREE.Vector3());
   const transitionBackLookRef = useRef(new THREE.Vector3());
+  const transitionBootRevealBackPosRef = useRef(new THREE.Vector3());
+  const transitionBootRevealBackLookRef = useRef(new THREE.Vector3());
 
   useEffect(() => {
     targetsRef.current = targets;
@@ -3318,7 +3325,10 @@ export const GameplayRuntime = forwardRef<
       rifleReadyPoseActive = false;
     }
 
-    if (presentation.phase === "menu") {
+    if (
+      presentation.phase === "menu" ||
+      presentation.phase === "bootReveal"
+    ) {
       nextAnimState = "rifleIdle";
       lowerBodyOverlayState = null;
       upperBodyOverlayState = null;
@@ -3755,6 +3765,11 @@ export const GameplayRuntime = forwardRef<
     } else {
       characterWeaponAnchor = null;
     }
+    const forcedDisplayWeapon = presentation.phase === "menu" ||
+        presentation.phase === "bootReveal"
+      ? "rifle"
+      : null;
+
     updateCharacterWeaponMesh(
       characterWeaponRef.current,
       characterRifleModelRef.current,
@@ -3771,7 +3786,7 @@ export const GameplayRuntime = forwardRef<
       controller.getAdsLerp(),
       camera,
       weapon.getActiveWeapon(),
-      presentation.phase === "menu" ? "rifle" : null,
+      forcedDisplayWeapon,
     );
 
     const weaponSprinting = slideState.active || (!weaponEquipped
@@ -4046,7 +4061,7 @@ export const GameplayRuntime = forwardRef<
     const displayedWeapon = resolveDisplayedWeapon(
       weapon,
       switchState,
-      presentation.phase === "menu" ? "rifle" : null,
+      forcedDisplayWeapon,
     );
     const showBackSlots = presentation.phase === "playing" && !firstPerson;
     const upperTorsoBoneForBack = characterUpperTorsoBoneRef.current;
@@ -4150,7 +4165,22 @@ export const GameplayRuntime = forwardRef<
       backLook
         .addScaledVector(forward, TRANSITION_LOOK_DISTANCE)
         .addScaledVector(right, TRANSITION_SHOULDER * 0.9);
-      const menuLightBlend = presentation.phase === "menu"
+      const bootRevealBackPos = transitionBootRevealBackPosRef.current
+        .copy(position)
+        .addScaledVector(forward, -BOOT_REVEAL_BACK_DISTANCE)
+        .addScaledVector(right, BOOT_REVEAL_SHOULDER);
+      bootRevealBackPos.y = position.y + BOOT_REVEAL_BACK_HEIGHT;
+      const bootRevealBackLook = transitionBootRevealBackLookRef.current
+        .copy(position)
+        .addScaledVector(forward, BOOT_REVEAL_LOOK_DISTANCE)
+        .addScaledVector(right, BOOT_REVEAL_SHOULDER * 0.28);
+      bootRevealBackLook.y = position.y + BOOT_REVEAL_LOOK_HEIGHT;
+      const bootRevealCameraBlend = presentation.phase === "bootReveal"
+        ? easeInOutCubic(clamp01((phaseProgress - 0.36) / 0.48))
+        : 0;
+      const menuLightBlend = presentation.phase === "bootReveal"
+        ? clamp01((phaseProgress - 0.12) / 0.24)
+        : presentation.phase === "menu"
         ? 1
         : presentation.phase === "entering"
         ? 1 - clamp01(phaseProgress / 0.72)
@@ -4162,7 +4192,15 @@ export const GameplayRuntime = forwardRef<
       if (keyLight) {
         keyLight.visible = menuLightBlend > 0.001;
         keyLight.intensity = 7.25 * menuLightBlend;
-        keyLight.position.copy(frontPos);
+        if (presentation.phase === "bootReveal") {
+          keyLight.position.lerpVectors(
+            bootRevealBackPos,
+            frontPos,
+            bootRevealCameraBlend,
+          );
+        } else {
+          keyLight.position.copy(frontPos);
+        }
         keyLight.position.y += 0.2;
         keyLight.position.addScaledVector(right, 0.22);
         keyLight.position.addScaledVector(forward, 0.36);
@@ -4181,6 +4219,18 @@ export const GameplayRuntime = forwardRef<
       if (presentation.phase === "menu") {
         camera.position.copy(frontPos);
         camera.lookAt(frontLook);
+      } else if (presentation.phase === "bootReveal") {
+        camera.position.lerpVectors(
+          bootRevealBackPos,
+          frontPos,
+          bootRevealCameraBlend,
+        );
+        tempAimPointRef.current.lerpVectors(
+          bootRevealBackLook,
+          frontLook,
+          bootRevealCameraBlend,
+        );
+        camera.lookAt(tempAimPointRef.current);
       } else if (presentation.phase === "entering") {
         const blend = easeInOutCubic(phaseProgress);
         camera.position.lerpVectors(frontPos, backPos, blend);

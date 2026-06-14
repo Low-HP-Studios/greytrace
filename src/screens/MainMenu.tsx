@@ -184,7 +184,7 @@ export function MainMenu({ onStartGame }: MainMenuProps) {
   }, []);
 
   const showOnlineToast = useCallback(() => {
-    toast.warning("Online Deployment is in alpha", {
+    toast.warning("Online Deployment is in beta development", {
       description:
         "This lane is still under development. Practice is the only live module in the current build.",
       duration: 4200,
@@ -206,7 +206,7 @@ export function MainMenu({ onStartGame }: MainMenuProps) {
         <header className="lobby-topbar-v2">
           <div className="lobby-brand-v2">
             <h1 className="lobby-logo-v2">GrayTrace</h1>
-            <span className="lobby-alpha-chip-v2">α</span>
+            <span className="lobby-alpha-chip-v2">β</span>
           </div>
 
           <nav className="lobby-nav-v2" aria-label="Main navigation">
@@ -358,7 +358,7 @@ export function MainMenu({ onStartGame }: MainMenuProps) {
                 <div>
                   <h2 className="lobby-store-title-v2">Character Store</h2>
                   <p className="lobby-store-subtitle-v2">
-                    All characters are available during Early Access
+                    All characters are available during Beta
                   </p>
                 </div>
                 <span className="lobby-store-balance-v2">All Owned</span>

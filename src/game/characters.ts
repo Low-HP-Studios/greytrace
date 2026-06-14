@@ -200,7 +200,7 @@ export function isCharacterId(id: unknown): id is CharacterDefinition["id"] {
 export function isCharacterSelectable(
   id: unknown,
 ): id is CharacterDefinition["id"] {
-  return id === TROOPER_CHARACTER_ID;
+  return isCharacterId(id);
 }
 
 export function normalizePlayableCharacterId(

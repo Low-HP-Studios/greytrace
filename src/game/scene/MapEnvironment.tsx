@@ -342,6 +342,7 @@ function WorldBackdrop({
   skyAssetUrl = DEFAULT_SKY_ASSET_URL,
   rangeTheme,
   surfaceBlend = theme,
+  stageFloorColor,
 }: {
   theme: number;
   worldBounds: PracticeMapDefinition["worldBounds"];
@@ -349,6 +350,7 @@ function WorldBackdrop({
   skyAssetUrl?: string;
   rangeTheme?: SkyEnvironmentTheme;
   surfaceBlend?: number;
+  stageFloorColor?: string;
 }) {
   const skyTexture = useMemo(() => createSkyTexture(), []);
   const nightSkyTexture = useMemo(() => createNightSkyTexture(), []);
@@ -398,26 +400,34 @@ function WorldBackdrop({
     [animeTexture, iceTexture, spaceTexture, tundraTexture],
   );
 
-  const backdropColor = rangeTheme
+  const backdropColor = stageFloorColor
+    ? new THREE.Color(stageFloorColor)
+    : rangeTheme
     ? blendHexColor(
         rangeTheme.range.menu.backdropColor,
         rangeTheme.range.gameplay.backdropColor,
         rangeBlend,
       )
     : blendColor(TUNDRA_COLOR_VOID, TUNDRA_COLOR_LIVE, liveTheme);
-  const oceanColor = rangeTheme
+  const oceanColor = stageFloorColor
+    ? new THREE.Color(stageFloorColor)
+    : rangeTheme
     ? blendHexColor(
         rangeTheme.range.menu.oceanColor,
         rangeTheme.range.gameplay.oceanColor,
         rangeBlend,
       )
     : blendColor(ICE_COLOR_VOID, ICE_COLOR_LIVE, liveTheme);
-  const backdropTexture = rangeTheme
+  const backdropTexture = stageFloorColor
+    ? undefined
+    : rangeTheme
     ? resolveRangeTexture(rangeTheme.range.backdropTexture, textureBank)
     : allowTextures
     ? tundraTexture ?? undefined
     : undefined;
-  const oceanTexture = rangeTheme
+  const oceanTexture = stageFloorColor
+    ? undefined
+    : rangeTheme
     ? resolveRangeTexture(rangeTheme.range.oceanTexture, textureBank)
     : allowTextures
     ? iceTexture ?? undefined
@@ -512,6 +522,7 @@ export type MapEnvironmentProps = {
   skyAssetUrl?: string;
   skyTheme?: SkyEnvironmentTheme;
   surfaceBlend?: number;
+  stageFloorColor?: string;
 };
 
 export function MapEnvironment({
@@ -523,6 +534,7 @@ export function MapEnvironment({
   skyAssetUrl = DEFAULT_SKY_ASSET_URL,
   skyTheme = DEFAULT_RANGE_THEME,
   surfaceBlend = theme,
+  stageFloorColor,
 }: MapEnvironmentProps) {
   const tundraTexture = useMemo(() => createTundraTexture(), []);
   const animeTexture = useMemo(() => createAnimeGroundTexture(), []);
@@ -578,11 +590,13 @@ export function MapEnvironment({
     floorMaterial.floorTexture,
     floorTextures,
   );
-  const floorColor = blendHexColor(
-    floorMaterial.menu.floorColor,
-    floorMaterial.gameplay.floorColor,
-    rangeBlend,
-  );
+  const floorColor = stageFloorColor
+    ? new THREE.Color(stageFloorColor)
+    : blendHexColor(
+        floorMaterial.menu.floorColor,
+        floorMaterial.gameplay.floorColor,
+        rangeBlend,
+      );
   const floorRoughness = blendNumber(
     floorMaterial.menu.floorRoughness,
     floorMaterial.gameplay.floorRoughness,
@@ -603,6 +617,7 @@ export function MapEnvironment({
         skyAssetUrl={skyAssetUrl}
         rangeTheme={skyTheme}
         surfaceBlend={surfaceBlend}
+        stageFloorColor={stageFloorColor}
       />
 
       <mesh
@@ -614,7 +629,7 @@ export function MapEnvironment({
         <planeGeometry args={[walkableSizeX, walkableSizeZ]} />
         <meshStandardMaterial
           color={floorColor}
-          map={floorTexture}
+          map={stageFloorColor ? undefined : floorTexture}
           roughness={floorRoughness}
           metalness={floorMetalness}
         />
@@ -1736,6 +1751,7 @@ export function PracticeMapEnvironment({
   skyAssetUrl = DEFAULT_SKY_ASSET_URL,
   skyTheme = DEFAULT_RANGE_THEME,
   surfaceBlend = theme,
+  stageFloorColor,
 }: {
   practiceMap: PracticeMapDefinition;
   shadows: boolean;
@@ -1746,6 +1762,7 @@ export function PracticeMapEnvironment({
   skyAssetUrl?: string;
   skyTheme?: SkyEnvironmentTheme;
   surfaceBlend?: number;
+  stageFloorColor?: string;
 }) {
   if (practiceMap.environment.kind === "school-glb") {
     return (
@@ -1794,6 +1811,7 @@ export function PracticeMapEnvironment({
       skyAssetUrl={skyAssetUrl}
       skyTheme={skyTheme}
       surfaceBlend={surfaceBlend}
+      stageFloorColor={stageFloorColor}
     />
   );
 }

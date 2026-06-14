@@ -11,7 +11,7 @@ type LoadingScreenProps = {
 };
 
 const INTRO_WORDMARK = "LOW HP STUDIOS";
-const MAIN_STATUS_LABEL = "Alpha Preview Build";
+const MAIN_STATUS_LABEL = "Beta Build";
 const INTRO_BLACK_MS = 60;
 const INTRO_FADE_IN_MS = 500;
 const INTRO_HOLD_MS = 2_000;
@@ -212,7 +212,7 @@ export function LoadingScreen({
         <div className="loading-bottom-left">
           <div className="loading-bottom-left-brand">{MAIN_STATUS_LABEL}</div>
           <p className="loading-alpha-note">
-            GreyTrace is currently in alpha stage. Please report issues.
+            GreyTrace is now in beta. Please report issues.
           </p>
         </div>
         <div className="loading-bottom-right" aria-hidden="true">
