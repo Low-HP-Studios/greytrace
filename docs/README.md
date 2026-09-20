@@ -27,6 +27,7 @@ Small notes now beat a beautiful postmortem later.
 - `WINDOWS-DISTRIBUTION.md` - current Windows release recommendation, channel choice, and trade-offs
 - `DECISIONS.md` - design/technical decisions and why (FPS→TPS, camera, jump, Electron migration, HP targets)
 - `ROADMAP.md` - completed work, next steps, backlog
+- [FUTURE-PLANS.md](FUTURE-PLANS.md) - planned Cloudflare migration, web-only distribution, focused gameplay, and optimization priorities (2026-09-20; implementation deferred)
 
 ## Doc Conventions
 

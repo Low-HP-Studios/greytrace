@@ -2,6 +2,17 @@
 
 ## Current Focus
 
+The 2026-09-20 direction is a web-only tactical shooting/practice game, Cloudflare
+hosting, and a polished core with smaller assets. Implementation is deferred.
+Read [Future Plans](FUTURE-PLANS.md) before choosing the next work; it captures the
+owner's reasoning, tradeoffs, proposed scope, and implementation order.
+
+## Earlier Roadmap (Historical Context)
+
+The entries below preserve the prior desktop-focused roadmap. They are not a
+fresh status audit or the current priority order; reassess them against the
+future direction before implementation.
+
 Stabilize TPS feel, camera, and Electron desktop experience for the practice prototype.
 
 ## Completed

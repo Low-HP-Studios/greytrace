@@ -6,7 +6,14 @@ The current public-facing target is **Beta Build 0.3.0**.
 This beta focuses on the core playable loop: a cinematic lobby, selectable
 operators, practice maps, gun handling, settings, and desktop update support.
 It is still not a full live-service game: there is no backend progression,
-matchmaking, account system, or online deployment yet.
+matchmaking, or account system yet. A web version is deployed on Vercel.
+
+## Planned Direction
+
+The planned direction is Cloudflare hosting, web-only distribution, and a focused
+tactical shooting/practice experience. These changes are deferred, not shipped.
+See [future plans](docs/FUTURE-PLANS.md) for the reasons, tradeoffs, proposed scope,
+and implementation order, and [the roadmap](docs/ROADMAP.md) for earlier backlog context.
 
 ## Current Beta Scope
 
