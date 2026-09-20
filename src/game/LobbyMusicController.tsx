@@ -9,8 +9,8 @@ type WindowWithPassiveListener = Window & typeof globalThis;
 
 const LOBBY_TRACKS = [
   "/assets/audio/lobby/lobby1.mp3",
-  "/assets/audio/lobby/lobby2.wav",
-  "/assets/audio/lobby/lobby3.wav",
+  "/assets/audio/lobby/lobby2.mp3",
+  "/assets/audio/lobby/lobby3.mp3",
 ] as const;
 const LOBBY_MUSIC_FADE_OUT_MS = 320;
 
