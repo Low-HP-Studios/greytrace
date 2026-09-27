@@ -297,8 +297,6 @@ export function menuTitle(tab: import("./settings").SettingsTabId) {
       return "Crosshair";
     case "imports":
       return "Imports";
-    case "system":
-      return "System";
     default:
       return "Settings";
   }

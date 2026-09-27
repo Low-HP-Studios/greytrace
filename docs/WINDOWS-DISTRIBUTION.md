@@ -1,5 +1,7 @@
 # Windows Distribution
 
+> Historical desktop documentation. Desktop packaging, release jobs, and auto-updates were retired on 2026-09-27. See the root README for current web commands.
+
 Current recommendation for this repo's Windows release strategy.
 
 ## Summary

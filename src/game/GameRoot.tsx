@@ -73,12 +73,6 @@ import {
 } from "./types";
 import { SKY_IDS, type SkyId } from "./sky-registry";
 
-const DEFAULT_UPDATER_STATUS: UpdaterStatusPayload = {
-  phase: "idle",
-  currentVersion: "dev",
-  message: "Updater is idle.",
-};
-
 const BOOT_REVEAL_MS = 2_500;
 const REDUCED_MOTION_BOOT_REVEAL_MS = 450;
 const BOOT_REVEAL_WORLD_START = 0.84;
@@ -86,10 +80,6 @@ const ENTER_TRANSITION_MS = 1800;
 const RETURN_TRANSITION_MS = 1350;
 const RETURN_RESET_PROGRESS = 0.58;
 const KILL_PULSE_MS = 450;
-const CHECKING_UPDATE_TOAST_ID = "greytrace-updater-checking";
-const UPDATE_AVAILABLE_TOAST_ID = "greytrace-updater-available";
-const READY_TO_INSTALL_TOAST_ID = "greytrace-updater-ready";
-const MENU_AUTO_UPDATE_CHECK_COOLDOWN_MS = 30_000;
 const MAX_SHOT_BLOOM = 24;
 const CONTROLLER_CAPTURE_CANCEL_HOLD_MS = 800;
 const RIFLE_FIRE_RUMBLE = {
@@ -408,15 +398,7 @@ export function GameRoot({
   const shotBloomRef = useRef(0);
   const shotBloomFrameRef = useRef<number | null>(null);
   const shotBloomLastTimeRef = useRef(0);
-  const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatusPayload>(
-    DEFAULT_UPDATER_STATUS,
-  );
   const [settingsImportDraft, setSettingsImportDraft] = useState("");
-  const [updaterBusyAction, setUpdaterBusyAction] = useState<
-    "check" | "install" | "repair" | null
-  >(null);
-  const updaterApi = window.electronAPI?.updater;
-  const updaterAvailable = Boolean(updaterApi);
   const inventoryOpen = phase === "playing" && player.inventoryPanelOpen;
   const [hasBeenLocked, setHasBeenLocked] = useState(false);
   const returnResetDoneRef = useRef(false);
@@ -504,8 +486,6 @@ export function GameRoot({
     controllerBindingCaptureRef.current = controllerBindingCapture;
   }, [controllerBindingCapture]);
 
-  const previousUpdaterPhaseRef = useRef<UpdaterPhase | null>(null);
-  const lastMenuAutoCheckAtRef = useRef(0);
 
   useEffect(() => {
     if (!player.pointerLocked) {
@@ -657,10 +637,6 @@ export function GameRoot({
   }, [bootRevealComplete, booting, deferredAssetsEnabled]);
 
   useEffect(() => {
-    window.electronAPI?.setGameplayActive(phase === "playing");
-  }, [phase]);
-
-  useEffect(() => {
     if (killPulseToken <= 0) {
       return;
     }
@@ -683,8 +659,6 @@ export function GameRoot({
   }, [killPulseToken]);
 
   const showPauseMenu = phase === "playing" && pauseMenuOpen;
-  const inLobbyPhase = phase === "menu" || phase === "entering" ||
-    phase === "returning";
   const showSettingsModal = menuSettingsOpen || showPauseMenu;
   const showClickToContinueOverlay =
     phase === "playing" &&
@@ -1071,180 +1045,6 @@ export function GameRoot({
       });
     }
   }, [settingsImportDraft]);
-
-  useEffect(() => {
-    if (!updaterApi) {
-      return;
-    }
-
-    let mounted = true;
-    const unsubscribe = updaterApi.onStatus((status: UpdaterStatusPayload) => {
-      if (!mounted) {
-        return;
-      }
-      setUpdaterStatus(status);
-    });
-
-    void updaterApi.getStatus()
-      .then((status: UpdaterStatusPayload) => {
-        if (!mounted) {
-          return;
-        }
-        setUpdaterStatus(status);
-      })
-      .catch((error: unknown) => {
-        if (!mounted) {
-          return;
-        }
-        setUpdaterStatus((prev) => ({
-          ...prev,
-          phase: "error",
-          message: `Updater unavailable: ${
-            error instanceof Error ? error.message : "unknown error"
-          }`,
-        }));
-      });
-
-    return () => {
-      mounted = false;
-      unsubscribe();
-    };
-  }, [updaterApi]);
-
-  useEffect(() => {
-    if (phase !== "menu" || !updaterApi || booting) {
-      return;
-    }
-
-    const now = Date.now();
-    if (
-      now - lastMenuAutoCheckAtRef.current < MENU_AUTO_UPDATE_CHECK_COOLDOWN_MS
-    ) {
-      return;
-    }
-    lastMenuAutoCheckAtRef.current = now;
-
-    void updaterApi.check().catch(() => {
-      // Updater status events surface errors to UI and toast channel.
-    });
-  }, [booting, phase, updaterApi]);
-
-  const handleCheckForUpdates = useCallback(async () => {
-    if (!updaterApi) {
-      return;
-    }
-
-    setUpdaterBusyAction("check");
-    try {
-      await updaterApi.check();
-    } finally {
-      setUpdaterBusyAction(null);
-    }
-  }, [updaterApi]);
-
-  const handleInstallUpdate = useCallback(async () => {
-    if (!updaterApi) {
-      return;
-    }
-
-    setUpdaterBusyAction("install");
-    try {
-      await updaterApi.installNow();
-    } finally {
-      setUpdaterBusyAction(null);
-    }
-  }, [updaterApi]);
-
-  const handleRepairInstall = useCallback(async () => {
-    if (!updaterApi) {
-      return;
-    }
-
-    setUpdaterBusyAction("repair");
-    try {
-      await updaterApi.repair();
-    } finally {
-      setUpdaterBusyAction(null);
-    }
-  }, [updaterApi]);
-
-  useEffect(() => {
-    if (inLobbyPhase && updaterApi) {
-      return;
-    }
-
-    toast.dismiss(CHECKING_UPDATE_TOAST_ID);
-    toast.dismiss(UPDATE_AVAILABLE_TOAST_ID);
-    toast.dismiss(READY_TO_INSTALL_TOAST_ID);
-  }, [inLobbyPhase, updaterApi]);
-
-  useEffect(() => {
-    const previousPhase = previousUpdaterPhaseRef.current;
-    previousUpdaterPhaseRef.current = updaterStatus.phase;
-
-    if (!inLobbyPhase || !updaterApi) {
-      return;
-    }
-
-    if (updaterStatus.phase === "checking" && previousPhase !== "checking") {
-      toast.info("Checking for latest release...", {
-        id: CHECKING_UPDATE_TOAST_ID,
-        duration: 5000,
-        description: "Polling GitHub release metadata in the background.",
-      });
-    }
-
-    if (updaterStatus.phase === "available" && previousPhase !== "available") {
-      toast.info(`Update ${updaterStatus.targetVersion ?? "found"}.`, {
-        id: UPDATE_AVAILABLE_TOAST_ID,
-        duration: 5000,
-        description: "Download started. Restart button appears when ready.",
-      });
-    }
-
-    if (updaterStatus.phase === "downloaded") {
-      toast.success(
-        `Update ${updaterStatus.targetVersion ?? "package"} ready to install.`,
-        {
-          id: READY_TO_INSTALL_TOAST_ID,
-          duration: Infinity,
-          closeButton: false,
-          action: {
-            label: updaterBusyAction === "install"
-              ? "Restarting..."
-              : "Restart now",
-            onClick: () => {
-              void handleInstallUpdate();
-            },
-          },
-        },
-      );
-    } else {
-      toast.dismiss(READY_TO_INSTALL_TOAST_ID);
-    }
-
-    if (
-      updaterStatus.phase !== "available" &&
-      updaterStatus.phase !== "downloading"
-    ) {
-      toast.dismiss(UPDATE_AVAILABLE_TOAST_ID);
-    }
-
-    if (updaterStatus.phase === "error" && previousPhase !== "error") {
-      toast.error("Updater hit an error.", {
-        duration: 5000,
-        description: updaterStatus.message ?? "Unknown updater failure.",
-      });
-    }
-  }, [
-    handleInstallUpdate,
-    inLobbyPhase,
-    updaterApi,
-    updaterBusyAction,
-    updaterStatus.message,
-    updaterStatus.phase,
-    updaterStatus.targetVersion,
-  ]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1685,8 +1485,6 @@ export function GameRoot({
     }`
     : "";
 
-  const canInstallUpdate = updaterStatus.phase === "downloaded";
-  const installUpdateInProgress = updaterBusyAction === "install";
   const gameplayHudVisible = phase === "playing";
   const showInventoryOverlay = gameplayHudVisible && player.inventoryPanelOpen;
   const showInteractPrompt = gameplayHudVisible && !isGameplayPaused &&
@@ -1822,20 +1620,12 @@ export function GameRoot({
           <ExperienceMenuOverlay
             onEnterPractice={handleEnterPractice}
             onOpenSettings={handleOpenSettingsModal}
-            updateReadyToInstall={canInstallUpdate}
-            updateTargetVersion={updaterStatus.targetVersion}
-            installingUpdate={installUpdateInProgress}
-            onInstallUpdate={() => { void handleInstallUpdate(); }}
             selectedCharacterId={selectedCharacterId}
             onCharacterSelect={handleCharacterSelect}
             selectedSkyId={selectedSkyId}
             onSkySelect={setSelectedSkyId}
             selectedMapId={selectedMapId}
             onMapSelect={setSelectedMapId}
-            updaterStatus={updaterStatus}
-            updaterBusyAction={updaterBusyAction}
-            updaterAvailable={updaterAvailable}
-            onCheckForUpdates={() => { void handleCheckForUpdates(); }}
           />
         )
         : null}
@@ -2044,20 +1834,6 @@ export function GameRoot({
                             Return to Lobby
                           </button>
                         ) : null}
-                        <button
-                          type="button"
-                          className="btn-quit-app"
-                          onClick={() => {
-                            const api = (window as unknown as { electronAPI?: { quitApp?: () => void } }).electronAPI;
-                            if (api?.quitApp) {
-                              api.quitApp();
-                            } else {
-                              window.close();
-                            }
-                          }}
-                        >
-                          Quit Game
-                        </button>
                       </div>
                     </aside>
                     <section
@@ -3635,37 +3411,6 @@ export function GameRoot({
                             )}
                           </div>
                         </>
-                      )
-                      : null}
-
-                    {menuTab === "system"
-                      ? (
-                        <div className="menu-sections">
-                          <MenuSection
-                            title="Repair Installation"
-                            blurb="Re-run the repair flow if files are missing or broken."
-                          >
-                            <div className="update-action-row">
-                              <button
-                                type="button"
-                                className="btn"
-                                onClick={() => { void handleRepairInstall(); }}
-                                disabled={!updaterAvailable || updaterBusyAction !== null}
-                              >
-                                {updaterBusyAction === "repair"
-                                  ? "Repairing..."
-                                  : "Repair installation"}
-                              </button>
-                            </div>
-                            {!updaterAvailable
-                              ? (
-                                <p className="warning-note">
-                                  Updater API unavailable in this runtime.
-                                </p>
-                              )
-                              : null}
-                          </MenuSection>
-                        </div>
                       )
                       : null}
 

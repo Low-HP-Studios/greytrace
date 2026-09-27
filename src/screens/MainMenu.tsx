@@ -427,22 +427,6 @@ export function MainMenu({ onStartGame }: MainMenuProps) {
                     {tab.label}
                   </button>
                 ))}
-                <div style={{ marginTop: "auto" }}>
-                  <button
-                    type="button"
-                    className="btn-quit-app"
-                    onClick={() => {
-                      const api = (window as unknown as { electronAPI?: { quitApp?: () => void } }).electronAPI;
-                      if (api?.quitApp) {
-                        api.quitApp();
-                      } else {
-                        window.close();
-                      }
-                    }}
-                  >
-                    Quit Game
-                  </button>
-                </div>
               </aside>
               <section className="lobby-settings-content">
                 {settingsTab === "sensitivity" && (

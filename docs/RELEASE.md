@@ -1,5 +1,7 @@
 # Release Process
 
+> Historical desktop documentation. Desktop packaging, release jobs, and auto-updates were retired on 2026-09-27. See the root README for current web commands.
+
 This project ships desktop installers through GitHub Actions + `electron-builder`.
 
 ## Canonical flow

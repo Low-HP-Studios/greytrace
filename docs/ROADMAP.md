@@ -3,7 +3,7 @@
 ## Current Focus
 
 The 2026-09-20 direction is a web-only tactical shooting/practice game, Cloudflare
-hosting, and a polished core with smaller assets. Implementation is deferred.
+hosting, and a polished core with smaller assets. Desktop packaging and updater cleanup is implemented locally (2026-09-27); hosting migration and gameplay changes remain pending.
 Read [Future Plans](FUTURE-PLANS.md) before choosing the next work; it captures the
 owner's reasoning, tradeoffs, proposed scope, and implementation order.
 

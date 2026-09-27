@@ -211,3 +211,17 @@ Player starts without a weapon. Walk to the floating gun and press F to pick up.
 - `WeaponSystem.equipped` defaults to `false`
 - Implemented `tryPickup` (distance check, 2.5 unit range), `drop` (place in front of player), and `canPickup`
 - World gun mesh visible at spawn position until picked up
+
+
+## 2026-09-27 - Retire desktop distribution tooling
+
+Remove Electron runtime, installer builds, desktop release automation, and updater UI.
+Keep Vite development, production web builds, shared settings notifications, and gameplay.
+Replace installer CI with lint and web-build validation. Preserve existing hosted deployments
+and historical desktop releases. Content removal and Cloudflare migration are separate steps.
+
+Validation: production web build passes; lint reports zero errors and 12 existing warnings.
+Browser smoke check reached the lobby, opened settings/audio, entered TDM practice,
+and returned through the pause menu. Pointer capture did not complete in the embedded
+browser (Chromium UnknownError), so mouse aiming, firing, audible playback, and fullscreen
+still need a normal-browser manual pass. No deployment or release changes were published.

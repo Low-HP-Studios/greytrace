@@ -12,8 +12,7 @@ export type SettingsTabId =
   | "controls"
   | "graphics"
   | "crosshair"
-  | "imports"
-  | "system";
+  | "imports";
 
 export type BindingKey = keyof ControlBindings;
 
@@ -57,7 +56,6 @@ export const MENU_TABS: MenuTabOption[] = [
   { id: "graphics", label: "Graphics", hint: "Render and performance" },
   { id: "crosshair", label: "Crosshair", hint: "Preview and tuning" },
   { id: "imports", label: "Imports", hint: "Profiles and presets" },
-  { id: "system", label: "System", hint: "Maintenance" },
 ];
 
 export const BINDING_ROWS: BindingDefinition[] = [

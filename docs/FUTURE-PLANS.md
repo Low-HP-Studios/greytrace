@@ -2,9 +2,7 @@
 
 Recorded: 2026-09-20.
 
-Status: direction agreed in planning; implementation is deferred. This document
-does not mean Cloudflare migration, desktop retirement, or gameplay changes have
-already shipped. Use it as context when resuming the work.
+Status update (2026-09-27): desktop packaging and auto-update removal is implemented locally. Cloudflare migration and gameplay/optimization work remain deferred. This document does not mean these changes have been deployed. Use it as context when resuming the work.
 
 ## Product intent and reasons
 
@@ -105,3 +103,13 @@ validation of ADS, recoil, and bullet behavior with players.
 
 The Vercel storage cleanup and initial asset optimization precede this plan.
 Their completion should not be confused with completion of this future work.
+
+## Revised implementation order (2026-09-27)
+
+1. Remove desktop packaging, installer release automation, and auto-update UI.
+2. Review unwanted gameplay/content separately and implement owner-directed fixes.
+3. Measure and optimize the selected game experience.
+4. Deploy and validate Cloudflare previews; optimize delivery.
+5. Connect the lowhp domain and selected game subdomain before going live.
+
+Existing deployments and historical GitHub releases are preserved during cleanup.
