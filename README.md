@@ -1,17 +1,19 @@
 # GreyTrace
 
-GreyTrace is a desktop FPS prototype built with React, Three.js, and Electron.
+GreyTrace is a web tactical shooting prototype built with React and Three.js.
 The current public-facing target is **Beta Build 0.3.0**.
 
+**[Play Greytrace in your browser](https://greytrace.lowhp.studio)**
+
 This beta focuses on the core playable loop: a cinematic lobby, selectable
-operators, practice maps, gun handling, settings, and desktop update support.
+operators, practice maps, gun handling, and settings.
 It is still not a full live-service game: there is no backend progression,
 matchmaking, or account system yet. A web version is deployed on Vercel.
 
 ## Planned Direction
 
 The planned direction is Cloudflare hosting, web-only distribution, and a focused
-tactical shooting/practice experience. These changes are deferred, not shipped.
+tactical shooting/practice experience. Desktop packaging and auto-updates have been removed. Cloudflare migration and gameplay changes are still planned.
 See [future plans](docs/FUTURE-PLANS.md) for the reasons, tradeoffs, proposed scope,
 and implementation order, and [the roadmap](docs/ROADMAP.md) for earlier backlog context.
 
@@ -22,17 +24,13 @@ and implementation order, and [the roadmap](docs/ROADMAP.md) for earlier backlog
 - Play panel with selectable **Range** and **TDM** practice maps
 - Unlocked operator collection
 - Practice shooting, movement, recoil, hit feedback, and reset flow
-- Settings for gameplay, controls, audio, graphics, HUD, and updates
-- Electron packaging for macOS, Windows, and Linux
-- GitHub Releases update channel
+- Settings for gameplay, controls, audio, graphics, and HUD
 
 ## Tech Stack
 
 - React 19 + TypeScript
 - Vite for the web build/dev server
 - Three.js with `@react-three/fiber` and `@react-three/drei`
-- Electron for desktop packaging
-- `electron-updater` for release update checks
 - pnpm for dependency management
 
 ## Requirements
@@ -54,12 +52,6 @@ Run the web lobby/game in Vite:
 pnpm dev
 ```
 
-Run the desktop Electron app during development:
-
-```bash
-pnpm app
-```
-
 The Vite dev server uses port `1420`.
 
 ## Verification
@@ -71,30 +63,22 @@ pnpm lint
 pnpm audit --audit-level moderate
 ```
 
-There are no automated gameplay tests yet, so visual and desktop smoke testing
+There are no automated gameplay tests yet, so visual and browser smoke testing
 are still required before shipping a build.
 
-## Packaging
+## Web build
 
 ```bash
-pnpm build:electron
-pnpm build:mac
-pnpm build:win
-pnpm build:linux
+pnpm build
+pnpm preview
 ```
 
-Packaged builds are written to `release/`.
+The production website is generated in `dist/`. Existing Vercel hosting remains
+in place until the separate Cloudflare migration. GitHub Actions validates lint
+and the web build; it no longer publishes desktop installers.
 
-## Updates
-
-GreyTrace uses GitHub Releases for update metadata:
-
-https://github.com/Low-HP-Studios/greytrace/releases
-
-macOS auto-update can fail while the app is unsigned. Until a signing
-certificate is configured, macOS users should install updates manually from the
-GitHub Releases page. Windows and Linux update behavior still depends on the
-release artifacts produced by `electron-builder`.
+Historical desktop releases remain available on GitHub. New desktop installers
+and automatic desktop updates are no longer produced.
 
 ## Controls
 
@@ -116,9 +100,8 @@ Controls can be adjusted from the in-game settings.
 - `src/game/GameRoot.tsx` - main lobby/game state and overlays
 - `src/game/scene/` - Three.js scene, runtime, camera, and lobby/game presentation
 - `src/game/ExperienceMenuOverlay.tsx` - lobby tabs and UI surfaces
-- `src/game/SettingsPanels.tsx` - settings and updater panels
+- `src/game/SettingsPanels.tsx` - settings panels
 - `src/screens/LoadingScreen.tsx` - loading experience
-- `electron/` - Electron main process, preload bridge, and updater integration
 - `public/assets/` - models, animations, audio, and static assets
 
 ## Dependency Safety
